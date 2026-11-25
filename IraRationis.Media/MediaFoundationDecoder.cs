@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 
 namespace IraRationis.Media;
@@ -36,6 +37,8 @@ public static unsafe partial class MediaFoundationDecoder
     private static readonly Guid BitsPerSample = new("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
     private static readonly Guid AverageBytesPerSecond = new("1aab75c8-cfef-451c-ab95-ac034b8e1731");
     private static readonly Guid BlockAlignment = new("322de230-9eeb-43bd-ab7a-ff412251541d");
+    private static readonly Guid MinimumDisplayAperture = new("d7388766-18fe-48c6-a177-ee894867c8c4");
+    private static readonly Guid GeometricAperture = new("66758743-7e5f-400d-980a-aa8596c85696");
     private static readonly Guid Buffer2D = new("7dc9d5f9-9ed9-44ec-9bbf-0600bb589fbb");
 
     public static DecodedClip Decode(string inputPath)
@@ -68,19 +71,13 @@ public static unsafe partial class MediaFoundationDecoder
             {
                 var video = ReadVideo(path);
                 var audio = ReadAudio(path);
-                var duration = audio.Samples.Length / 96000.0;
-
-                if (Math.Abs((double)video.Start - audio.Start) > 333334 ||
-                    Math.Abs(duration - video.Frames.Length / (double)video.FrameBytes / FramesPerSecond) > 1.0 / FramesPerSecond)
-                {
-                    throw new InvalidDataException("The bounded player requires aligned audio and video tracks.");
-                }
+                var pcm = AlignAudio(video, audio);
 
                 Console.Error.WriteLine(
-                    $"[media] IRX-R38.1: Media Foundation decoded {video.Frames.Length / video.FrameBytes} frames; " +
-                    $"size={video.Width}x{video.Height}; PCM samples={audio.Samples.Length}.");
+                    $"[media] IRX-R39.1: Media Foundation decoded {video.Frames.Length / video.FrameBytes} frames; " +
+                    $"size={video.Width}x{video.Height}; PCM samples={pcm.Length}.");
 
-                return new DecodedClip(video.Width, video.Height, video.Frames, audio.Samples, 48000, 2);
+                return new DecodedClip(video.Width, video.Height, video.Frames, pcm, 48000, 2);
             }
             finally
             {
@@ -93,23 +90,95 @@ public static unsafe partial class MediaFoundationDecoder
         }
     }
 
+    // Keep the video timeline authoritative for the existing constant-rate player.
+    // Only small edge corrections are supported; never conceal gaps inside a track.
+    private static short[] AlignAudio(VideoPayload video, AudioPayload audio)
+    {
+        const int sampleRate = 48000;
+        const int channels = 2;
+        const int maxCorrectionFrames = sampleRate / 10;
+
+        var videoFrames = video.Frames.Length / video.FrameBytes;
+        var targetFrames = checked(videoFrames * (sampleRate / (int)FramesPerSecond));
+        var audioFrames = audio.Samples.Length / channels;
+        var startDeltaTicks = (decimal)audio.Start - video.Start;
+        var startDeltaFrames = decimal.Round(startDeltaTicks * sampleRate / TicksPerSecond,
+            0, MidpointRounding.AwayFromZero);
+        var endDeltaFrames = startDeltaFrames + audioFrames - targetFrames;
+
+        Console.Error.WriteLine(
+            $"[media] IRX-R39.1: timeline videoStart={video.Start}; audioStart={audio.Start}; " +
+            $"videoFrames={videoFrames}; audioFrames={audioFrames}; targetAudioFrames={targetFrames}; " +
+            $"startDeltaFrames={startDeltaFrames}; endDeltaFrames={endDeltaFrames} (48 kHz frames).");
+
+        if (targetFrames <= 0 || audioFrames <= 0 || audio.Samples.Length % channels != 0 ||
+            Math.Abs(startDeltaFrames) > maxCorrectionFrames || Math.Abs(endDeltaFrames) > maxCorrectionFrames)
+        {
+            throw new InvalidDataException("Audio/video alignment exceeds the bounded 100 ms edge-correction contract.");
+        }
+
+        var offset = (int)startDeltaFrames;
+        var sourceStart = Math.Max(0, -offset);
+        var destinationStart = Math.Max(0, offset);
+        var copyFrames = Math.Min(audioFrames - sourceStart, targetFrames - destinationStart);
+
+        if (copyFrames <= 0)
+        {
+            throw new InvalidDataException("Audio and video timelines do not overlap.");
+        }
+
+        if (offset == 0 && audioFrames == targetFrames)
+        {
+            return audio.Samples;
+        }
+
+        var aligned = new short[checked(targetFrames * channels)];
+
+        audio.Samples.AsSpan(sourceStart * channels, copyFrames * channels)
+            .CopyTo(aligned.AsSpan(destinationStart * channels));
+
+        var tailTrim = audioFrames - sourceStart - copyFrames;
+        var tailPad = targetFrames - destinationStart - copyFrames;
+
+        Console.Error.WriteLine(
+            $"[media] IRX-R39.1: alignment headTrim={sourceStart}; headPad={destinationStart}; " +
+            $"tailTrim={tailTrim}; tailPad={tailPad}; copied={copyFrames} (48 kHz frames).");
+
+        return aligned;
+    }
+
     private static VideoPayload ReadVideo(string path)
     {
         var reader = Open(path, VideoStream, VideoType, Nv12);
 
         try
         {
-            var (width, height) = ValidateVideoType(reader);
+            // The output type is provisional until the first decoded sample.
+            var provisionalType = CurrentType(reader, VideoStream);
 
-            var frameBytes = checked(width * height * 3 / 2);
-            var frame = new byte[frameBytes];
+            try
+            {
+                var provisionalSize = GetUInt64(provisionalType, FrameSize);
+
+                Console.Error.WriteLine($"[media] IRX-R39: provisional video {provisionalSize >> 32}x{(uint)provisionalSize}.");
+            }
+            finally
+            {
+                Release(provisionalType);
+            }
+
+            var layout = default(VideoLayout);
+            var frame = Array.Empty<byte>();
+            var cropped = Array.Empty<byte>();
+
             using var output = new MemoryStream();
+
             var count = 0;
             var start = 0L;
 
             while (true)
             {
-                var sample = ReadSample(reader, VideoStream, width, height, out var timestamp, out var end);
+                var sample = ReadSample(reader, VideoStream, out var timestamp, out var end, out var formatFlags);
 
                 if (sample == 0)
                 {
@@ -123,21 +192,53 @@ public static unsafe partial class MediaFoundationDecoder
 
                 try
                 {
-                    if (count == 0)
+                    if (count == 0 || formatFlags != 0)
                     {
-                        start = timestamp;
+                        var current = ValidateVideoType(reader);
+
+                        if (count == 0)
+                        {
+                            layout = current;
+                            frame = new byte[layout.CodedBytes];
+                            cropped = layout.IsFullFrame ? Array.Empty<byte>() : new byte[layout.VisibleBytes];
+                            start = timestamp;
+
+                            Console.Error.WriteLine(
+                                $"[media] IRX-R39: first sample negotiated {layout.CodedWidth}x{layout.CodedHeight}; " +
+                                $"display={layout.Width}x{layout.Height}; origin={layout.X},{layout.Y}; flags=0x{formatFlags:X}.");
+                        }
+                        else if (current != layout)
+                        {
+                            throw new InvalidDataException(
+                                $"Video layout changed after {count} frames: {layout} -> {current}.");
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"[media] IRX-R39: compatible video format notification 0x{formatFlags:X}.");
+                        }
                     }
 
                     var expected = (double)start + count * TicksPerSecond / FramesPerSecond;
 
-                    if (count >= 150 || output.Length + frameBytes > MaxVideoBytes ||
+                    if (count >= 150 || output.Length + layout.VisibleBytes > MaxVideoBytes ||
                         Math.Abs((double)timestamp - expected) > 166667)
                     {
                         throw new InvalidDataException("Video exceeds the bounded constant-rate playback contract.");
                     }
 
                     CopyFrame(sample, frame);
-                    output.Write(frame);
+
+                    if (layout.IsFullFrame)
+                    {
+                        output.Write(frame);
+                    }
+                    else
+                    {
+                        CopyVisibleFrame(frame, layout, cropped);
+
+                        output.Write(cropped);
+                    }
+
                     count++;
                 }
                 finally
@@ -156,7 +257,7 @@ public static unsafe partial class MediaFoundationDecoder
                 throw new InvalidDataException("No video frames decoded.");
             }
 
-            return new VideoPayload(width, height, frameBytes, start, output.ToArray());
+            return new VideoPayload(layout.Width, layout.Height, layout.VisibleBytes, start, output.ToArray());
         }
         finally
         {
@@ -170,15 +271,13 @@ public static unsafe partial class MediaFoundationDecoder
 
         try
         {
-            ValidateAudioType(reader);
-
             using var output = new MemoryStream();
             var start = 0L;
             var count = 0;
 
             while (true)
             {
-                var sample = ReadSample(reader, AudioStream, 0, 0, out var timestamp, out var end);
+                var sample = ReadSample(reader, AudioStream, out var timestamp, out var end, out var formatFlags);
 
                 if (sample == 0)
                 {
@@ -192,9 +291,19 @@ public static unsafe partial class MediaFoundationDecoder
 
                 try
                 {
-                    if (count == 0)
+                    if (count == 0 || formatFlags != 0)
                     {
-                        start = timestamp;
+                        ValidateAudioType(reader);
+
+                        if (count == 0)
+                        {
+                            start = timestamp;
+                        }
+
+                        if (formatFlags != 0)
+                        {
+                            Console.Error.WriteLine($"[media] IRX-R39: compatible audio format notification 0x{formatFlags:X}.");
+                        }
                     }
 
                     var expected = (double)start + output.Length / 4 * TicksPerSecond / 48000;
@@ -284,7 +393,7 @@ public static unsafe partial class MediaFoundationDecoder
         return type;
     }
 
-    private static (int Width, int Height) ValidateVideoType(nint reader)
+    private static VideoLayout ValidateVideoType(nint reader)
     {
         var type = CurrentType(reader, VideoStream);
 
@@ -301,14 +410,31 @@ public static unsafe partial class MediaFoundationDecoder
             var numerator = (uint)(frameRateRatio >> 32);
             var denominator = (uint)(frameRateRatio & uint.MaxValue);
 
-            if (width is < 2 or > 1920 || height is < 2 or > 1080 ||
+            if (width is < 2 or > 1920 || height is < 2 or > 1088 ||
                 (width & 1) != 0 || (height & 1) != 0 || denominator == 0 ||
                 numerator != (ulong)FramesPerSecond * denominator)
             {
-                throw new InvalidDataException("Only even-sized constant 30 FPS video up to 1080p is supported.");
+                throw new InvalidDataException("Unsupported coded dimensions or frame rate; expected even NV12 up to 1920x1088 at 30 FPS.");
             }
 
-            return (width, height);
+            // Prefer the declared valid image area. Never infer a crop from padding alone.
+            if (!TryGetAperture(type, MinimumDisplayAperture, out var area) &&
+                !TryGetAperture(type, GeometricAperture, out area))
+            {
+                area = (0, 0, width, height);
+            }
+
+            var layout = new VideoLayout(width, height, area.X, area.Y, area.Width, area.Height);
+
+            if (layout.X < 0 || layout.Y < 0 || layout.Width is < 2 or > 1920 ||
+                layout.Height is < 2 or > 1080 || (layout.X & 1) != 0 || (layout.Y & 1) != 0 ||
+                (layout.Width & 1) != 0 || (layout.Height & 1) != 0 ||
+                (long)layout.X + layout.Width > width || (long)layout.Y + layout.Height > height)
+            {
+                throw new InvalidDataException($"Unsupported NV12 display aperture: {layout}.");
+            }
+
+            return layout;
         }
         finally
         {
@@ -337,10 +463,11 @@ public static unsafe partial class MediaFoundationDecoder
         }
     }
 
-    private static nint ReadSample(nint reader, uint stream, int width, int height,
-        out long timestamp, out bool end)
+    private static nint ReadSample(nint reader, uint stream, out long timestamp, out bool end,
+        out uint formatFlags)
     {
         var read = (delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint*, long*, nint*, int>)Slot(reader, 9);
+        formatFlags = 0;
 
         for (var attempt = 0; attempt < MaxConsecutiveFormatEvents; attempt++)
         {
@@ -360,25 +487,9 @@ public static unsafe partial class MediaFoundationDecoder
                     throw new InvalidDataException($"Unsupported source-reader flags: 0x{flags:X}.");
                 }
 
-                if ((flags & FormatChangeFlags) != 0)
-                {
-                    if (stream == VideoStream)
-                    {
-                        var (currentWidth, currentHeight) = ValidateVideoType(reader);
-
-                        if (currentWidth != width || currentHeight != height)
-                        {
-                            throw new InvalidDataException("Video dimensions changed during bounded playback.");
-                        }
-                    }
-                    else
-                    {
-                        ValidateAudioType(reader);
-                    }
-
-                    Console.Error.WriteLine($"[media] IRX-R38.1: validated format notification 0x{flags:X}.");
-                }
-
+                // Retain notifications across sample-free reads. The caller inspects
+                // the current type when a sample actually arrives.
+                formatFlags |= flags & FormatChangeFlags;
                 timestamp = time;
                 end = (flags & EndOfStream) != 0;
 
@@ -402,6 +513,66 @@ public static unsafe partial class MediaFoundationDecoder
         }
 
         throw new InvalidDataException("Too many consecutive source-reader format notifications without a sample.");
+    }
+
+    private static bool TryGetAperture(nint type, Guid key, out (int X, int Y, int Width, int Height) area)
+    {
+        // MFVideoArea: two MFOffset pairs (WORD fraction, SHORT value), then SIZE.
+        var data = stackalloc byte[16];
+        var length = 0U;
+        var get = (delegate* unmanaged[Stdcall]<nint, Guid*, byte*, uint, uint*, int>)Slot(type, 15);
+        var hr = get(type, &key, data, 16, &length);
+
+        if (hr == unchecked((int)0xC00D36E6))
+        {
+            area = default;
+
+            return false;
+        }
+
+        Check(hr, "GetBlob(display aperture)");
+
+        if (length != 16)
+        {
+            throw new InvalidDataException("Unexpected MFVideoArea size.");
+        }
+
+        var bytes = new ReadOnlySpan<byte>(data, 16);
+
+        if (BinaryPrimitives.ReadUInt16LittleEndian(bytes) != 0 ||
+            BinaryPrimitives.ReadUInt16LittleEndian(bytes[4..]) != 0)
+        {
+            throw new InvalidDataException("Fractional NV12 display apertures are not supported.");
+        }
+
+        area = (BinaryPrimitives.ReadInt16LittleEndian(bytes[2..]),
+            BinaryPrimitives.ReadInt16LittleEndian(bytes[6..]),
+            BinaryPrimitives.ReadInt32LittleEndian(bytes[8..]),
+            BinaryPrimitives.ReadInt32LittleEndian(bytes[12..]));
+
+        return true;
+    }
+
+    private static void CopyVisibleFrame(ReadOnlySpan<byte> source, VideoLayout layout, Span<byte> destination)
+    {
+        // The validated layout is even in both axes, preserving NV12 chroma pairs.
+        var sourceChroma = checked(layout.CodedWidth * layout.CodedHeight);
+        var destinationChroma = checked(layout.Width * layout.Height);
+
+        for (var row = 0; row < layout.Height; row++)
+        {
+            var offset = checked((layout.Y + row) * layout.CodedWidth + layout.X);
+
+            source.Slice(offset, layout.Width).CopyTo(destination.Slice(row * layout.Width, layout.Width));
+        }
+
+        for (var row = 0; row < layout.Height / 2; row++)
+        {
+            var offset = checked(sourceChroma + (layout.Y / 2 + row) * layout.CodedWidth + layout.X);
+
+            source.Slice(offset, layout.Width).CopyTo(
+                destination.Slice(destinationChroma + row * layout.Width, layout.Width));
+        }
     }
 
     private static nint ContiguousBuffer(nint sample)
@@ -432,7 +603,7 @@ public static unsafe partial class MediaFoundationDecoder
 
                 if (length != destination.Length)
                 {
-                    throw new InvalidDataException("Unexpected contiguous NV12 extent.");
+                    throw new InvalidDataException($"Unexpected contiguous NV12 extent: expected {destination.Length}, received {length}.");
                 }
 
                 var copy = (delegate* unmanaged[Stdcall]<nint, byte*, uint, int>)Slot(plane, 8);
@@ -455,7 +626,7 @@ public static unsafe partial class MediaFoundationDecoder
                 {
                     if (length != destination.Length)
                     {
-                        throw new InvalidDataException("Unexpected linear NV12 extent.");
+                        throw new InvalidDataException($"Unexpected linear NV12 extent: expected {destination.Length}, received {length}.");
                     }
 
                     new ReadOnlySpan<byte>(data, length).CopyTo(destination);
@@ -623,6 +794,33 @@ public static unsafe partial class MediaFoundationDecoder
     [LibraryImport("mfreadwrite.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial int MFCreateSourceReaderFromByteStream(nint stream, nint attributes, out nint reader);
+
+    private readonly record struct VideoLayout(int CodedWidth, int CodedHeight, int X, int Y, int Width, int Height)
+    {
+        public int CodedBytes
+        {
+            get
+            {
+                return checked(CodedWidth * CodedHeight * 3 / 2);
+            }
+        }
+
+        public int VisibleBytes
+        {
+            get
+            {
+                return checked(Width * Height * 3 / 2);
+            }
+        }
+
+        public bool IsFullFrame
+        {
+            get
+            {
+                return X == 0 && Y == 0 && Width == CodedWidth && Height == CodedHeight;
+            }
+        }
+    }
 
     private sealed record VideoPayload(int Width, int Height, int FrameBytes, long Start, byte[] Frames);
 
