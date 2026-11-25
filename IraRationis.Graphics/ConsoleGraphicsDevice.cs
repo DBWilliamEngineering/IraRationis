@@ -158,6 +158,21 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
         while (Interlocked.CompareExchange(ref references, observed - 1, observed) != observed);
+        if (observed == 1 && IsCommandSignature(value))
+        {
+            ReleaseCommandSignature(value);
+            return 0;
+        }
+        if (observed == 1 && IsQueryHeap(value))
+        {
+            ReleaseQueryHeap(value);
+            return 0;
+        }
+        if (observed == 1 && IsPipeline(value))
+        {
+            ReleasePipeline(value);
+            return 0;
+        }
         if (observed == 1 && IsRootSignature(value))
         {
             ReleaseRootSignature(value);
@@ -176,6 +191,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (observed == 1 && value != _device && !IsDisplayObject(value))
         {
             var allocator = IsList(value) ? *(nint*)(value + ListAllocator) : 0;
+            ReleaseCommandState(value);
             _ = LiveObjects.TryRemove(value, out _);
             if (IsList(value))
             {
@@ -218,6 +234,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (IsList(value))
         {
             return Array.IndexOf(ListIds, id) >= 0;
+        }
+        if (IsCommandSignature(value))
+        {
+            return id == CommandSignatureId || id == PageableId;
+        }
+        if (IsQueryHeap(value))
+        {
+            return id == QueryHeapId || id == PageableId;
+        }
+        if (IsPipeline(value))
+        {
+            return id == PipelineId || id == PageableId;
         }
         if (IsRootSignature(value))
         {
@@ -277,7 +305,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int Name(nint self, char* name)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self) || IsPipeline(self) || IsQueryHeap(self) || IsCommandSignature(self))
         {
             // Names are diagnostic metadata, not a GPU operation.
             return 0;
@@ -289,7 +317,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int GetPrivate(nint self, Guid* id, uint* size, void* data)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self) || IsPipeline(self) || IsQueryHeap(self) || IsCommandSignature(self))
         {
             return GetResourcePrivate(self, id, size, data);
         }
@@ -300,7 +328,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int SetPrivate(nint self, Guid* id, uint size, void* data)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self) || IsPipeline(self) || IsQueryHeap(self) || IsCommandSignature(self))
         {
             return SetResourcePrivate(self, id, size, data);
         }
@@ -382,6 +410,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     _host = (ID3D12Device*)device;
                     var name = new string((char*)&description, 0, 128).TrimEnd('\0');
                     Console.Error.WriteLine($"[graphics] Host device created: {name} (C#).");
+                    DetectHostRaytracing();
                     return 0;
                 }
                 finally
@@ -676,10 +705,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return InvalidArgument;
         }
-        if (pipeline != 0)
+        if (pipeline != 0 && !IsPipeline(pipeline))
         {
-            Console.Error.WriteLine("[graphics] Command list initial pipeline not translated.");
-            return NotImplemented;
+            return InvalidArgument;
         }
         var id = HostListId;
         var host = (nint)0;
@@ -692,6 +720,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         *(uint*)(child + 0x10) = kind;
         *(nint*)(child + ListAllocator) = allocator;
         _ = Retain(allocator);
+        if (pipeline != 0)
+        {
+            BindPipelineCore(child, pipeline);
+        }
         Console.Error.WriteLine($"[graphics] Command list type {kind} created.");
         return FinishChild(child, iid, output);
     }
@@ -742,9 +774,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return InvalidArgument;
         }
-        if (pipeline != 0)
+        if (pipeline != 0 && !IsPipeline(pipeline))
         {
-            return NotImplemented;
+            return InvalidArgument;
         }
         var host = Host(self);
         var hr = ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)Slot(host, 10))(host, Host(allocator), 0);
@@ -755,6 +787,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             *(nint*)(self + ListAllocator) = allocator;
             _ = Drop(previous);
             *(int*)(self + ListClosed) = 0;
+            ReleaseCommandState(self);
+            if (pipeline != 0)
+            {
+                BindPipelineCore(self, pipeline);
+            }
         }
         return hr;
     }
@@ -777,12 +814,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return;
         }
+
         if (lists == null || count > 65536)
         {
             Environment.FailFast("[graphics] Invalid command list submission.");
         }
+
         var length = checked((int)count);
         var hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
+
         for (var i = 0; i < length; i++)
         {
             var list = lists[i];
@@ -792,7 +832,24 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
             hosts[i] = Host(list);
         }
+
         var host = Host(self);
+        var hasMemory = false;
+
+        for (var i = 0; i < length; i++)
+        {
+            hasMemory |= HasCommandMemory(lists[i]);
+        }
+
+        if (hasMemory)
+        {
+            for (var i = 0; i < length; i++)
+            {
+                SubmitWithCommandMemory(host, lists[i], hosts[i]);
+            }
+            return;
+        }
+
         fixed (nint* values = hosts)
         {
             ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(host, 10))(host, count, values);
@@ -863,10 +920,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         RegisterResourceMethods(device);
         RegisterDescriptorMethods(device);
         RegisterRootSignatureMethods(device);
+        RegisterComputePipelineMethods(device);
+        RegisterQueryHeapMethods(device);
+        RegisterCommandSignatureMethods(device);
+        RegisterFootprintMethods(device);
+        RegisterGraphicsPipelineMethods(device);
+        RegisterOptionalDeviceMethods(device);
         _queueOld = (nint)BuildQueue(false);
         _queueNew = (nint)BuildQueue(true);
         var allocator = ChildTable(24);
         allocator[8] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&AllocatorReset;
+        allocator[9] = AllocationCallbackAddress;
         _allocatorTable = (nint)allocator;
         var fence = ChildTable(24);
         fence[8] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&Completed;
@@ -880,6 +944,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         ValidateTables(AllTables((nint)device));
         ValidateRootSignatureRegistration(device);
+        ValidateComputePipelineRegistration(device);
+        ValidateQueryHeapRegistration(device);
+        ValidateDeviceBatchRegistration(device);
+        ValidateOptionalDeviceRegistration(device);
+        ValidateCommandStateRegistration();
+        ValidateCommandMemoryRegistration();
+        ValidateBarrierRegistration();
         _deviceTable = (nint)device;
     }
 
@@ -903,6 +974,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         table[9] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&CloseList;
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, int>)&ResetList;
         RegisterRasterMethods(table);
+        RegisterCommandStateMethods(table);
+        RegisterCommandMemoryMethods(table, newer);
+        RegisterBarrierMethods(table, newer);
         table[newer ? 131 : 129] = PipelineSyncAddress;
         table[newer ? 132 : 130] = PipelineSyncAddress;
         table[newer ? 139 : 137] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)&ResetListX;

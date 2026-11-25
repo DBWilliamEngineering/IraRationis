@@ -2,6 +2,7 @@
 // Allocation sizing adapted from Zettrox/ztrx, victory-formats/src/texture.rs.
 // Based on AMD addrlib; see AMD-ADDRLIB-NOTICE.txt.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace IraRationis.Graphics.Textures;
@@ -11,11 +12,50 @@ internal static class TextureFootprintCalculator
     private const uint MaximumExtent = 16384;
     private const uint MaximumMips = 16;
 
+    internal static uint SuggestMode(ConsoleGraphicsDevice.ResourceDescription description)
+    {
+        return description.Dimension == 2 ? 0U :
+            (description.Flags & 2) != 0 ? 24U :
+            (description.Flags & 1) != 0 ? 27U : 5U;
+    }
+
     internal static bool TryCalculate(ConsoleGraphicsDevice.ResourceDescription description, out ulong size,
         out ulong alignment)
     {
         size = 0;
         alignment = 0;
+        try
+        {
+            if (!TryCreate(description, out var texture))
+            {
+                return false;
+            }
+
+            alignment = Math.Max(texture.Alignment, description.Alignment);
+            size = RoundUp(texture.Size, alignment);
+
+            return size != 0;
+        }
+        catch (OverflowException)
+        {
+            size = 0;
+            alignment = 0;
+
+            return false;
+        }
+        catch (OutOfMemoryException)
+        {
+            size = 0;
+            alignment = 0;
+
+            return false;
+        }
+    }
+
+    internal static bool TryCreate(ConsoleGraphicsDevice.ResourceDescription description,
+        [NotNullWhen(true)] out TextureLayout? texture)
+    {
+        texture = null;
         var dimension = description.Dimension;
         var width = description.Width;
         var height = description.Height;
@@ -39,10 +79,7 @@ internal static class TextureFootprintCalculator
 
         var mode = description.Layout switch
         {
-            0 when dimension == 2 => 0U,
-            0 when (description.Flags & 2) != 0 => 24U,
-            0 when (description.Flags & 1) != 0 => 27U,
-            0 => 5U,
+            0 => SuggestMode(description),
             1 => 0U,
             >= 0x100 and <= 0x1FF => description.Layout & 0xFF,
             _ => uint.MaxValue
@@ -82,58 +119,46 @@ internal static class TextureFootprintCalculator
 
         try
         {
-            var natural = blockLog == 0 ? 256UL : 1UL << blockLog;
-            var total = PlaneSize(dimension, (uint)width, height, depth, mips, bytes, block, samples, mode, blockLog);
+            var first = BuildPlane(dimension, (uint)width, height, depth, mips, bytes, block, samples, mode, blockLog,
+                0);
+            var planes = new List<TexturePlane> { first };
             if (stencil)
             {
-                total = checked(RoundUp(total, natural) + PlaneSize(dimension, (uint)width, height, depth, mips, 1,
-                    block, samples, mode, blockLog));
+                planes.Add(BuildPlane(dimension, (uint)width, height, depth, mips, 1, block, samples, mode, blockLog,
+                    RoundUp(first.Size, first.Alignment)));
             }
 
-            var required = Math.Max(natural, description.Alignment);
-            size = RoundUp(total, required);
-            alignment = required;
+            texture = new TextureLayout(description, planes.ToArray(), checked(planes[^1].Offset + planes[^1].Size),
+                first.Alignment);
 
-            return size != 0;
+            return true;
         }
         catch (OverflowException)
         {
-            size = 0;
-            alignment = 0;
-
             return false;
         }
     }
 
-    private static ulong PlaneSize(uint dimension, uint width, uint height, uint depth, uint mips, uint bytes,
-        uint block, uint samples, uint mode, int blockLog)
+    private static TexturePlane BuildPlane(uint dimension, uint width, uint height, uint depth, uint mips, uint bytes,
+        uint block, uint samples, uint mode, int blockLog, ulong planeOffset)
     {
-        var chain = 0UL;
-        if (blockLog == 0)
-        {
-            for (var mip = 0U; mip < mips; mip++)
-            {
-                var pitch = RoundUp(PaddedDimension(width, mip, block), 256 / bytes);
-                chain = checked(chain + pitch * PaddedDimension(height, mip, block) * bytes);
-            }
-
-            return checked(chain * depth);
-        }
-
+        var entries = new TextureMip[mips];
+        var alignment = blockLog == 0 ? 256UL : 1UL << blockLog;
         var elementLog = BitOperations.Log2(bytes);
         var sampleLog = BitOperations.Log2(samples);
-        var blockBytes = 1UL << blockLog;
         var thick = dimension == 4 && mode is 5 or 9 or 17 or 21 or 25 or 26;
         uint tileWidth, tileHeight, tileDepth;
-        if (thick)
+        if (blockLog == 0)
+        {
+            tileWidth = 256 / bytes;
+            tileHeight = 1;
+            tileDepth = 1;
+        }
+        else if (thick)
         {
             var (x, y, z) = elementLog switch
             {
-                0 => (16U, 8U, 8U),
-                1 => (8U, 8U, 8U),
-                2 => (8U, 8U, 4U),
-                3 => (8U, 4U, 4U),
-                _ => (4U, 4U, 4U)
+                0 => (16U, 8U, 8U), 1 => (8U, 8U, 8U), 2 => (8U, 8U, 4U), 3 => (8U, 4U, 4U), _ => (4U, 4U, 4U)
             };
             var amp = (blockLog - 10) / 3;
             var rest = (blockLog - 10) % 3;
@@ -144,6 +169,11 @@ internal static class TextureFootprintCalculator
         else
         {
             var elementsLog = blockLog - elementLog - sampleLog;
+            if (elementsLog < 0)
+            {
+                throw new OverflowException();
+            }
+
             var wide = (sampleLog & 1) == 0 || (blockLog & 1) != 0;
             var w = (elementsLog + (wide ? 1 : 0)) / 2;
             tileWidth = 1U << w;
@@ -151,13 +181,7 @@ internal static class TextureFootprintCalculator
             tileDepth = 1;
         }
 
-        var slices = RoundUp(depth, tileDepth);
-        if (mips == 1)
-        {
-            return checked(RoundUp(PaddedDimension(width, 0, block), tileWidth) *
-                           RoundUp(PaddedDimension(height, 0, block), tileHeight) * bytes * samples * slices);
-        }
-
+        var paddedDepth = (uint)RoundUp(depth, tileDepth);
         var tailWidth = tileWidth;
         var tailHeight = tileHeight;
         if (!thick || blockLog % 3 == 1)
@@ -169,39 +193,100 @@ internal static class TextureFootprintCalculator
             tailHeight >>= 1;
         }
 
-        // When thick blockLog % 3 == 2, upstream halves the tail depth,
-        // which is not part of its width/height tail-entry test.
         var effective = thick ? blockLog - (blockLog - 8) / 3 : blockLog;
-        var maxTail = effective switch
-        {
-            8 => 0,
-            >= 9 and <= 11 => 1 + (1 << (effective - 9)),
-            _ => effective - 4
-        };
+        var maxTail = effective switch { <= 8 => 0, <= 11 => 1 + (1 << (effective - 9)), _ => effective - 4 };
+        var fixedWidth = tailWidth;
+        var fixedHeight = tailHeight;
         if (mode == 24 && elementLog <= 1)
         {
-            tailWidth /= 2;
+            fixedWidth /= 2;
             if (elementLog == 0)
             {
-                tailHeight /= 2;
+                fixedHeight /= 2;
             }
         }
 
-        for (var mip = 0U; mip < mips; mip++)
+        var firstTail = mips;
+        var chain = 0UL;
+        for (var i = 0U; i < mips; i++)
         {
-            var w = PaddedDimension(width, mip, block);
-            var h = PaddedDimension(height, mip, block);
-            if (w <= tailWidth && h <= tailHeight && mips - mip <= (uint)maxTail)
+            var w = (uint)PaddedDimension(width, i, block);
+            var h = (uint)PaddedDimension(height, i, block);
+            if (blockLog != 0 && mips > 1 && w <= fixedWidth && h <= fixedHeight && mips - i <= (uint)maxTail)
             {
-                chain = checked(chain + blockBytes / tileDepth);
+                firstTail = i;
+                chain = checked(chain + alignment / tileDepth);
 
                 break;
             }
 
-            chain = checked(chain + RoundUp(w, tileWidth) * RoundUp(h, tileHeight) * bytes);
+            var pitch = (uint)RoundUp(w, tileWidth);
+            var rows = (uint)RoundUp(h, tileHeight);
+            var depthPitch = dimension != 4 ? 1U :
+                blockLog == 0 || mips == 1 ? paddedDepth :
+                thick ? (uint)RoundUp(PaddedDimension(depth, i, 1), tileDepth) : 1U;
+            entries[i] = new TextureMip(Dimension(width, i, block), Dimension(height, i, block),
+                dimension == 4 ? Dimension(depth, i, 1) : 1U, pitch, rows, depthPitch);
+            chain = checked(chain + (ulong)pitch * rows * bytes * samples);
         }
 
-        return checked(chain * slices);
+        var offset = firstTail < mips ? alignment : 0UL;
+        for (var i = (int)firstTail - 1; i >= 0; i--)
+        {
+            var mip = entries[i];
+            entries[i] = mip with { Offset = offset };
+            offset = checked(offset + (ulong)mip.Pitch * mip.Rows * bytes * samples * tileDepth);
+        }
+
+        var (microX, microY, microZ) = thick
+            ? elementLog switch
+            {
+                0 => (8U, 4U, 8U), 1 => (4U, 4U, 8U), 2 => (4U, 4U, 4U), 3 => (4U, 2U, 4U), _ => (2U, 2U, 4U)
+            }
+            : elementLog switch
+            {
+                0 => (16U, 16U, 1U), 1 => (16U, 8U, 1U), 2 => (8U, 8U, 1U), 3 => (8U, 4U, 1U), _ => (4U, 4U, 1U)
+            };
+        var tailPitch = tailWidth;
+        var tailRows = tailHeight;
+        for (var i = firstTail; i < mips; i++)
+        {
+            var m = maxTail - 1 - (int)(i - firstTail);
+            var tailOffset = (uint)(m > 6 ? 16 << m : m << 8);
+            uint x = 0, y = 0;
+            for (var bit = 0; bit < 6; bit++)
+            {
+                x |= ((tailOffset >> (9 + 2 * bit)) & 1) << bit;
+                y |= ((tailOffset >> (8 + 2 * bit)) & 1) << bit;
+            }
+
+            if ((blockLog & 1) != 0)
+            {
+                (x, y) = (y, x);
+                if ((elementLog & 1) != 0)
+                {
+                    y = (y << 1) | (x & 1);
+                    x >>= 1;
+                }
+            }
+
+            entries[i] = new TextureMip(Dimension(width, i, block), Dimension(height, i, block),
+                dimension == 4 ? Dimension(depth, i, 1) : 1U, tailPitch, tailRows,
+                thick ? (uint)RoundUp(PaddedDimension(depth, i, 1), microZ) : 1U, 0, true, tailOffset, x * microX,
+                y * microY);
+            tailPitch = Math.Max(tailPitch >> 1, microX);
+            tailRows = Math.Max(tailRows >> 1, microY);
+        }
+
+        var sliceSize = checked(chain * tileDepth);
+
+        return new TexturePlane(planeOffset, checked(chain * paddedDepth), alignment, sliceSize, bytes, block, samples,
+            mode, tileWidth, tileHeight, tileDepth, paddedDepth / tileDepth, thick, firstTail, entries);
+    }
+
+    private static uint Dimension(uint extent, uint mip, uint block)
+    {
+        return (Math.Max(1U, extent >> (int)mip) + block - 1) / block;
     }
 
     private static ulong PaddedDimension(uint extent, uint mip, uint block)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Console object ABI adapted from Zettrox/ztrx victory-gpu/src/root.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -7,17 +8,10 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
-    private static readonly Guid RootSignatureId = new("c54a6b66-72df-4ee8-8be5-a946a1429214");
-    private static nint _rootSignatureTable;
     // Defensive limit for a serialized signature, not a hardware limit.
     private const int MaximumRootSignatureBytes = 16 * 1024 * 1024;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RootSignatureObject
-    {
-        public Header Header;
-        public nuint BlobSize;
-    }
+    private static readonly Guid RootSignatureId = new("c54a6b66-72df-4ee8-8be5-a946a1429214");
+    private static nint _rootSignatureTable;
 
     private static bool IsRootSignature(nint value)
     {
@@ -27,6 +21,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static ReadOnlySpan<byte> RootSignatureBlob(nint value)
     {
         var root = (RootSignatureObject*)value;
+
         return new ReadOnlySpan<byte>(root + 1, checked((int)root->BlobSize));
     }
 
@@ -36,8 +31,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("Unexpected root signature ABI header size.");
         }
+
         _rootSignatureTable = (nint)ChildTable(24);
-        device[16] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature;
+        device[16] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -47,14 +44,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             *output = 0;
         }
+
         if (blob == null || size == 0 || size > MaximumRootSignatureBytes)
         {
             return InvalidArgument;
         }
+
         if (iid == null || (*iid != RootSignatureId && *iid != UnknownId && *iid != ObjectId && *iid != ChildId))
         {
             return NoInterface;
         }
+
         if (output == null)
         {
             return 1; // S_FALSE: no object requested.
@@ -76,10 +76,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 NativeMemory.Free(root);
             }
+
             return OutOfMemory;
         }
+
         *output = (nint)root;
-        Console.WriteLine($"[graphics] Root signature: bytes={size}, nodes=0x{nodes:X}, object=0x{(nuint)root:X} (CPU blob only).");
+        Console.WriteLine(
+            $"[graphics] Root signature: bytes={size}, nodes=0x{nodes:X}, object=0x{(nuint)root:X} (CPU blob only).");
+
         return 0;
     }
 
@@ -93,6 +97,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                 _ = ResourcePrivateData.TryRemove(key, out _);
             }
         }
+
         NativeMemory.Free((void*)value);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RootSignatureObject
+    {
+        public Header Header;
+        public nuint BlobSize;
     }
 }

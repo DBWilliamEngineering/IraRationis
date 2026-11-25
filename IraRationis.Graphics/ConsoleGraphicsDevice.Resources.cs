@@ -39,6 +39,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (IsResource(value))
         {
             var resource = (ResourceObject*)value;
+            ReleaseHostResource(resource);
             if (resource->OwnedMemory != 0)
             {
                 FreeCommittedBacking(resource->OwnedMemory, resource->FreeHook, resource->AllocationAttributes);
@@ -754,6 +755,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         public long Generation;
         public nint FreeHook;
         public ulong AllocationAttributes;
+        public nint HostResource;
+        public ulong HostCharge;
     }
 
     [StructLayout(LayoutKind.Sequential)]

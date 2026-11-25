@@ -63,6 +63,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     };
 
     private static readonly Dictionary<int, string> DescriptorHeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc", [9] = "GetCPUDescriptorHandleForHeapStart", [10] = "GetGPUDescriptorHandleForHeapStart" };
+    private static readonly Dictionary<int, string> QueryHeapMethods = new() { [7] = "GetDevice" };
+    private static readonly Dictionary<int, string> PipelineMethods = new() { [7] = "GetDevice", [8] = "GetCachedBlob" };
     private static readonly Dictionary<int, string> RootSignatureMethods = new() { [7] = "GetDevice" };
     private static readonly Dictionary<int, string> HeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc" };
     private static readonly Dictionary<int, string> FenceMethods = new()
@@ -85,7 +87,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             table == _queueNew ? "queue-new" : table == _allocatorTable ? "allocator" :
             table == _fenceTable ? "fence" : table == _listOld ? "list-old" : table == _listNew ? "list-new" :
             table == _resourceTable ? "resource" : table == _heapTable ? "heap" :
-            table == _descriptorHeapTable ? "descriptor-heap" : table == _rootSignatureTable ? "root-signature" :
+            table == _descriptorHeapTable ? "descriptor-heap" : table == _rootSignatureTable ? "root-signature" : table == _pipelineTable ? "pipeline" : table == _queryHeapTable ? "query-heap" : table == _commandSignatureTable ? "command-signature" :
             table == _dxgiDeviceTable ? "dxgi-device" : table == _dxgiAdapterTable ? "dxgi-adapter" :
             table == _dxgiFactoryTable ? "dxgi-factory" : table == _dxgiOutputTable ? "dxgi-output" : "unknown-object";
     }
@@ -101,6 +103,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             "heap" => HeapMethods,
             "descriptor-heap" => DescriptorHeapMethods,
             "root-signature" => RootSignatureMethods,
+            "pipeline" => PipelineMethods,
+            "query-heap" => QueryHeapMethods,
+            "command-signature" => QueryHeapMethods,
             "fence" => FenceMethods,
             "allocator" => AllocatorMethods,
             "dxgi-device" => DxgiDeviceMethods,
@@ -160,6 +165,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             ("heap", _heapTable, 24),
             ("descriptor-heap", _descriptorHeapTable, 24),
             ("root-signature", _rootSignatureTable, 24),
+            ("pipeline", _pipelineTable, 24),
+            ("query-heap", _queryHeapTable, 24),
+            ("command-signature", _commandSignatureTable, 24),
             ("dxgi-device", _dxgiDeviceTable, 32),
             ("dxgi-adapter", _dxgiAdapterTable, 24),
             ("dxgi-factory", _dxgiFactoryTable, 32),
@@ -229,6 +237,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
             ValidateTables(AllTables(_deviceTable));
             ValidateRootSignatureRegistration((nint*)_deviceTable);
+            ValidateComputePipelineRegistration((nint*)_deviceTable);
+            ValidateQueryHeapRegistration((nint*)_deviceTable);
+            ValidateDeviceBatchRegistration((nint*)_deviceTable);
+            ValidateOptionalDeviceRegistration((nint*)_deviceTable);
+            ValidateCommandStateRegistration();
+            ValidateCommandMemoryRegistration();
+            ValidateBarrierRegistration();
+            VerifyOptionalDeviceAbi((nint*)_deviceTable);
+            VerifyCommandStateAbi();
+            VerifyCommandMemoryAbi();
         }
     }
 
@@ -245,6 +263,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             tables = AllTables(_deviceTable);
             ValidateTables(tables);
             ValidateRootSignatureRegistration((nint*)_deviceTable);
+            ValidateComputePipelineRegistration((nint*)_deviceTable);
+            ValidateQueryHeapRegistration((nint*)_deviceTable);
+            ValidateDeviceBatchRegistration((nint*)_deviceTable);
+            ValidateOptionalDeviceRegistration((nint*)_deviceTable);
+            ValidateCommandStateRegistration();
+            ValidateCommandMemoryRegistration();
+            ValidateBarrierRegistration();
         }
         Directory.CreateDirectory(reportDirectory);
         _evidencePath = Path.Combine(reportDirectory, "blocking-slots.tsv");
@@ -276,9 +301,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                         knownRegistered++;
                     }
                 }
-                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" || kind == "root-signature" ||
-                    (kind == "device" && index is 14 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
-                var status = !bound ? "missing" : cpuOnly ? "registered-cpu-only" : "registered-unverified";
+                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" || kind == "root-signature" || kind == "pipeline" || kind == "query-heap" || kind == "command-signature" ||
+                    (kind == "device" && index is 10 or 38 or 41 or 86 or 108 or 39 or 11 or 62 or 14 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
+                var status = !bound ? "missing" : BarrierStatus(kind, index) ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index) ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
                 rows.Add($"{kind}\t{index}\t0x{index * 8:X}\t{method ?? "(unnamed)"}\t{status}");
             }
             writer.WriteLine($"[abi] {kind,-14}: {registered}/{count} registered; {knownRegistered}/{known} named methods registered.");
@@ -295,7 +320,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     continue;
                 }
                 var current = tables.FirstOrDefault(item => item.Name == fields[1]);
-                var status = current.Table != 0 && slot >= 0 && slot < current.Count && ((nint*)current.Table)[slot] != MissingAddress(slot) ? "now registered (unverified)" : "still missing/unknown";
+                var status = current.Table != 0 && slot >= 0 && slot < current.Count && ((nint*)current.Table)[slot] != MissingAddress(slot) ? CommandStateStatus(fields[1], slot) ?? OptionalDeviceStatus(fields[1], slot) ?? "now registered (unverified)" : "still missing/unknown";
                 writer.WriteLine($"[abi] Previous blocker: {fields[1]} 0x{slot * 8:X} {fields[3]}: {status}.");
             }
         }

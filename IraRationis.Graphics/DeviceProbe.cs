@@ -18,6 +18,10 @@ public static unsafe class DeviceProbe
 
     public static int Execute(TextWriter writer)
     {
+        IraRationis.Shaders.NativeShaderProbe.Verify();
+        writer.WriteLine("Native shader extraction and scalar diagnostic lowering passed (CPU only).");
+        Textures.TextureComputerProbe.Verify();
+        writer.WriteLine("XG texture computer ABI and layout tests passed.");
         ConsoleGraphicsDevice.VerifyAbiInitialization();
         writer.WriteLine("ABI initialization, null-table diagnostics and root signature registration passed.");
 
@@ -60,6 +64,11 @@ public static unsafe class DeviceProbe
                 ConsoleGraphicsDevice.VerifyResourceAbi(device);
                 ConsoleGraphicsDevice.VerifyDescriptorAbi(device);
                 ConsoleGraphicsDevice.VerifyRootSignatureAbi(device);
+                ConsoleGraphicsDevice.VerifyComputePipelineAbi(device);
+                ConsoleGraphicsDevice.VerifyQueryHeapAbi(device);
+                ConsoleGraphicsDevice.VerifyDeviceBatchAbi(device);
+                writer.WriteLine("Query heap creation, description ownership and interface ABI passed (CPU only).");
+                writer.WriteLine("Compute pipeline ABI, shader deduplication and ownership passed (CPU only).");
                 writer.WriteLine("Root signature blob ownership and interface ABI passed.");
                 writer.WriteLine("Resource CPU backing, aliases, page pools and descriptor ABI passed.");
 
@@ -101,11 +110,29 @@ public static unsafe class DeviceProbe
                 var syncBottom = (delegate* unmanaged[Stdcall]<nint, uint, uint, ulong, ulong, void>)Slot(list, newer ? 132 : 130);
                 syncTop(list, 0, 0, 0, 0);
                 syncBottom(list, 0, 0, 0, 0);
+                ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
 
+                ulong marker = 0;
+                var write = (delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)Slot(list, newer ? 72 : 70);
+                var waitValue = (delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)Slot(list, newer ? 74 : 72);
+                write(list, (ulong)&marker, 0x1234, 0, 0);
+                waitValue(list, (ulong)&marker, 3, 0x1234);
+                ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
+                write(list, (ulong)&marker, 0x5678, 0, 0);
+                if (marker != 0)
+                {
+                    throw new InvalidOperationException("A command memory write executed while recording.");
+                }
                 var close = (delegate* unmanaged[Stdcall]<nint, int>)Slot(list, 9);
                 Check(close(list), "Close command list");
                 var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10);
                 execute(queue, 1, &list);
+                if (marker != 0x5678)
+                {
+                    throw new InvalidOperationException("Segmented command write/wait order failed.");
+                }
+                writer.WriteLine("[graphics-probe] GPU fence-ordered write/wait/write passed.");
+                writer.WriteLine($"[graphics-probe] {(newer ? "Legacy and enhanced" : "Legacy")} barrier recording and segmented submission passed (ordering only).");
                 var signal = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(queue, newer ? 16 : 14);
                 var complete = (delegate* unmanaged[Stdcall]<nint, ulong>)Slot(fence, 8);
                 var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(fence, 9);
@@ -118,6 +145,7 @@ public static unsafe class DeviceProbe
                     Environment.FailFast("Graphics device probe: fence did not complete; objects may still be in flight.");
                 }
 
+                ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
                 Check(reset(allocator), "Allocator reset after completion");
                 var resetList = (delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)Slot(list, newer ? 139 : 137);
                 Check(resetList(list, allocator, 0, 0), "ResetCommandListX");
