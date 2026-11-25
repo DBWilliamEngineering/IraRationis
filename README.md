@@ -46,6 +46,8 @@ flowchart TD
     E --> G[Native exception handler]
     F --> H[XMem / physical pages]
     F --> I[GameInput / DirectStorage]
+    F --> S[AcpHal / APU memory R6]
+    S --> T[CPU backing and 32-bit device address map]
     F --> J[Console graphics ABI]
     J --> P[PresentX ingress / R4]
     J --> R[Addressable fence bridge / R5]
@@ -73,6 +75,7 @@ IRX is a GPL-3.0-or-later derivative of ztrx/VIctory, not a clean-room implement
 | Generated ABI fallbacks | Compile-time Roslyn generation of fallback callbacks | Implemented; known registrations explicit |
 | Compatibility preflight | Build hash, import inventory, named ABI coverage, blocker history | Partial runtime coverage, not a complete static call graph |
 | Synchronization | Conservative global barriers and segmented memory operations | Exact guest resource/layout semantics and cross-queue coherence unverified |
+| Audio coprocessor memory | Independent 32-bit APU address space, sorted bidirectional interval indexes and owned context storage | Heap ABI implemented in R6; runtime tests and audio execution pending |
 | Performance research | Dependency-aware scheduling, resource ownership, caching, allocation-free hot paths | Design goals; no comparative title benchmarks yet |
 
 ### Managed-first implementation boundary
@@ -162,12 +165,13 @@ The ladder is cumulative, not a percentage of code complete. No points are claim
 
 ### Latest execution evidence
 
-Maintainer logs report native entry, GameInput and DirectStorage initialization, CPU physical-page reservations, host D3D12 initialization, descriptor heaps and command-list creation. The latest trace reaches CPU-only root signatures, compute pipeline containers, resource views and enhanced barrier recording. Optional pipeline slots `0x218` and `0x1C8` return `E_NOTIMPL`; no host pipeline is created by those paths. Earlier startup stopped in `SealMemoryBoundary` on host command-list `Close`, HRESULT `0x80070057` (`E_INVALIDARG`); the standalone `graphics-probe` reproduced that failure after creating a 4 × 4 test texture. The latest maintainer trace explicitly contains the R3 runtime marker, proceeds through enhanced barrier recording and 33,333 microsecond frame-interval configuration, then stops at the newer queue slot `0x100` (`PresentX`). This is evidence of a guest presentation request, not of a displayed frame or a passing full graphics probe. R4 registers and decodes the request. The next maintainer-reported failure is fence slot `0x60` (`GetGPUVirtualAddress`), indicating that execution reached another synchronization boundary; actual displayed frames and a complete passing probe remain unreported. R5 implements the addressable fence bridge, pending Windows validation.
+Maintainer logs report native entry, GameInput and DirectStorage initialization, CPU physical-page reservations, host D3D12 initialization, descriptor heaps and command-list creation. The latest trace reaches CPU-only root signatures, compute pipeline containers, resource views and enhanced barrier recording. Optional pipeline slots `0x218` and `0x1C8` return `E_NOTIMPL`; no host pipeline is created by those paths. Earlier startup stopped in `SealMemoryBoundary` on host command-list `Close`, HRESULT `0x80070057` (`E_INVALIDARG`); the standalone `graphics-probe` reproduced that failure after creating a 4 × 4 test texture. The latest maintainer trace explicitly contains the R3 runtime marker, proceeds through enhanced barrier recording and 33,333 microsecond frame-interval configuration, then stops at the newer queue slot `0x100` (`PresentX`). This is evidence of a guest presentation request, not of a displayed frame or a passing full graphics probe. R4 registers and decodes the request. The next maintainer-reported failure is fence slot `0x60` (`GetGPUVirtualAddress`), indicating that execution reached another synchronization boundary; actual displayed frames and a complete passing probe remain unreported. R5 implements the addressable fence bridge. A subsequent maintainer report reaches the missing import `AcpHal.dll!ApuCreateHeap`; this establishes a later startup blocker, not full validation of fence behavior or a displayed frame. R6 adds the audio coprocessor memory ABI; Windows execution remains pending.
 
 ### Current blockers and next steps
 
 | Blocker | Next engineering step |
 | --- | --- |
+| Audio coprocessor initialization | R6 heap and SHAPE storage reached in maintainer logs; R7 implements AcpHalCreate and immediate message registration/control. Decoder and audio-processing commands remain outstanding. |
 | Addressable fences | R5 bridges guest fence memory to native fence completion; verify delayed completion, packet writes and release |
 | Presentation ingress | R4 registers old/new PresentX and checks the first plane prefix; validate source metadata and implement a coherent host presentation backend |
 | Host command-list validation | R3 title trace progressed beyond prior close failure; run complete GPU clear/readback and segmented execution probes |
@@ -293,3 +297,56 @@ Remove-Item Env:IRX_PRESENT_HEADLESS
 ```
 
 Expected marker: `IRX-GFX-FENCE-R5 active`. The extended graphics probe checks null/registered ABI slots, stable and aligned alias, a native queue blocked behind an unsignaled gate (no premature mirror publication), direct-memory completion without a guest API query, native fence publication from 64-bit and partial writes, rewinds, actual segmented packet write/wait, and removal from the observer registry after final release. Both old/new queue layouts run through the probe. The Windows compile and execution results are not yet verified. No original title frame, intro, menu, gameplay or comparative performance result is claimed by this revision.
+
+
+## First Light R6: audio coprocessor memory
+
+The maintainer reported a missing `AcpHal.dll!ApuCreateHeap` import after committing R4/R5 and code cleanup (`dfbc9cf`). R6 adds `AcpHalModule` to the CLI HLE registry and explicitly includes it in the HLE project. No existing graphics sources, native sources, solution membership, dependencies, or runtime settings are replaced.
+
+The six heap exports are `ApuCreateHeap`, `ApuAlloc`, `ApuFree`, `ApuMapVirtualAddress`, `ApuMapApuAddress`, and `ApuIsVirtualAddressValid`. Their signatures were compared against [VIctory audio.rs](https://github.com/LooperSalty/VIctory/blob/main/crates/victory-hle/src/modules/audio.rs), [victory-fork audio.rs](https://github.com/fxceless/victory-fork/blob/main/crates/victory-hle/src/modules/audio.rs) and DexNom/VIctory. APU addresses are software device addresses, not truncated host pointers, physical addresses or D3D12 GPU VAs.
+
+```mermaid
+flowchart LR
+    A[Guest AcpHal imports] --> B[Managed APU heap ABI]
+    B --> C[Aligned unmanaged CPU backing]
+    B --> D[Sorted host interval index]
+    B --> E[Sorted 32-bit APU interval index]
+    D <-->|Shared block metadata| E
+    E --> F[SHAPE context storage]
+    F -.-> G[Future ACP command engine and decoder]
+    classDef irx fill:#35171b,stroke:#b52837,color:#fff
+    class B,D,E irx
+```
+
+Both address indexes share immutable block metadata under one short metadata lock. Address translation uses binary predecessor search, O(log n), and no explicit per-lookup managed allocation. Allocation and release may move sorted-array entries (O(n)); first fit scans live device intervals. Free gaps are implicit and adjacent gaps automatically merge. Native backing is allocated and cleared outside the lock and freed when the ownership record is removed. The requested cached and non-cached sizes are advisory, following the reference; cache flags are not enforced and no hardware DMA or audio accelerator is modeled. Mapping pointers are borrowed and callers must synchronize against concurrent free. This is a separate audio address domain, not production VUM integration. Performance is a design hypothesis, not a measured improvement.
+
+`AcpHalAllocateShapeContexts` and `AcpHalReleaseShapeContexts` implement the upstream packed 96-byte context descriptor and allocate the requested context arrays. Contexts remain owned by the aggregate allocation until release; individual `ApuFree` calls do not release them. The EQ/compression, filter/volume and PCM strides are provisional upstream estimates. No ACP command object (`AcpHalCreate`), command execution, XMA/Opus decoding, mixer or audio output is implemented by R6. No fake command completion or audio is reported.
+
+```powershell
+dotnet build IraRationis.slnx -c Release
+dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r6
+```
+
+Expected title marker: `[audio] IRX-ACP-R6: APU heap initialized`. The runtime test invokes actual unmanaged export pointers and checks invalid input, duplicate creation, alignment, zeroing, interior translation, invalidation, gap reuse and SHAPE ownership and release. It is a CPU-only test, not proof of audio playback. C# compilation, Native AOT publish and Windows title execution require maintainer validation. First original frame, intro and menu remain unverified.
+
+
+## First Light R7: audio coprocessor control
+
+Maintainer-reported R6 execution initialized the APU heap (cached 477,102,080 bytes; non-cached 2,256,384 bytes, advisory) and allocated SHAPE context storage. The next missing import was `AcpHalCreate`. R7 adds the custom six-slot ACP interface using C# unmanaged callbacks, an immutable process-lifetime vtable and per-object connection state. The existing R6 heap and graphics paths are preserved.
+
+```mermaid
+flowchart LR
+    A[Guest AcpHalCreate] --> B[ACP control object]
+    B --> C[Immediate registration commands]
+    C --> D[Bounded preallocated message ring]
+    C --> E[Checked APU notification word]
+    E --> F[R6 address translation]
+    B -. unsupported .-> G[Flowgraph / XMA / DSP processing]
+```
+
+The packed 28-byte message ABI carries a 12-byte header and 16-byte payload. Registration and unregistration update the message mask; successful commands with nonzero IDs may publish completion messages and aligned, range-checked APU notification words. Disconnect posts a subscribed disconnect event. The FIFO is allocated on connect, uses no per-message allocation, and counts discarded messages when full. Command capacity is currently validated only for nonzero values because the implemented control operations execute immediately; scheduled-frame processing is not modeled. Message capacity is capped at 1,048,576 records as a defensive implementation limit.
+
+Unknown or audio-processing commands return `E_NOTIMPL`, with a first-occurrence diagnostic and no fabricated completion or notification. No XMA decoding, SHAPE flowgraph execution, mixing or actual audio playback is implemented. The interface ABI is inferred from upstream [audio.rs](https://github.com/LooperSalty/VIctory/blob/main/crates/victory-hle/src/modules/audio.rs); exact title behavior and Windows Native AOT execution require validation.
+
+The runtime tests exercise the real registered callbacks, including null output, connection lifecycle, bounded FIFO, drop counts, packed payload, notification range and unsupported command behavior. No C++ sources or dependencies were added.

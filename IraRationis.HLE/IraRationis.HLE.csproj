@@ -9,4 +9,9 @@
         <ProjectReference Include="../IraRationis.PE/IraRationis.PE.csproj" />
         <ProjectReference Include="../IraRationis.Loader/IraRationis.Loader.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Remove="AcpHalModule.cs;AcpHalModule.Control.cs" />
+        <Compile Include="AcpHalModule.cs" />
+        <Compile Include="AcpHalModule.Control.cs" />
+    </ItemGroup>
 </Project>
