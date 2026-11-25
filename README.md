@@ -7,6 +7,8 @@
 Independent engineering research: a C# Native AOT-oriented compatibility runtime derived from a source-level port of [Zettrox/ztrx](https://github.com/Zettrox/ztrx), based on VIctory and victory-fork. Upstream reference tree: `90b529f878a470fec9bf07b7be316bc769a12232`. Windows x64, C# 15, .NET 11, Native AOT. Output: `irx.exe`.
 
 > **Experimental compatibility runtime.** Native title execution has been demonstrated in maintainer-reported local logs. Original game frames, intro playback, menus and gameplay have not been demonstrated. First Light has reached host GPU initialization, command-list creation, frame pacing, CPU-backed resource creation and descriptor heap initialization. The latest texture allocation fix and memory benchmark still require Windows validation. No game data is included. Run only trusted, lawfully obtained executables; IRX is not a sandbox.
+>
+> Core Testing is done with GTA VI
 
 ## Engineering identity and differentiators
 
