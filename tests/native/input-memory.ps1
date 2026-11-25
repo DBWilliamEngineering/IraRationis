@@ -41,3 +41,6 @@ finally {
     $env:IRX_DATA_DIR = $oldData
     Remove-Item -Recurse -Force $root
 }
+
+# Translate the validated guest sentinel into ordinary test success.
+exit 0

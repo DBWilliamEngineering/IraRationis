@@ -179,7 +179,7 @@ internal static class Program
         writer.WriteLine("       irx present-probe [--seconds 1..120] [--fps 1..240] [--gpu-upload]");
         writer.WriteLine("       irx memory-probe [--mib 1..256] [--iterations 1..100] [--adapter N]");
         writer.WriteLine("       irx memory-probe --self-test");
-        writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play]");
+        writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play|--stream]");
         writer.WriteLine("       irx inspect [file] | irx shader <file> | irx archive <file>");
         writer.WriteLine(
             "Omit the run path to open the Windows executable picker. Run only trusted title files; this is not a sandbox.");

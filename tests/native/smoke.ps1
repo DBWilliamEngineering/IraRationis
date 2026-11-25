@@ -33,3 +33,7 @@ finally {
     $env:IRX_DATA_DIR = $oldData
     Remove-Item -Recurse -Force $root
 }
+
+# The guest's expected sentinel is not the test process exit code.
+# Only reached after every assertion and cleanup has succeeded.
+exit 0

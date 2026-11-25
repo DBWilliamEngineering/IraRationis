@@ -2,29 +2,48 @@ name: Windows x64 Native AOT
 
 on:
     push:
+        branches: ['**']
+        tags: ['v*']
     pull_request:
     workflow_dispatch:
 
 permissions:
     contents: read
 
+defaults:
+    run:
+        shell: pwsh
+
 jobs:
     native-aot:
         runs-on: windows-latest
+        timeout-minutes: 30
+        env:
+            IRX_STORAGE_STRICT_LENGTH: '1'
+            IRX_TRACE_COLOR_FLOW: '0'
+            IRX_R31_INPUT_COLOR_TRACE: '0'
+            IRX_INPUT_DUALSENSE: '0'
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-dotnet@v4
+            - uses: actions/checkout@v6
               with:
-                  dotnet-version: '11.0.x'
-            - uses: actions/setup-python@v5
+                  persist-credentials: false
+            - uses: actions/setup-dotnet@v5
+              with:
+                  global-json-file: global.json
+            - uses: actions/setup-python@v6
               with:
                   python-version: '3.12'
+            - uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
             - name: Restore solution
               run: dotnet restore IraRationis.slnx
             - name: Build solution
               run: dotnet build IraRationis.slnx -c Release --no-restore
             - name: Run component tests
               run: dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+            - name: Test strict storage contracts
+              run: dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build
             - name: Publish Native AOT executable
               run: dotnet publish IraRationis.Cli/IraRationis.Cli.csproj -c Release -r win-x64 -o artifacts/native
             - name: Test memory page table
@@ -33,16 +52,88 @@ jobs:
               run: ./artifacts/native/irx.exe veh-probe
             - name: Smoke-test native executable
               run: python tests/smoke.py artifacts/native/irx.exe
-            - uses: ilammy/msvc-dev-cmd@v1
-              with:
-                  arch: x64
             - name: Test native entry and thread execution
               run: ./tests/native/smoke.ps1 artifacts/native/irx.exe
             - name: Test GameInput and physical page mapping
               run: ./tests/native/input-memory.ps1 artifacts/native/irx.exe
             - name: Test DirectStorage ABI and completion
               run: ./tests/native/storage.ps1 artifacts/native/irx.exe
-            - uses: actions/upload-artifact@v4
+            - name: Locate or install FFmpeg for synthetic media tests
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $ffmpeg = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
+                  if (-not $ffmpeg) {
+                      choco install ffmpeg --yes --no-progress
+                      if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed.' }
+                      $env:Path += ";$env:ChocolateyInstall\bin"
+                      $ffmpeg = Get-Command ffmpeg.exe -ErrorAction Stop
+                  }
+                  "IRX_CI_FFMPEG=$($ffmpeg.Source)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            - name: Test media primitives and synthetic decoding
+              run: |
+                  $clip = (Resolve-Path tests/media-baseline/fixture.mp4).Path
+                  dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release --no-build -- $env:IRX_CI_FFMPEG $clip
+            - name: Test Native AOT media CLI (noninteractive)
+              run: |
+                  $clip = (Resolve-Path tests/media-baseline/fixture.mp4).Path
+                  & ./artifacts/native/irx.exe media-probe $env:IRX_CI_FFMPEG $clip
+            - name: Prepare validated binary distribution
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  if (!(Test-Path artifacts/native/irx.exe) -or !(Test-Path artifacts/native/irx-native.dll)) {
+                      throw 'Required runtime binaries missing.'
+                  }
+                  $stage = 'artifacts/distribution'
+                  New-Item -ItemType Directory -Path $stage -Force | Out-Null
+                  Get-ChildItem artifacts/native -Force | Where-Object { $_.Extension -ne '.pdb' } | Copy-Item -Destination $stage -Recurse -Force
+                  Copy-Item README.md, LICENSE, LICENSE-PROPRIETARY.md -Destination $stage
+                  if (Test-Path docs/assets/crest.png) {
+                      New-Item -ItemType Directory -Path "$stage/docs/assets" -Force | Out-Null
+                      Copy-Item docs/assets/crest.png "$stage/docs/assets/crest.png"
+                      Copy-Item docs/architecture.md, docs/RELEASING.md -Destination "$stage/docs"
+                  }
+                  @("Commit: $env:GITHUB_SHA", "Ref: $env:GITHUB_REF", "Run: $env:GITHUB_RUN_ID", "SDK: $(dotnet --version)") | Set-Content "$stage/BUILD-INFO.txt" -Encoding utf8
+                  New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
+                  Compress-Archive -Path "$stage/*" -DestinationPath artifacts/release/irx-win-x64.zip -Force
+            - name: Upload validated Windows distribution
+              uses: actions/upload-artifact@v4
               with:
                   name: irx-win-x64
-                  path: artifacts/native/
+                  path: artifacts/release/irx-win-x64.zip
+                  if-no-files-found: error
+                  retention-days: 14
+
+    draft-release:
+        needs: native-aot
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        runs-on: windows-latest
+        timeout-minutes: 10
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - uses: actions/download-artifact@v4
+              with:
+                  name: irx-win-x64
+                  path: artifacts/release
+            - name: Package matching source and checksums
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  # Archive the exact tagged source, not the runner's generated outputs.
+                  git archive --format=zip --output=artifacts/release/irx-source.zip HEAD
+                  if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
+                  $files = Get-ChildItem artifacts/release -Filter '*.zip' | Sort-Object Name
+                  if ($files.Count -ne 2) { throw 'Expected binary and source archives.' }
+                  $files | ForEach-Object {
+                      $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                      "$hash  $($_.Name)"
+                  } | Set-Content artifacts/release/SHA256SUMS.txt -Encoding ascii
+            - name: Create draft prerelease for maintainer review
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_TAG: ${{ github.ref_name }}
+              run: |
+                  gh release create $env:RELEASE_TAG artifacts/release/irx-win-x64.zip artifacts/release/irx-source.zip artifacts/release/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --verify-tag --draft --prerelease --generate-notes --title "Ira Rationis $env:RELEASE_TAG"
+                  if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed; inspect any existing draft before retrying.' }

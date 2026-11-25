@@ -1,33 +1,34 @@
-# Ira Rationis | Vindex
+<div align="center">
+  <img src="docs/assets/crest.png" width="260" alt="Ira Rationis crest" />
+  <h1>IRA RATIONIS</h1>
+  <h3>PROJECT VINDEX · v0.1.0</h3>
+  <p><i>The Wrath of Reason</i><br />
+  <b>Nullius in verba · Non impone opinionem</b></p>
+  <p><b>Defiance through competence.</b></p>
+  <p>
+    <img alt="First Light R36" src="https://img.shields.io/badge/FIRST_LIGHT-R36-8e2334?style=for-the-badge" />
+    <img alt="Windows x64" src="https://img.shields.io/badge/WINDOWS-x64-333840?style=for-the-badge" />
+    <img alt="Experimental" src="https://img.shields.io/badge/STATUS-EXPERIMENTAL-333840?style=for-the-badge" />
+  </p>
+  <p>
+    <img alt="C# 15" src="https://img.shields.io/badge/C%23-15-6942b8" />
+    <img alt=".NET 11" src="https://img.shields.io/badge/.NET-11-6942b8" />
+    <img alt="Native AOT" src="https://img.shields.io/badge/Native-AOT-37698c" />
+    <img alt="Direct3D 12" src="https://img.shields.io/badge/Graphics-D3D12-37698c" />
+    <a href="https://github.com/DBWilliamEngineering/IraRationis/actions/workflows/build.yml"><img alt="Windows x64 Native AOT CI" src="https://github.com/DBWilliamEngineering/IraRationis/actions/workflows/build.yml/badge.svg?branch=main" /></a>
+  </p>
+  <p><b>First Light R36 · Bounded video streaming and release engineering</b><br />
+  Windows x64 · C# / selected native C++ · <code>irx.exe</code><br />
+  GPL-covered runtime · separately designated proprietary material<br />
+  Updated November 25, 2026</p>
+  <p><a href="#first-light-current-progress">Progress</a> · <a href="#architecture">Architecture</a> · <a href="#build-and-validate">Build &amp; validate</a> · <a href="#continuous-integration-and-releases">Releases</a> · <a href="#development-history">History</a> · <a href="#intellectual-property-licensing-and-attribution">Licensing</a></p>
+</div>
 
-<p align="center"><img src="docs/assets/crest.png" width="220" alt="Ira Rationis crest" /></p>
-<h2 align="center">PROJECT VINDEX · v0.1.0</h2>
-<p align="center"><i>The Wrath of Reason · Nullius in verba · Non impone opinionem</i></p>
-<p align="center"><b>Defiance through competence.</b></p>
+---
 
-<p align="center">
-  <img alt="Development milestone: First Light R34" src="https://img.shields.io/badge/First_Light-R34-8e2334" />
-  <img alt="Target: Windows x64" src="https://img.shields.io/badge/target-Windows_x64-37698c" />
-  <img alt=".NET 11" src="https://img.shields.io/badge/.NET-11-6942b8" />
-  <img alt="Status: Experimental" src="https://img.shields.io/badge/status-experimental-777777" />
-</p>
+Independent systems engineering research into native x86-64 console compatibility on Windows. Ira Rationis (IRX) develops a managed-first runtime spanning native ABI translation, GPU command execution, virtual memory, input, storage and media processing. It is an experimental compatibility runtime, not a complete console emulator, security sandbox or official SDK.
 
-Independent engineering research into native x86-64 console compatibility on Windows. Ira Rationis (IRX) investigates managed-first ABI translation, native execution, GPU command and resource translation, virtual memory, input, storage, and media processing. It is a compatibility runtime, not a complete console emulator, a security sandbox, or an official platform SDK.
-
-## Project identity
-
-| Identity | Designation |
-| --- | --- |
-| Project | Ira Rationis (IRX) |
-| Release family | Vindex v0.1.0 |
-| Development milestone | First Light R34 — Media CLI integration |
-| Updated | 2026-11-25 |
-| Implementation | C# 15 / .NET 11 / selected native C++ |
-| Target | Windows x64 / Native AOT |
-| Graphics | Direct3D 12 / TerraFX |
-| Executable | `irx.exe` |
-| License | GPL-3.0-or-later; see [LICENSE](LICENSE) |
-| Status | Experimental; partial compatibility |
+## Release designations
 
 | Version | Codename | State |
 | --- | --- | --- |
@@ -37,13 +38,13 @@ Independent engineering research into native x86-64 console compatibility on Win
 | 0.4 | Prometheus | Reserved |
 | 1.0 | Invictus | Reserved |
 
-The identity card above is the release-level source of truth. Update the release designation, milestone and verified capabilities at each major release. Reserved names are not delivery commitments.
+The centered identity header is the release-level source of truth. Update the release designation, milestone and verified capabilities at each major release. Reserved names are not delivery commitments.
 
 ## First Light: current progress
 
-> **Native execution, recognizable UI rendering and guest-consumed controller input have been observed.** Startup logo, intro video, guest audio output, account workflow completion and the main menu remain unresolved. R34 integrates independent media processing with the CLI, not with the guest's playback or account services.
+> **Native execution, recognizable UI rendering and guest-consumed controller input have been observed.** Startup logo, intro video, guest audio output, account workflow completion and the main menu remain unresolved. R34–R35 established an independently working Windows media path. R36 adds bounded streamed video; it does not connect the guest's playback or account services.
 
-The evidence below is maintainer-reported from local R30–R32 execution logs unless indicated otherwise. These observations are not proof of compatibility across other titles, hardware or builds. No game-derived binaries or captures are included in this repository update.
+The evidence below is maintainer-reported from local R30–R35 execution logs unless indicated otherwise. These observations are not proof of compatibility across other titles, hardware or builds. No game-derived binaries or captures are included in this repository update.
 
 | Milestone | State | Evidence / boundary |
 | --- | --- | --- |
@@ -53,8 +54,10 @@ The evidence below is maintainer-reported from local R30–R32 execution logs un
 | Host presentation | Observed | Native D3D12/DXGI presentation; sampled final composition fingerprints match their intermediate inputs. |
 | Controller input | Observed | Wired DualSense press/release events retrieved through the guest GameInput ABI. |
 | Storage | Observed | R32 strict length checks, successful sampled reads and decompression/status markers; no reported request failures in the submitted run. |
-| Independent media decoding | Component evidence | R33 synthetic H.264/AAC fixture: 60 decoded video frames, 192,000 interleaved PCM16 samples. FFmpeg commands validated independently; managed implementation awaits Windows validation. |
-| Media CLI integration | Implemented, unverified | R34 CLI command, project reference and solution membership. |
+| Independent media decoding | Observed | R34 Windows CLI: 60 decoded frames, 60 unique fingerprints, 192,000 interleaved PCM16 samples at 48 kHz stereo. |
+| Media CLI integration | Observed | R34 published CLI executed the media command and completed the synchronous audio API call. |
+| Independent live A/V | Observed | R35 original Vindex clip: 60 frames presented, 0 skipped, 25 distinct image fingerprints, cancellation false, audio clock 2.000 s; visible logo screenshot supplied. Audible output not separately confirmed. |
+| Bounded video streaming | Implemented, unverified | R36 adds a four-frame decoder queue and pooled buffers; Windows build and runtime pending. |
 | Startup logo / video | Outstanding | Black startup surfaces observed; decoded guest frame delivery not established. |
 | Guest audio | Outstanding | APU/SHAPE/ACP initialization observed; XMA, full DSP and actual output missing or unverified. |
 | Frontend / main menu | Outstanding | Input reaches the guest but account workflow does not progress in the supplied run. |
@@ -79,7 +82,7 @@ These are development-run presentation rates, not measured gameplay FPS, and not
 ```mermaid
 flowchart TD
     CLI[irx CLI] --> RUN[RunCommand]
-    CLI --> MP[MediaProbeCommand - R34]
+    CLI --> MP[MediaProbeCommand - R34–R36]
     RUN --> PE[PE parsing and loader]
     PE --> EXEC[Native execution]
     EXEC --> HLE[HLE registry and resolver]
@@ -98,6 +101,7 @@ flowchart TD
     MEDIA --> DEC[Local FFmpeg adapter]
     MEDIA --> PIX[NV12 to BGRA and frame inspection]
     MEDIA --> PCM[PCM mixing / WAVE / WinMM]
+    MEDIA --> STREAM[Bounded video pipe / frame queue]
     MEDIA -. future guest integration .-> AUDIO
     MEDIA -. future surface ownership .-> GFX
     classDef irx fill:#35171b,stroke:#b52837,color:#fff
@@ -162,26 +166,50 @@ The controller backend preserves XInput and keyboard fallback and adds wired Dua
 
 DirectStorage uses per-queue ordered workers with raw reads and Zlib decompression. R32 added opt-in strict payload length checks and sampled request/status accounting. BCPack and weighted shared scheduling are not yet implemented. Success reports do not independently verify every byte's semantic interpretation by the guest.
 
-### Media: actual R34 call path
+### Media architecture: R34–R36
+
+```mermaid
+flowchart TD
+    A[irx media-probe] --> B[MediaProbeCommand]
+    B --> C[Batch decoder - R34/R35]
+    B --> S[StreamingMediaSession - R36]
+    C --> E[DecodedClip]
+    E --> F[MediaClipInspector]
+    F --> I[BMP previews / hashes / WAV]
+    E --> P[MediaPlaybackSession - R35]
+    S --> V[Local FFmpeg video pipe]
+    V --> Q[Bounded channel - 4 frames]
+    Q --> N[Pooled NV12 buffers]
+    S --> U[Local FFmpeg PCM pipe]
+    U --> W[Bounded predecoded stereo PCM16]
+    P --> K[WindowsPcmClock]
+    W --> K
+    K --> T[Audio device position]
+    T --> P
+    T --> S
+    P --> G[NV12 to BGRA]
+    N --> S
+    S --> G
+    G --> H[Win32 GDI presenter]
+    K --> L[WinMM waveOut device]
+```
+
+The existing `--play` path uses a bounded batch decoder, exports inspection artifacts and displays video in a native window synchronized to `waveOut` device position. R35 was observed presenting every frame of the original two-second Vindex fixture. The R36 `--stream` path decodes video progressively into a bounded four-frame channel, applies producer backpressure, rents frame memory from `ArrayPool<byte>`, and schedules the most recent due frame from the same audio clock. It does not write temporary raw video files. Audio is still predecoded (48 kHz stereo PCM16, up to 30 seconds) and submitted as one buffer. Fixed output: 640×360 NV12 at 30 FPS; clips with a different aspect ratio are currently rescaled to this extent. The queue capacity is not a measurement of total process memory: the producer, consumer and FFmpeg can retain additional bounded buffers or codec state. Both paths require an external, trusted FFmpeg executable and authorized local media. No D3D12 video presenter, WASAPI streaming, variable timestamps, guest Bink or XMA integration is claimed.
+
+### Startup integration boundary
 
 ```mermaid
 flowchart LR
-    A[irx media-probe] --> B[MediaProbeCommand]
-    B --> C[LocalMediaDecoder]
-    C --> D[FFmpeg local file adapter]
-    D --> E[DecodedClip]
-    E --> F[MediaClipInspector]
-    F --> G[Nv12Converter]
-    F --> H[PcmMixer.ToWave]
-    G --> I[BMP previews and fingerprints]
-    H --> J[PCM16 WAV]
-    E --> K[Optional WindowsWaveOutput.Play]
-    K --> L[WinMM synchronous PCM playback]
-    T[MediaBaseline regression app] --> C
-    T --> F
+    A[Authorized native application] --> B[Guest media and platform contracts]
+    B -. unimplemented bindings .-> C[IRX media frame and PCM services]
+    C -. future coherent texture upload .-> D[Host D3D12]
+    C -. future guest audio routing .-> E[Audio output]
+    F[Independent local clip] --> G[R35/R36 media player]
+    G --> H[Win32 presentation]
+    G --> I[WinMM output]
 ```
 
-Both CLI and regression app use the same managed library. The probe decodes a bounded local clip with a user-supplied FFmpeg executable, produces video preview images, hashes decoded frames, measures PCM peak and writes a WAVE file. Optional audio playback uses `PlaySoundW` with a pinned in-memory WAVE buffer. The video path exports previews, not a live video window; FFmpeg is an external process, not an embedded codec. No synchronized A/V playback, XMA processing, real-time WASAPI mixer, guest Bink interception, or authentication implementation is claimed. Use only trusted FFmpeg builds and local authorized media; this adapter is not a sandbox.
+The independent player is not invoked during normal guest execution. It does not replace an application's logo, simulate account success or establish guest video/audio playback. Integration depends on correct, documented decoder, graphics, audio and legitimate platform service contracts.
 
 ## Build and validate
 
@@ -190,11 +218,11 @@ Requirements: Windows x64, the .NET SDK specified in `global.json`, Visual Studi
 ```powershell
 dotnet restore IraRationis.slnx
 dotnet build IraRationis.slnx -c Release
-dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r34
-.\artifacts\native-r34\irx.exe --help
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r36
+.\artifacts\native-r36\irx.exe --help
 ```
 
-The R34 source and project wiring have been checked offline. Windows compilation, Native AOT publication of the new integration and native speaker playback have not been validated in the authoring environment.
+R34 and R35 were successfully exercised by the maintainer on Windows. R36 source integration and decoder pipe commands are checked offline; R36 C# compilation, Native AOT publication and Windows playback remain unverified. The local R35 playback result is not a substitute for a green CI run.
 
 ### Standalone media validation (no guest executable required)
 
@@ -202,8 +230,12 @@ The R34 source and project wiring have been checked offline. Windows compilation
 $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 $clip = (Resolve-Path .\tests\media-baseline\fixture.mp4).Path
 
-# Actual main CLI entry point
-& .\artifacts\native-r34\irx.exe media-probe $ffmpeg $clip --play
+# R35 batch playback baseline
+& .\artifacts\native-r36\irx.exe media-probe $ffmpeg $clip --play
+
+# R36 progressive video path (no raw video files)
+$intro = (Resolve-Path .\tests\media-baseline\vindex-intro.mp4).Path
+& .\artifacts\native-r36\irx.exe media-probe $ffmpeg $intro --stream
 
 # Independent primitive and fixture regression checks
 dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release -- $ffmpeg $clip
@@ -212,18 +244,53 @@ dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release -- $ff
 dotnet run --project tests/storage-contract/StorageContract.csproj -c Release
 ```
 
-Expected fixture observations: 60 decoded video frames, 60 distinct frame hashes, 192,000 interleaved PCM samples (96,000 stereo sample frames), 48 kHz and a nonzero audio peak. The CLI prints `IRX-R34` and the output directory under `artifacts/media-probe/`; the test application uses `artifacts/media-baseline/`. Each run creates a unique directory containing up to three BMP previews and `media-output.wav`. Omit `--play` to decode and export without speaker output. Static or silent clips are valid for the general CLI; the synthetic fixture test explicitly requires motion and sound.
+Expected fixture observations: 60 decoded video frames, 60 distinct frame hashes, 192,000 interleaved PCM samples (96,000 stereo sample frames), 48 kHz and a nonzero audio peak. The CLI prints `IRX-R34` and the output directory under `artifacts/media-probe/`; the test application uses `artifacts/media-baseline/`. Each run creates a unique directory containing up to three BMP previews and `media-output.wav`. Omit the playback flag to decode and export without speaker output. The R36 `--stream` mode reports `IRX-R36`, decoded/presented/skipped frame counts and audio position; the Vindex fixture is expected to decode 60 frames, with approximately 2.0 seconds of audio (AAC padding may slightly increase PCM length); it does not export inspection artifacts. Static or silent clips are valid for the general CLI; the synthetic fixture test explicitly requires motion and sound.
 
 Other independent commands:
 
 ```powershell
-.\artifacts\native-r34\irx.exe graphics-probe
-.\artifacts\native-r34\irx.exe veh-probe
-.\artifacts\native-r34\irx.exe present-probe --seconds 5 --fps 60
-.\artifacts\native-r34\irx.exe memory-probe --self-test
+.\artifacts\native-r36\irx.exe graphics-probe
+.\artifacts\native-r36\irx.exe veh-probe
+.\artifacts\native-r36\irx.exe present-probe --seconds 5 --fps 60
+.\artifacts\native-r36\irx.exe memory-probe --self-test
 ```
 
 For supported runtime options, use `irx --help`. Native title execution is experimental and unsandboxed. Use only trusted executables and dependencies for which you have authorization; do not bypass licensing, authentication or entitlement requirements.
+
+## Continuous integration and releases
+
+The [Windows x64 Native AOT workflow](.github/workflows/build.yml) validates the solution on pushes, pull requests and manual runs. Pushes of `v*` tags also prepare a draft prerelease, only if the entire validation job passes. Ordinary CI has read-only repository permissions; release creation has a separate, tag-only job with `contents: write`.
+
+```mermaid
+flowchart TD
+    A[Push / pull request / manual run] --> B[Restore and build pinned SDK baseline]
+    B --> C[Component and storage contract tests]
+    C --> D[Native AOT publish]
+    D --> E[Memory / VEH / native ABI smoke tests]
+    E --> F[Synthetic media tests - no speaker or window]
+    F --> G[Binary ZIP and build metadata]
+    G --> H[Upload CI artifact]
+    H --> I{Version tag push?}
+    I -->|No| J[CI complete]
+    I -->|Yes| K[Archive matching tagged source]
+    K --> L[SHA-256 manifest]
+    L --> M[Draft prerelease for maintainer review]
+```
+
+**Most recent inspected historical run:** [45712840752](https://github.com/DBWilliamEngineering/IraRationis/actions/runs/45712840752) passed compilation, Native AOT publish and initial component probes. Its native entry test returned the expected sentinel `42` and printed its success message, but the Actions step failed. R36 explicitly returns `0` from all three PowerShell native test scripts after successful assertions and cleanup. Unexpected exit codes still throw. This corrects the likely exit-status propagation issue; a new CI run is required to confirm the fix and expose any subsequent failures. No test is marked `continue-on-error`.
+
+CI adds the independent R32 storage regression and R34 media decoding/primitive tests, including a noninteractive published-CLI probe. It does not open a video window, require physical controllers or assert that sound was audible. R35/R36 live playback remains a local Windows acceptance check.
+
+### Creating a release
+
+After the intended commit passes CI, select a new version tag. For example, for this experimental milestone:
+
+```powershell
+git tag -a v0.1.0-r36 -m "Vindex / First Light R36"
+git push origin v0.1.0-r36
+```
+
+The workflow prepares `irx-win-x64.zip`, `irx-source.zip` (the exact tagged source) and `SHA256SUMS.txt`. Review the draft under GitHub Releases before publishing. The release job does not publish automatically, modify an existing release, create game assets, or bundle FFmpeg. Binary archives include the project license and notices; review third-party dependency obligations and the corresponding source archive before distribution. See [release procedure](docs/RELEASING.md) for the complete checklist. If repository content is intended to remain restricted, confirm repository visibility before pushing or releasing it.
 
 ## Development history
 
@@ -242,10 +309,12 @@ For supported runtime options, use `irx --help`. Native title execution is exper
 | R32 | Strict storage payload validation and request/status telemetry |
 | R33 | Independent media library and synthetic fixture |
 | R34 | Solution registration, CLI integration, shared inspection implementation and documentation |
+| R35 | Native live A/V, audio-clock frame scheduling and original Vindex fixture |
+| R36 | Progressive video decode, bounded frame channel, pooled buffers, PCM pipe, release identity, native test exit handling and gated draft release workflow |
 
 ## Remaining engineering milestones
 
-1. Validate the R34 Windows build and independent media command on the target system.
+1. Validate R36 progressive playback and cancellation on Windows, preserving the verified R35 baseline.
 2. Establish documented video surface ownership, layout and synchronization using authorized synthetic GPU workloads.
 3. Extend shader and pipeline translation with explicit capability and error semantics rather than dummy-success returns.
 4. Establish a streaming audio backend, correct decoder/PCM ownership, scheduling and observable native output.
@@ -254,8 +323,14 @@ For supported runtime options, use `irx --help`. Native title execution is exper
 
 The previously observed pipeline rejections (`E_NOTIMPL` for slots `0x1C8` and `0x218`), transparent startup draws, guest resource alias coherence, incomplete audio processing and unverified account lifecycle are outstanding questions, not proven root causes of a single failure. Independent media success does not demonstrate guest video or audio integration.
 
-## Provenance and licensing
+## Intellectual property, licensing and attribution
 
-IRX is a GPL-3.0-or-later source-level derivative of [Zettrox/ztrx](https://github.com/Zettrox/ztrx), based on VIctory and victory-fork. Original reference tree: `90b529f878a470fec9bf07b7be316bc769a12232`. [DexNom/VIctory](https://github.com/DexNom/VIctory/tree/main) and [victory-fork](https://github.com/fxceless/victory-fork) are additional architectural references, not proof of IRX parity. Maintain applicable upstream notices and license obligations. Review the license of external codec binaries separately; FFmpeg is not bundled by this update. No commercial game assets, executable images, account credentials, shader dumps, runtime caches or title-derived captures belong in version control.
+Ira Rationis maintains its own technical direction, release identity, architecture and implementation strategy, with a focus on managed-first systems engineering and measurable correctness. Copyright in original contributions remains with their respective rights holders.
 
-IRX-specific work denotes implementation and research choices relative to its upstream references, not a claim of global novelty or proprietary rights over GPL-covered derivative code. See [LICENSE](LICENSE) and source notices. Preserve historical technical notes in Git history when revising this README.
+The GPL-covered runtime incorporates adapted work from [Zettrox/ztrx](https://github.com/Zettrox/ztrx), based on VIctory and victory-fork (original reference tree `90b529f878a470fec9bf07b7be316bc769a12232`). [DexNom/VIctory](https://github.com/DexNom/VIctory/tree/main) and [victory-fork](https://github.com/fxceless/victory-fork) are additional technical references. Applicable upstream notices and GPL obligations are preserved; reference use does not imply upstream feature parity or endorsement.
+
+- **Runtime software:** [GPL-3.0-or-later](LICENSE).
+- **Separately identifiable independent materials:** [proprietary material notice](LICENSE-PROPRIETARY.md), where validly and explicitly designated. No proprietary designation overrides GPL rights or third-party obligations.
+- **External dependencies:** retain their applicable licenses. FFmpeg is supplied separately by the user and is not bundled.
+
+No commercial game assets, executable images, credentials, shader dumps, caches or title-derived captures belong in version control. Preserve historical technical notes in Git history. IRX is not affiliated with or endorsed by Microsoft, Rockstar Games or the referenced projects.
