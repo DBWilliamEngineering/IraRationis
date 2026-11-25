@@ -1,0 +1,48 @@
+name: Windows x64 Native AOT
+
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    native-aot:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: '11.0.x'
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
+            - name: Restore solution
+              run: dotnet restore IraRationis.slnx
+            - name: Build solution
+              run: dotnet build IraRationis.slnx -c Release --no-restore
+            - name: Run component tests
+              run: dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+            - name: Publish Native AOT executable
+              run: dotnet publish IraRationis.Cli/IraRationis.Cli.csproj -c Release -r win-x64 -o artifacts/native
+            - name: Test memory page table
+              run: ./artifacts/native/irx.exe memory-probe --self-test
+            - name: Test native VEH during managed exception dispatch
+              run: ./artifacts/native/irx.exe veh-probe
+            - name: Smoke-test native executable
+              run: python tests/smoke.py artifacts/native/irx.exe
+            - uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+            - name: Test native entry and thread execution
+              run: ./tests/native/smoke.ps1 artifacts/native/irx.exe
+            - name: Test GameInput and physical page mapping
+              run: ./tests/native/input-memory.ps1 artifacts/native/irx.exe
+            - name: Test DirectStorage ABI and completion
+              run: ./tests/native/storage.ps1 artifacts/native/irx.exe
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: irx-win-x64
+                  path: artifacts/native/

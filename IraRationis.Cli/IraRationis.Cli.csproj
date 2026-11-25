@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <RootNamespace>IraRationis.Cli</RootNamespace>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>irx</AssemblyName>
+        <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+        <PlatformTarget>x64</PlatformTarget>
+        <PublishAot>true</PublishAot>
+        <IsAotCompatible>true</IsAotCompatible>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <SelfContained>true</SelfContained>
+        <OptimizationPreference>Speed</OptimizationPreference>
+        <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../IraRationis.Memory/IraRationis.Memory.csproj" />
+        <ProjectReference Include="../IraRationis.Loader/IraRationis.Loader.csproj" />
+        <ProjectReference Include="../IraRationis.HLE/IraRationis.HLE.csproj" />
+        <ProjectReference Include="../IraRationis.Graphics/IraRationis.Graphics.csproj" />
+        <ProjectReference Include="../IraRationis.PE/IraRationis.PE.csproj" />
+        <ProjectReference Include="../IraRationis.Shaders/IraRationis.Shaders.csproj" />
+        <ProjectReference Include="../IraRationis.Game/IraRationis.Game.csproj" />
+        <ProjectReference Include="../IraRationis.Pipeline/IraRationis.Pipeline.csproj" />
+    </ItemGroup>
+    <PropertyGroup>
+        <NativeBridgeDirectory>$(MSBuildProjectDirectory)/obj/native/$(Configuration)</NativeBridgeDirectory>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+        <Content Include="$(NativeBridgeDirectory)/irx-native.dll" Link="irx-native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <NativeBridgeSource Include="../IraRationis.Native/*.cpp;../IraRationis.Native/*.h;../IraRationis.Native/build.ps1" />
+    </ItemGroup>
+    <Target Name="BuildNativeBridge" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT' And '$(DesignTimeBuild)' != 'true'" Inputs="@(NativeBridgeSource)" Outputs="$(NativeBridgeDirectory)/irx-native.dll">
+        <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../IraRationis.Native/build.ps1&quot; -OutputDirectory &quot;$(NativeBridgeDirectory)&quot;" />
+    </Target>
+</Project>

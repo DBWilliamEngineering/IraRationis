@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Blake3" />
+        <ProjectReference Include="../IraRationis.Loader/IraRationis.Loader.csproj" />
+        <ProjectReference Include="../IraRationis.HLE/IraRationis.HLE.csproj" />
+        <ProjectReference Include="../IraRationis.Graphics/IraRationis.Graphics.csproj" />
+        <ProjectReference Include="../IraRationis.Game/IraRationis.Game.csproj" />
+        <ProjectReference Include="../IraRationis.Pipeline/IraRationis.Pipeline.csproj" />
+    </ItemGroup>
+</Project>

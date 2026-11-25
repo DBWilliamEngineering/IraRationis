@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <RootNamespace>IraRationis.Loader</RootNamespace>
+        <IsAotCompatible>true</IsAotCompatible>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Blake3" />
+        <ProjectReference Include="../IraRationis.PE/IraRationis.PE.csproj" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,23 @@
+<Project>
+    <PropertyGroup>
+        <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+        <LangVersion>15.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Deterministic>true</Deterministic>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <AnalysisMode>Default</AnalysisMode>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+        <EnableAotAnalyzer>true</EnableAotAnalyzer>
+        <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+        <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <Version>0.1.0</Version>
+        <Product>Ira Rationis</Product>
+        <Description>Independent native platform compatibility research</Description>
+        <DebugType>portable</DebugType>
+    </PropertyGroup>
+</Project>

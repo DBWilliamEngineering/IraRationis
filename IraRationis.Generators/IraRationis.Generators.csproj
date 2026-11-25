@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <SupportedOSPlatformVersion></SupportedOSPlatformVersion>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+        <EnableAotAnalyzer>false</EnableAotAnalyzer>
+        <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+        <ImplicitUsings>disable</ImplicitUsings>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    </ItemGroup>
+</Project>

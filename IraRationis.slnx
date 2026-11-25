@@ -1,0 +1,43 @@
+<Solution>
+    <Folder Name="/Application/">
+        <Project Path="IraRationis.Cli/IraRationis.Cli.csproj" />
+    </Folder>
+    <Folder Name="/Libraries/">
+        <Project Path="IraRationis.Core/IraRationis.Core.csproj" />
+        <Project Path="IraRationis.PE/IraRationis.PE.csproj" />
+        <Project Path="IraRationis.Shaders/IraRationis.Shaders.csproj" />
+        <Project Path="IraRationis.Game/IraRationis.Game.csproj" />
+        <Project Path="IraRationis.Pipeline/IraRationis.Pipeline.csproj" />
+    </Folder>
+    <Folder Name="/Runtime/">
+        <Project Path="IraRationis.Memory/IraRationis.Memory.csproj" />
+        <Project Path="IraRationis.Loader/IraRationis.Loader.csproj" />
+        <Project Path="IraRationis.HLE/IraRationis.HLE.csproj" />
+        <Project Path="IraRationis.Graphics/IraRationis.Graphics.csproj" />
+    </Folder>
+    <Folder Name="/Solution Items/">
+        <File Path="README.md" />
+        <File Path="Directory.Build.props" />
+        <File Path="Directory.Packages.props" />
+        <File Path="global.json" />
+        <File Path=".editorconfig" />
+        <File Path="LICENSE" />
+        <File Path="LICENSE-PROPRIETARY.md" />
+    </Folder>
+    <Folder Name="/IraRationis.Native/">
+        <File Path="IraRationis.Native/ExceptionHandler.cpp" />
+        <File Path="IraRationis.Native/MemoryProbe.cpp" />
+        <File Path="IraRationis.Native/PresentationProbe.cpp" />
+        <File Path="IraRationis.Native/GraphicsBridge.h" />
+        <File Path="IraRationis.Native/InstructionDecoder.h" />
+        <File Path="IraRationis.Native/DecoderTests.cpp" />
+        <File Path="IraRationis.Native/build.ps1" />
+    </Folder>
+    <Folder Name="/Build Tools/">
+        <Project Path="IraRationis.Generators/IraRationis.Generators.csproj" />
+    </Folder>
+    <Folder Name="/Tests/">
+        <Project Path="IraRationis.Runtime.Tests/IraRationis.Runtime.Tests.csproj" />
+        <File Path="tests/smoke.py" />
+    </Folder>
+</Solution>
