@@ -2,9 +2,14 @@
     <PropertyGroup>
         <RootNamespace>IraRationis.Shaders</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="../IraRationis.Core/IraRationis.Core.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Remove="Rdna2VertexFetchCompiler.cs" />
+        <Compile Include="Rdna2VertexFetchCompiler.cs" />
     </ItemGroup>
 </Project>

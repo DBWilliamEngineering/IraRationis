@@ -5,13 +5,15 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
+        <PackageReference Include="Concentus" />
         <ProjectReference Include="../IraRationis.Graphics/IraRationis.Graphics.csproj" />
         <ProjectReference Include="../IraRationis.PE/IraRationis.PE.csproj" />
         <ProjectReference Include="../IraRationis.Loader/IraRationis.Loader.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Remove="AcpHalModule.cs;AcpHalModule.Control.cs" />
+        <Compile Remove="AcpHalModule.cs;AcpHalModule.Control.cs;XApuModule.cs" />
         <Compile Include="AcpHalModule.cs" />
         <Compile Include="AcpHalModule.Control.cs" />
+        <Compile Include="XApuModule.cs" />
     </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Console pipeline ABI adapted from Zettrox/ztrx victory-gpu/src/pipeline.rs.
 
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -51,7 +52,24 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool IsPointerFreeState(uint kind)
     {
-        return kind is 8 or 9 or 10 or 11 or 13 or 14 or 15 or 16 or 17 or 18 or 20 or 21 or 22;
+        return kind is 8 or 9 or 10 or 11 or 13 or 14 or 15 or 16 or 17 or 18 or 20 or 21;
+    }
+
+    // Only semantically empty pointer-bearing state may be omitted. Cached
+    // guest PSO data is a performance hint, not executable host state.
+    private static bool IsOmittablePipelineState(uint kind, ReadOnlySpan<byte> bytes)
+    {
+        return kind switch
+        {
+            7 => bytes.Length == 40 && BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..]) == 0 &&
+                 BinaryPrimitives.ReadUInt32LittleEndian(bytes[32..]) == 0 &&
+                 BinaryPrimitives.ReadUInt32LittleEndian(bytes[36..]) == 0,
+            12 => bytes.Length == 24 && BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..]) == 0,
+            19 => bytes.Length == 24,
+            22 => bytes.Length == 32 && BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..]) == 0 &&
+                  BinaryPrimitives.ReadUInt32LittleEndian(bytes[24..]) == 0,
+            _ => false
+        };
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -94,6 +112,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var count = 0;
         var root = (nint)0;
         var complete = true;
+        string? incompleteReason = null;
+        var seen = 0U;
         try
         {
             var records = new List<PipelineStateRecord>();
@@ -115,6 +135,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     Console.Error.WriteLine(
                         $"[graphics] Pipeline stream: unknown subobject {kind} at {offset}; remainder not captured.");
                     complete = false;
+                    incompleteReason ??= $"unknown subobject {kind} at byte {offset}";
 
                     break;
                 }
@@ -124,6 +145,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                     return InvalidArgument;
                 }
 
+                var bit = 1U << (int)kind;
+                if ((seen & bit) != 0)
+                {
+                    complete = false;
+                    incompleteReason ??= $"duplicate subobject {kind} at byte {offset}";
+                }
+
+                seen |= bit;
                 if (kind == 0)
                 {
                     root = Unsafe.ReadUnaligned<nint>(address + 8);
@@ -142,15 +171,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     records.Add(new PipelineStateRecord(kind, new ReadOnlySpan<byte>(address, size).ToArray()));
                 }
-                else
+                else if (!IsOmittablePipelineState(kind, new ReadOnlySpan<byte>(address, size)))
                 {
                     complete = false;
+                    incompleteReason ??= $"untranslated pointer-bearing subobject {kind} at byte {offset}";
                 }
 
                 offset += size;
             }
 
-            return StoreGraphicsPipeline(root, stages[..count], kinds[..count], records, true, complete, iid, output);
+            return StoreGraphicsPipeline(root, stages[..count], kinds[..count], records, true, complete, iid, output,
+                incompleteReason);
         }
         catch (OutOfMemoryException)
         {
@@ -159,7 +190,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static int StoreGraphicsPipeline(nint root, ReadOnlySpan<ShaderBytecode> stages, ReadOnlySpan<uint> kinds,
-        List<PipelineStateRecord> records, bool stream, bool complete, Guid* iid, nint* output)
+        List<PipelineStateRecord> records, bool stream, bool complete, Guid* iid, nint* output,
+        string? incompleteReason = null)
     {
         if (iid == null || (*iid != PipelineId && *iid != UnknownId && *iid != ObjectId && *iid != ChildId
                             && *iid != PageableId))
@@ -243,7 +275,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 GraphicsPipelines.Add((nint)pipeline,
-                    new GraphicsPipelineMetadata(root, retained, records, stream, complete));
+                    new GraphicsPipelineMetadata(root, retained, records, stream, complete, incompleteReason));
                 LiveObjects[(nint)pipeline] = _pipelineTable;
                 published = true;
             }
@@ -328,5 +360,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         List<PipelineShader> Shaders,
         List<PipelineStateRecord> State,
         bool IsStream,
-        bool CompleteStream);
+        bool CompleteStream,
+        string? IncompleteReason = null);
 }

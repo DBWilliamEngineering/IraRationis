@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using IraRationis.HLE;
 
@@ -28,6 +29,7 @@ internal static unsafe class InteropTests
         TestDsp();
         TestAcpHal();
         TestAcpControl();
+        TestXApu();
 
         if (!OperatingSystem.IsWindows())
         {
@@ -227,6 +229,105 @@ internal static unsafe class InteropTests
 
         Console.WriteLine(
             "[audio-probe] ACP control ABI, lifecycle, bounded FIFO, notification bounds and unsupported command rejection passed.");
+    }
+
+    private static void TestXApu()
+    {
+        var registry = new HleRegistry([XApuModule.Create()]);
+
+        nuint Export(string name)
+        {
+            return registry.Lookup("xapu.dll", name)
+                   ?? throw new InvalidOperationException($"Missing XApu export {name}.");
+        }
+
+        var connect = (delegate* unmanaged[Stdcall]<uint*, nint*, nint*, int>)Export("XApuConnect");
+        var disconnect = (delegate* unmanaged[Stdcall]<nint, int>)Export("XApuDisconnect");
+        var enqueue = (delegate* unmanaged[Stdcall]<nint, byte*, uint*, int>)Export("XApuEnqueueCommand");
+        var dequeue = (delegate* unmanaged[Stdcall]<nint, byte*, int>)Export("XApuDequeueResult");
+        var count = (delegate* unmanaged[Stdcall]<nint, uint*, uint>)Export("XApuGetResultCount");
+        var input = stackalloc uint[6] { 1, 2, 2, 65536, 0, 0 };
+        var output = stackalloc nint[2];
+        var handle = (nint)0;
+        Require(connect(null, output, &handle) < 0 && handle == 0, "XApu null connect");
+        input[0] = 2;
+        Require(connect(input, output, &handle) == unchecked((int)0x80004001) && handle == 0,
+            "XApu unsupported processing");
+        input[0] = 1;
+        Require(connect(input, output, &handle) == 0 && handle != 0 && output[0] != 0, "XApu connect");
+        try
+        {
+            var memory = (byte*)output[0];
+            Require(((nuint)memory & 15) == 0 && memory[0] == 0 && memory[65535] == 0, "XApu zeroed aligned backing");
+            // Synthetic 440 Hz stereo, 20 ms Opus packet generated with FFmpeg/libopus.
+            var packet = Convert.FromBase64String(
+                "/LQGWqe14f0LvgB/+QdyhNj0C69bh6dmtpD7sail85yTi1ueGeRgTYRPqYtjhKqkjPtSY0+EOenwjqA8KAaZE8Hu/n/KnGus1EAeaHscF95RABf3LfAPgm/XglZ+p4zh+MLd5oSTnZDV8VmfNi3Y9o7JGpQxKW243UkC7OBBZ1C2zFaXpTO5pTQPCUw0kKlTr418VyfjNJP5pPBhmd7PeddQ5YuJhGRyz4OIgzM7S6hSVdEQ59J64P0Q59IjgxQ5t1eqRLbfL4r+WGH12MBXJflBkV3msKUTYhWG9DaLDBcKUF8sg6v87g4oduJtPaBqdLgT/d2QqeVb03I2Hq5m0z/iTKHpy+AuYKPZ7G2T/Tz4i7haUHF7D5DEiWzewH8hNtL9Uq2k/tVt");
+            packet.AsSpan().CopyTo(new Span<byte>(memory, packet.Length));
+            var command = stackalloc byte[64];
+            var result = stackalloc byte[80];
+            var commandBytes = new Span<byte>(command, 64);
+            var resultBytes = new Span<byte>(result, 80);
+            var total = 0U;
+            Require(dequeue(handle, result) == unchecked((int)0x8AC81001), "XApu empty result");
+
+            commandBytes.Clear();
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[4..], 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[8..], 7);
+            BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[16..], 0x1234);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[24..], 2);
+            BinaryPrimitives.WriteSingleLittleEndian(commandBytes[40..], 1);
+            Require(enqueue(handle, command, &total) == 0 && total == 1, "XApu activate");
+
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 3);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[8..], 8);
+            commandBytes[24..].Clear();
+            BinaryPrimitives.WriteSingleLittleEndian(commandBytes[28..], 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[36..], 960);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[40..], (uint)packet.Length);
+            BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[44..], (nuint)memory);
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[52..], 960 * 2 * sizeof(float));
+            BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[56..], (nuint)(memory + 4096));
+            Require(enqueue(handle, command, &total) == 0 && total == 2, "XApu decode submit");
+            Require(enqueue(handle, command, &total) == unchecked((int)0x8AC81000), "XApu per-stream queue full");
+            Require(count(handle, &total) == 2 && total == 0, "XApu result count");
+            Require(dequeue(handle, result) == 0 && BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 &&
+                    BinaryPrimitives.ReadUInt64LittleEndian(resultBytes[16..]) == 0x1234,
+                "XApu activate result identity");
+            Require(dequeue(handle, result) == 0 && BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 &&
+                    BinaryPrimitives.ReadUInt32LittleEndian(resultBytes[48..]) == 960 &&
+                    BinaryPrimitives.ReadUInt32LittleEndian(resultBytes[52..]) == 7680, "XApu decoded result shape");
+            var energy = 0.0;
+            foreach (var sample in new ReadOnlySpan<float>(memory + 4096, 1920))
+            {
+                Require(float.IsFinite(sample), "XApu finite PCM");
+                energy += sample * sample;
+            }
+
+            Require(energy > 0.01, "XApu real non-silent Opus PCM");
+            Require(count(handle, &total) == 0 && total == 2, "XApu dequeued total");
+
+            BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[56..], (nuint)(memory + 65535));
+            Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
+                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == unchecked((int)0x80070057),
+                "XApu out-of-range output rejected");
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 5);
+            Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
+                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0, "XApu reset");
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 2);
+            Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0, "XApu deactivate");
+            BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 3);
+            Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
+                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == unchecked((int)0x8AC81003),
+                "XApu inactive stream");
+        }
+        finally
+        {
+            Require(disconnect(handle) == 0, "XApu disconnect");
+        }
+
+        Require(disconnect(handle) < 0 && count(handle, null) == 0, "XApu stale handle rejected");
+        Console.WriteLine("[audio-probe] XApu ABI, bounded results, shared memory and non-silent Opus PCM passed.");
     }
 
     private static void Require(bool condition, string message)

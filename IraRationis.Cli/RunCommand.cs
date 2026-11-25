@@ -34,7 +34,7 @@ internal static class RunCommand
             KernelThreadModule.Create(threads), KernelImageModule.Create(), XMemModule.Create(), DspModule.Create(),
             RootSignatureModule.Create(), FileSystemModule.Create(), GameInputModule.Create(),
             PhysicalPageModule.Create(), DirectStorageModule.Create(), GraphicsDeviceModule.Create(), XgModule.Create(),
-            AcpHalModule.Create()
+            AcpHalModule.Create(), XApuModule.Create()
         };
         var registry = new HleRegistry(modules);
         var host = strict ? new HostPolicy([]) : new HostPolicy();

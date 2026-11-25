@@ -48,7 +48,15 @@ flowchart TD
     F --> I[GameInput / DirectStorage]
     F --> S[AcpHal / APU memory R6]
     S --> T[CPU backing and 32-bit device address map]
+    S --> U[ACP control / R7]
+    F --> X[XApu managed decoder / R8]
+    X --> Y[Concentus Opus / float PCM result ring]
     F --> J[Console graphics ABI]
+    J --> Z[First blocked draw evidence / R9]
+    Z --> W[R10 strict vertex-fetch shader lowering]
+    W --> AA[Host shader / root / PSO validation]
+    AA -.-> AB[Future persistent PSO and coherent bindings]
+    AB -.-> K
     J --> P[PresentX ingress / R4]
     J --> R[Addressable fence bridge / R5]
     R --> K
@@ -75,7 +83,8 @@ IRX is a GPL-3.0-or-later derivative of ztrx/VIctory, not a clean-room implement
 | Generated ABI fallbacks | Compile-time Roslyn generation of fallback callbacks | Implemented; known registrations explicit |
 | Compatibility preflight | Build hash, import inventory, named ABI coverage, blocker history | Partial runtime coverage, not a complete static call graph |
 | Synchronization | Conservative global barriers and segmented memory operations | Exact guest resource/layout semantics and cross-queue coherence unverified |
-| Audio coprocessor memory | Independent 32-bit APU address space, sorted bidirectional interval indexes and owned context storage | Heap ABI implemented in R6; runtime tests and audio execution pending |
+| Audio coprocessor memory | Independent 32-bit APU address space, sorted bidirectional interval indexes and owned context storage | Heap and SHAPE allocation reached in title logs; R7 control connection reached |
+| Managed audio decoding | Per-stream Opus state, bounded result FIFO and reusable PCM scratch | R8 implemented; Windows build and title decoding unverified |
 | Performance research | Dependency-aware scheduling, resource ownership, caching, allocation-free hot paths | Design goals; no comparative title benchmarks yet |
 
 ### Managed-first implementation boundary
@@ -165,13 +174,13 @@ The ladder is cumulative, not a percentage of code complete. No points are claim
 
 ### Latest execution evidence
 
-Maintainer logs report native entry, GameInput and DirectStorage initialization, CPU physical-page reservations, host D3D12 initialization, descriptor heaps and command-list creation. The latest trace reaches CPU-only root signatures, compute pipeline containers, resource views and enhanced barrier recording. Optional pipeline slots `0x218` and `0x1C8` return `E_NOTIMPL`; no host pipeline is created by those paths. Earlier startup stopped in `SealMemoryBoundary` on host command-list `Close`, HRESULT `0x80070057` (`E_INVALIDARG`); the standalone `graphics-probe` reproduced that failure after creating a 4 × 4 test texture. The latest maintainer trace explicitly contains the R3 runtime marker, proceeds through enhanced barrier recording and 33,333 microsecond frame-interval configuration, then stops at the newer queue slot `0x100` (`PresentX`). This is evidence of a guest presentation request, not of a displayed frame or a passing full graphics probe. R4 registers and decodes the request. The next maintainer-reported failure is fence slot `0x60` (`GetGPUVirtualAddress`), indicating that execution reached another synchronization boundary; actual displayed frames and a complete passing probe remain unreported. R5 implements the addressable fence bridge. A subsequent maintainer report reaches the missing import `AcpHal.dll!ApuCreateHeap`; this establishes a later startup blocker, not full validation of fence behavior or a displayed frame. R6 adds the audio coprocessor memory ABI; Windows execution remains pending.
+Maintainer logs report native entry, GameInput and DirectStorage initialization, CPU physical-page reservations, host D3D12 initialization, descriptor heaps and command-list creation. The latest trace reaches CPU-only root signatures, compute pipeline containers, resource views and enhanced barrier recording. Optional pipeline slots `0x218` and `0x1C8` return `E_NOTIMPL`; no host pipeline is created by those paths. Earlier startup stopped in `SealMemoryBoundary` on host command-list `Close`, HRESULT `0x80070057` (`E_INVALIDARG`); the standalone `graphics-probe` reproduced that failure after creating a 4 × 4 test texture. The latest maintainer trace explicitly contains the R3 runtime marker, proceeds through enhanced barrier recording and 33,333 microsecond frame-interval configuration, then stops at the newer queue slot `0x100` (`PresentX`). This is evidence of a guest presentation request, not of a displayed frame or a passing full graphics probe. R4 registers and decodes the request. The next maintainer-reported failure is fence slot `0x60` (`GetGPUVirtualAddress`), indicating that execution reached another synchronization boundary; actual displayed frames and a complete passing probe remain unreported. R5 implements the addressable fence bridge. A subsequent maintainer report reaches the missing import `AcpHal.dll!ApuCreateHeap`; this establishes a later startup blocker, not full validation of fence behavior or a displayed frame. R6 added the audio coprocessor memory ABI. The subsequent maintainer trace confirms heap and SHAPE storage allocation, creation of the R7 ACP control object and connection with 4,096 commands and 4,096 messages. Execution then stops at `xapu.dll!XApuConnect`. R8 implements that interface and real plain Opus packet decoding; validation of decoded title audio is pending. A later maintainer trace reaches `DrawInstanced` with host target materialization, then stops at the existing incomplete-rendering guard. R9 captures the exact first blocked draw. The maintainer supplied a two-stage native shader pair, one root SRV and a 3840 × 2160 render/depth target. R10 adds a narrow semantic lowering, host shader compilation and conditional native PSO validation; no original game draw or frame has been demonstrated.
 
 ### Current blockers and next steps
 
 | Blocker | Next engineering step |
 | --- | --- |
-| Audio coprocessor initialization | R6 heap and SHAPE storage reached in maintainer logs; R7 implements AcpHalCreate and immediate message registration/control. Decoder and audio-processing commands remain outstanding. |
+| Audio initialization and processing | R6 heap/SHAPE and R7 ACP connection reached; R8 registers all five XApu exports and a managed Opus decoder. XMA, resampling, flowgraphs, mixing and real title playback remain outstanding. |
 | Addressable fences | R5 bridges guest fence memory to native fence completion; verify delayed completion, packet writes and release |
 | Presentation ingress | R4 registers old/new PresentX and checks the first plane prefix; validate source metadata and implement a coherent host presentation backend |
 | Host command-list validation | R3 title trace progressed beyond prior close failure; run complete GPU clear/readback and segmented execution probes |
@@ -350,3 +359,107 @@ The packed 28-byte message ABI carries a 12-byte header and 16-byte payload. Reg
 Unknown or audio-processing commands return `E_NOTIMPL`, with a first-occurrence diagnostic and no fabricated completion or notification. No XMA decoding, SHAPE flowgraph execution, mixing or actual audio playback is implemented. The interface ABI is inferred from upstream [audio.rs](https://github.com/LooperSalty/VIctory/blob/main/crates/victory-hle/src/modules/audio.rs); exact title behavior and Windows Native AOT execution require validation.
 
 The runtime tests exercise the real registered callbacks, including null output, connection lifecycle, bounded FIFO, drop counts, packed payload, notification range and unsupported command behavior. No C++ sources or dependencies were added.
+
+
+## First Light R8: managed XApu decoding
+
+Maintainer logs confirm R6 heap and SHAPE storage initialization and R7 ACP connection (4,096 commands and messages). The next missing import is `xapu.dll!XApuConnect`. R8 registers `XApuConnect`, `XApuDisconnect`, `XApuEnqueueCommand`, `XApuDequeueResult` and `XApuGetResultCount` via the HLE registry. The packed command/result ABI is cross-checked against [VIctory apu.rs](https://github.com/LooperSalty/VIctory/blob/main/crates/victory-hle/src/modules/apu.rs) and victory-fork. `AcpHalModule` remains unchanged.
+
+```mermaid
+flowchart LR
+    A[Guest XApu imports] --> B[Connection and bounded result ring]
+    B --> C[Per-stream decoder state]
+    C --> D[Managed Concentus Opus]
+    D --> E[Reusable signed PCM scratch]
+    E --> F[Guest float PCM shared memory]
+    F --> G[Result metadata / optional completion event]
+    G --> A
+```
+
+The connection allocates zeroed 16-byte-aligned unmanaged memory, one bounded FIFO sized by the requested stream and command limits, per-stream outstanding counts and one reusable PCM scratch buffer. Plain mono/stereo Opus at 48 kHz is supported through the managed `Concentus` 2.2.2 package (BSD-3-Clause; [upstream](https://github.com/lostromb/concentus)). The managed constructor is selected deliberately instead of the native-probing codec factory. No `Concentus.Native` package, C++ code, or additional native DLL is introduced. The 16-bit span decode API avoids the temporary short array allocated by the inspected float overload; IRX converts into guest float PCM, supporting interleaved or planar stereo. The codec may still allocate internally; no performance benchmark or allocation-free decoder claim is made.
+
+Commands activate, deactivate, process, notify and reset; results preserve command identity and are published in submission order. Connection-level serialization is an initial correctness baseline, not a real-time multicore decoder scheduler. This implementation treats the connection ID as opaque, caps arena size at 512 MiB, requires packet and PCM ranges to be inside the connection arena and supports unity pitch only. Activation initialization/processing buffers, frame scheduling, rate conversion, other processing modes, XMA, hardware DSP, mixing and host playback remain unsupported or unmodeled. Arbitrary guest pointer access is not sandboxed. The reference package API was inspected from its public source; exact package restore, compilation and Native AOT compatibility are unverified here.
+
+```powershell
+dotnet restore IraRationis.slnx
+dotnet build IraRationis.slnx -c Release
+dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r8
+```
+
+The regression test invokes all five registered callbacks, checks result ordering, per-stream saturation, bounds, reset, deactivation and stale handles, and requires 960 stereo frames of non-silent PCM from a synthetic 20 ms 440 Hz Opus packet. The fixture has been independently verified with libopus; the C# test remains to be run on Windows. First original title frame, intro, menu, audio playback and comparative performance remain unverified.
+
+
+## First Light R9: first-draw evidence and shader translation boundary
+
+The current maintainer trace reaches `DrawInstanced` after successful host target allocation. At this point the console ABI is registered, but the graphics PSO is metadata-only, root signatures are CPU blobs, and the RDNA2 scalar compiler emits diagnostic HLSL rather than an executable vertex or pixel shader. Forwarding the draw without translating those objects would be invalid. The existing guard remains active.
+
+```mermaid
+flowchart LR
+    A[Guest DrawInstanced] --> B[Recorded command state]
+    B --> C[First blocked draw evidence]
+    C --> D[Shader container and native stage classification]
+    C --> E[Root bindings and target metadata]
+    C --> F[PSO records and draw arguments]
+    D -.-> G[Future executable shader translation]
+    E -.-> H[Future host bindings and resource coherence]
+    F -.-> I[Future host pipeline creation]
+    G -.-> J[Native D3D12 draw]
+    H -.-> J
+    I -.-> J
+```
+
+R9 instruments `DrawInstanced` and `DrawIndexedInstanced` at the failure boundary only. It reports the first attempted draw per process, its count, topology, root binding metadata, retained RTV/DSV resource metadata, pipeline stream completeness, stage hashes, DXBC parts, DXIL layout and native RDNA2 stage/register/resource metadata. It runs the existing strict scalar diagnostic decoder on the bound native programs to locate the first unsupported instruction. Shader inspection does not imply host compatibility. No resource contents, constant values or arbitrary vertex/index buffer bytes are copied.
+
+By default, the report is written to stderr. To retain the exact shader containers and root signature blobs locally for authorized offline development, set `IRX_DRAW_CAPTURE_DIR` to a writable directory before launching the title. The runtime creates one uniquely named `draw-*` subdirectory with `draw.txt` and deduplicated-by-filename shader/root blobs. Do not commit title-derived binary artifacts or share them unless authorized. Only the text report is needed initially.
+
+```powershell
+dotnet build IraRationis.slnx -c Release
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r9
+.\artifacts\native-r9\irx.exe graphics-probe
+$env:IRX_DRAW_CAPTURE_DIR = "$PWD\artifacts\draw-capture"
+```
+
+Run the normal title launch with that newly published executable. The test probe includes a CPU-only regression for an absent pipeline and a minimal empty DXBC container. No host graphics APIs or native sources are added. This change deliberately does not make the first draw succeed; the next milestone is a stage-specific executable shader and matching root/descriptor translation, validated with a real GPU readback. R9 C# compilation and execution are unverified in the authoring environment.
+
+
+## First Light R10: first native shader lowering and pipeline validation
+
+The first captured draw is a three-vertex triangle-list draw with `SV_VertexID`, no conventional vertex buffer, one root SRV, one RGBA8 render target and one depth/stencil target. The serialized version 1.1 root contract names register `t0`, space `3`, slot 0. The native vertex shader consumes two packed fetch headers (offsets 0 and 12 in this capture), derives byte base/stride and component count, loads position.xyz and a four-component attribute from the root SRV, sets position.w to one, and exports both values. The pixel shader uses P0 interpolation of attribute 0 and packs round-toward-zero FP16 components for the MRT0 export. Neither uploaded container exposes usable standard LLVM bitcode at its declared bitcode location. LLVM's GFX10.3 disassembler was used to cross-check the live instruction sequences; the leading extended `v_nop` encodings (which LLVM does not disassemble canonically) are identified using the VIctory GFX10 opcode and instruction-length tables. The P0 and half-conversion lowering was cross-checked against [victory-fork](https://github.com/fxceless/victory-fork/blob/main/crates/victory-shader/src/emit/lower.rs).
+
+```mermaid
+flowchart TD
+    A[Native DXBC container and XDAT/FSSM program] --> B[Validate signatures and user-data layout]
+    B --> C[Recognize full vertex-fetch and P0 export instruction patterns]
+    C --> D[Semantic fetch-field plan and HLSL emission]
+    D --> E[Windows D3DCompile SM 5.1 DXBC]
+    F[Serialized guest root contract] --> G[Typed Windows version 1.1 root serialization]
+    E --> H[Conditional host PSO creation validation]
+    G --> H
+    I[Complete retained fixed-function state] --> H
+    H -.-> J[Future persistent pipeline and descriptor binding]
+    D -.-> K[Execution-time source extent and VUM authority]
+    K -.-> J
+    J -.-> L[Original GPU draw and readback]
+    classDef irx fill:#35171b,stroke:#b52837,color:#fff
+    class B,C,D,G,H irx
+```
+
+- `Rdna2VertexFetchCompiler` is a strict, specialized semantic recognition pass, not a general RDNA2 compiler. It matches all live instruction words (with bounded variation in harmless prologue operands and fetch-header offsets) and validates the root/resource and input/output signatures. It does not select a shader by title, hash, or filename. Unsupported instructions or interfaces are refused. FP16 RTZ uses integer bit manipulation before unpacking to float; NaN payload and hardware floating-point mode parity are not established.
+- `ConsoleGraphicsDevice.VertexFetchTranslation` generates HLSL and compiles it with the Windows-provided `d3dcompiler_47.dll` directly from C# using `LibraryImport`. It rebuilds the version 1.1 single-root-SRV signature with typed TerraFX structures and `D3D12SerializeVersionedRootSignature`. The compiler output is DXBC shader model 5.1, not DXIL. No C++ project changes or new NuGet dependency are required. The OS compiler remains a native API dependency.
+- The PSO parser records the first incomplete-state reason, detects duplicate subobjects, omits semantically empty input-layout/stream-output/view-instancing records, and discards cached guest PSO hints. It never retains view-instancing pointers as pointer-free state. The first-draw host PSO validation path accepts exactly the eight captured fixed-function records only when all state is accounted for, the standard layout sizes match and format/topology/sample state is compatible. It builds a pointer-aligned Windows stream using freshly created host root/shader pointers and standard state payloads, and calls `ID3D12Device2::CreatePipelineState`. It releases the validation objects immediately. Host acceptance is not proof of console fixed-function semantic parity.
+- The vertex-fetch range planner computes a bounded required byte extent from current headers and draw range, rejecting wrapped or truncated ranges. It is not wired to guest resource uploads: those must observe execution-time ordering and authoritative memory ownership. The original draw guard is retained.
+- `IRX_DRAW_CAPTURE_DIR` optionally writes translated HLSL, compiled DXBC if available, and retained pointer-free PSO records alongside the R9 report. Captures are local; do not distribute title-derived binaries without authorization. The package contains source only, no captured title binaries. Translation occurs on the first blocked draw, not on an eventual successful draw hot path. The compiler, root and PSO results are not yet cached or retained for execution.
+
+### R10 validation
+
+```powershell
+dotnet build IraRationis.slnx -c Release
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r10
+.\artifacts\native-r10\irx.exe graphics-probe
+$env:IRX_DRAW_CAPTURE_DIR = "$PWD\artifacts\draw-capture-r10"
+```
+
+Launch the title with the R10 executable and its normal arguments. Look for `IRX-GFX-SHADER-R10`, both shader compilation HRESULTs, host root serialization and creation HRESULTs, native PSO creation or refusal, and any `PSO incomplete reason`. A passing synthetic probe validates pattern recognition, a rejected instruction variation, source-range bounds, host shader compilation and root serialization; it does not issue a GPU draw. The authoring environment independently checked the captured shader/root SHA-256 hashes, native disassembly and full live instruction sequence against a synthetic variant with different fetch offsets, 24,900 finite FP16 RTZ conversion cases, and project membership. The C# compilation, Windows shader compilation and D3D12 object creation are not verified in the authoring environment.
+
+The immediate next milestone is persistent host PSO ownership, native RTV/DSV binding, and a bounded execution-time raw SRV binding with correct source authority, followed by real GPU readback. Presentation and title-frame correctness remain unverified. No placeholder shader or synthetic draw is substituted for the original title draw.

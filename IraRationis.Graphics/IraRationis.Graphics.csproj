@@ -11,10 +11,12 @@
     </ItemGroup>
     <ItemGroup>
         <!-- Explicit membership for new graphics infrastructure. Remove SDK glob entries first. -->
-        <Compile Remove="ConsoleGraphicsDevice.HostCompletionFence.cs;ConsoleGraphicsDevice.HostValidation.cs;ConsoleGraphicsDevice.Presentation.cs;ConsoleGraphicsDevice.FenceAddress.cs" />
+        <Compile Remove="ConsoleGraphicsDevice.HostCompletionFence.cs;ConsoleGraphicsDevice.HostValidation.cs;ConsoleGraphicsDevice.Presentation.cs;ConsoleGraphicsDevice.FenceAddress.cs;ConsoleGraphicsDevice.DrawEvidence.cs;ConsoleGraphicsDevice.VertexFetchTranslation.cs" />
         <Compile Include="ConsoleGraphicsDevice.HostCompletionFence.cs" />
         <Compile Include="ConsoleGraphicsDevice.HostValidation.cs" />
         <Compile Include="ConsoleGraphicsDevice.Presentation.cs" />
         <Compile Include="ConsoleGraphicsDevice.FenceAddress.cs" />
+        <Compile Include="ConsoleGraphicsDevice.DrawEvidence.cs" />
+        <Compile Include="ConsoleGraphicsDevice.VertexFetchTranslation.cs" />
     </ItemGroup>
 </Project>

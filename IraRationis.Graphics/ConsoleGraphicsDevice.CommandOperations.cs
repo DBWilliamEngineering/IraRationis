@@ -410,6 +410,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void DrawGuest(nint self, uint vertices, uint instances, uint first, uint firstInstance)
     {
+        CaptureBlockedDraw(self, false, vertices, instances, first, 0, firstInstance);
         IncompleteOperation(self, "DrawInstanced", "translated graphics pipeline and native descriptor bindings");
     }
 
@@ -417,6 +418,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void DrawIndexedGuest(nint self, uint indices, uint instances, uint first, int baseVertex,
         uint firstInstance)
     {
+        CaptureBlockedDraw(self, true, indices, instances, first, baseVertex, firstInstance);
         IncompleteOperation(self, "DrawIndexedInstanced", "translated graphics pipeline and index buffer binding");
     }
 
@@ -678,6 +680,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyKnownListOperations()
     {
         ValidateKnownListRegistration();
+        VerifyDrawEvidence();
         var list = (nint)NativeMemory.AllocZeroed(0x980);
         try
         {
