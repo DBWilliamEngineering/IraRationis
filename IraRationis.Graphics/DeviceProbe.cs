@@ -112,6 +112,7 @@ public static unsafe class DeviceProbe
                 syncBottom(list, 0, 0, 0, 0);
                 ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
 
+                var clearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list);
                 ulong marker = 0;
                 var write = (delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)Slot(list, newer ? 72 : 70);
                 var waitValue = (delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)Slot(list, newer ? 74 : 72);
@@ -145,6 +146,7 @@ public static unsafe class DeviceProbe
                     Environment.FailFast("Graphics device probe: fence did not complete; objects may still be in flight.");
                 }
 
+                ConsoleGraphicsDevice.VerifyHostClearProbe(clearReadback);
                 ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
                 Check(reset(allocator), "Allocator reset after completion");
                 var resetList = (delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)Slot(list, newer ? 139 : 137);

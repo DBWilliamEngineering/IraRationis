@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ABI and comparison conventions adapted from DexNom/VIctory victory-gpu/src/list.rs.
-
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,15 +10,17 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     private const int MemoryWaitTimeoutMilliseconds = 30000;
     private const int MaximumMemoryOperations = 65536;
+    private readonly record struct MemoryWrite(ulong Address, ulong Value, int Bytes, uint Flags);
+    private readonly record struct MemoryWait(ulong Address, uint Comparison, ulong Reference, int Bytes);
+
+    private readonly record struct MemoryBoundary(nint Host, MemoryWrite? Write, MemoryWait? Wait, DeferredCopy? Copy);
 
     // Use kernel-checked access rather than dereferencing arbitrary guest addresses.
     [DllImport("kernel32.dll", ExactSpelling = true)]
-    private static extern int ReadProcessMemory(nint process, void* address, void* buffer, nuint size,
-        nuint* transferred);
+    private static extern int ReadProcessMemory(nint process, void* address, void* buffer, nuint size, nuint* transferred);
 
     [DllImport("kernel32.dll", ExactSpelling = true)]
-    private static extern int WriteProcessMemory(nint process, void* address, void* buffer, nuint size,
-        nuint* transferred);
+    private static extern int WriteProcessMemory(nint process, void* address, void* buffer, nuint size, nuint* transferred);
 
     private static bool TryReadMemory(ulong address, int bytes, out ulong value)
     {
@@ -27,7 +28,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         nuint transferred = 0;
         var ok = ReadProcessMemory(-1, (void*)(nuint)address, &raw, (nuint)bytes, &transferred);
         value = raw;
-
         return ok != 0 && transferred == (nuint)bytes;
     }
 
@@ -48,7 +48,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid command memory write address or count.");
         }
-
         SealMemoryBoundary(self, state, new MemoryWrite(address, value, bytes, flags), null);
     }
 
@@ -60,28 +59,24 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid command memory wait address, comparison or count.");
         }
-
         SealMemoryBoundary(self, state, null, new MemoryWait(address, comparison, reference, bytes));
     }
 
     // Close the preceding packet range before opening the next. The guest list remains open.
     // The guest allocator owns all host command memory until its normal fence/reset lifecycle.
-    private static void SealMemoryBoundary(nint self, RecordedCommandState state, MemoryWrite? write, MemoryWait? wait)
+    private static void SealMemoryBoundary(nint self, RecordedCommandState state, MemoryWrite? write, MemoryWait? wait, DeferredCopy? copy = null)
     {
         var current = Host(self);
         if (current == 0) // Synthetic ABI probe only.
         {
-            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait));
-
+            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy));
             return;
         }
-
         var hr = ((delegate* unmanaged[Stdcall]<nint, int>)Slot(current, 9))(current);
         if (hr < 0)
         {
             Environment.FailFast($"[graphics] Closing memory segment failed: 0x{hr:X8}.");
         }
-
         var device = (nint)_host;
         var allocator = Host(*(nint*)(self + ListAllocator));
         var id = HostListId;
@@ -92,15 +87,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{hr:X8}.");
         }
-
-        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait));
+        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy));
         var enhanced = *(nint*)(self + ListEnhancedHost);
         if (enhanced != 0)
         {
             _ = HostRelease(enhanced);
             *(nint*)(self + ListEnhancedHost) = 0;
         }
-
         *(nint*)(self + ListHost) = next;
         ReplayRasterState(self, state);
     }
@@ -112,7 +105,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             value = (uint)value;
             reference = (uint)reference;
         }
-
         return comparison switch
         {
             1 => false,
@@ -175,15 +167,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static string? CommandMemoryStatus(string kind, int slot)
     {
         return (kind == "list-old" && slot is >= 69 and <= 72) ||
-               (kind == "list-new" && slot is >= 71 and <= 74)
-            ? "registered-segmented-sync"
-            : null;
+            (kind == "list-new" && slot is >= 71 and <= 74)
+            ? "registered-segmented-sync" : null;
     }
 
     private static bool HasCommandMemory(nint list)
     {
         return CommandStates.TryGetValue(list, out var state) &&
-               state.MemoryBoundaries.Count != 0;
+            state.MemoryBoundaries.Count != 0;
     }
 
     private static void AwaitCommandMemory(MemoryWait wait)
@@ -195,18 +186,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Environment.FailFast($"[graphics] Unmapped command memory wait: 0x{wait.Address:X}.");
             }
-
             if (CompareMemory(value, wait.Reference, wait.Comparison, wait.Bytes))
             {
                 return;
             }
-
             if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= MemoryWaitTimeoutMilliseconds)
             {
-                Environment.FailFast(
-                    $"[graphics] Command memory wait timed out: address=0x{wait.Address:X}, comparison={wait.Comparison}, reference=0x{wait.Reference:X}, current=0x{value:X}. Segmented asynchronous queue scheduling may be required.");
+                Environment.FailFast($"[graphics] Command memory wait timed out: address=0x{wait.Address:X}, comparison={wait.Comparison}, reference=0x{wait.Reference:X}, current=0x{value:X}. Segmented asynchronous queue scheduling may be required.");
             }
-
             Thread.Sleep(1);
         }
     }
@@ -216,13 +203,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         var fence = (nint)0;
         var iid = FenceId;
         var device = (nint)_host;
-        var hr = ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36))(device, 0, 0,
-            &iid, &fence);
+        var hr = ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36))(device, 0, 0, &iid, &fence);
         if (hr < 0 || fence == 0)
         {
             Environment.FailFast($"[graphics] Completion fence creation failed: 0x{hr:X8}.");
         }
-
         try
         {
             hr = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(queue, 14))(queue, fence, 1);
@@ -230,7 +215,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Environment.FailFast($"[graphics] Completion fence signal failed: 0x{hr:X8}.");
             }
-
             var started = Stopwatch.GetTimestamp();
             while (true)
             {
@@ -239,17 +223,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     Environment.FailFast("[graphics] GPU removed while waiting for command memory writes.");
                 }
-
                 if (completed >= 1)
                 {
                     return;
                 }
-
                 if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= MemoryWaitTimeoutMilliseconds)
                 {
                     Environment.FailFast("[graphics] GPU completion timed out before deferred memory publication.");
                 }
-
                 Thread.Sleep(1);
             }
         }
@@ -272,14 +253,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     PublishCommandWrite(queue, write);
                 }
-
+                if (boundary.Copy is { } copy)
+                {
+                    ExecuteDeferredCopy(copy);
+                }
                 if (boundary.Wait is { } wait)
                 {
                     AwaitCommandMemory(wait);
                 }
             }
         }
-
         ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &hostList);
         // Earlier segments are retained until reset; the final segment uses the guest fence lifecycle.
     }
@@ -296,14 +279,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Environment.FailFast($"[graphics] GPU clock calibration failed: 0x{hr:X8}.");
             }
-
             value = gpu;
         }
         else if (write.Bytes == 8 && write.Flags == 2)
         {
             value = (ulong)Stopwatch.GetTimestamp();
         }
-
         PublishMemory(write.Address, value, write.Bytes);
     }
 
@@ -334,13 +315,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 throw new InvalidOperationException("Command memory recording ABI failed.");
             }
-
             PublishMemory(address, 0x12345678, 4);
             if (target != 0xAABBCCDD12345678)
             {
                 throw new InvalidOperationException("Command memory write width failed.");
             }
-
             ReleaseCommandState(list);
             if (HasCommandMemory(list))
             {
@@ -353,13 +332,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             _ = LiveObjects.TryRemove(list, out _);
             NativeMemory.Free((void*)list);
         }
-
         Console.WriteLine("[graphics-probe] Command memory write/wait ABI passed (CPU synthetic checks only).");
     }
-
-    private readonly record struct MemoryWrite(ulong Address, ulong Value, int Bytes, uint Flags);
-
-    private readonly record struct MemoryWait(ulong Address, uint Comparison, ulong Reference, int Bytes);
-
-    private readonly record struct MemoryBoundary(nint Host, MemoryWrite? Write, MemoryWait? Wait);
 }

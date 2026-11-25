@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ABI adapted from DexNom/VIctory crates/victory-gpu/src/list.rs and object.rs.
-
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,19 +10,63 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private static readonly ConcurrentDictionary<nint, RecordedCommandState> CommandStates = new();
     private const uint MaximumRootParameters = 64;
     private const uint MaximumRootWords = 64;
     private const uint MaximumVertexViews = 32;
-    private static readonly ConcurrentDictionary<nint, RecordedCommandState> CommandStates = new();
 
-    private static readonly int[] CommandStateSlots =
-        [25, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50];
-
-    private static nint AllocationCallbackAddress
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RecordedBufferView
     {
-        get
+        public ulong Address;
+        public uint Size;
+        public uint FormatOrStride;
+    }
+
+    private sealed class RecordedRootState
+    {
+        public nint Signature;
+        public readonly Dictionary<uint, ulong> Tables = new();
+        public readonly Dictionary<uint, uint[]> Constants = new();
+        public readonly Dictionary<uint, (uint Kind, ulong Address)> Views = new();
+
+        public void ClearArguments()
         {
-            return (nint)(delegate* unmanaged[Stdcall]<int>)&AcceptAllocatorCallback;
+            Tables.Clear();
+            Constants.Clear();
+            Views.Clear();
+        }
+    }
+
+    private sealed class RecordedCommandState
+    {
+        public nint Pipeline;
+        public readonly List<MemoryBoundary> MemoryBoundaries = new();
+        public readonly List<nint> HostViews = new();
+        public readonly List<nint> Uploads = new();
+        public ulong UploadBytes;
+        public (float Min, float Max)? DepthBounds;
+        public uint? Topology;
+        public D3D12_VIEWPORT[]? Viewports;
+        public RECT[]? Scissors;
+        public float[]? Blend;
+        public bool BlendSet;
+        public uint? Stencil;
+        public readonly RecordedRootState Compute = new();
+        public readonly RecordedRootState Graphics = new();
+        public nint[] Heaps = [];
+        public readonly HashSet<nint> Owned = new();
+        public RecordedBufferView? Index;
+        public readonly Dictionary<uint, RecordedBufferView> Vertices = new();
+        public ulong[] Targets = [];
+        public ulong? Depth;
+
+        public void RetainObject(nint value)
+        {
+            if (value != 0 && Owned.Add(value))
+            {
+                _ = Retain(value);
+            }
         }
     }
 
@@ -35,7 +78,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Binding attempted on an invalid or closed command list.");
         }
-
         return CommandStates.GetOrAdd(self, static _ => new RecordedCommandState());
     }
 
@@ -50,7 +92,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                     _ = HostRelease(boundary.Host);
                 }
             }
-
+            foreach (var heap in state.HostViews)
+            {
+                _ = HostRelease(heap);
+            }
+            foreach (var upload in state.Uploads)
+            {
+                NativeMemory.AlignedFree((void*)upload);
+            }
             foreach (var value in state.Owned)
             {
                 _ = Drop(value);
@@ -70,7 +119,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid console pipeline binding.");
         }
-
         state.RetainObject(pipeline);
         state.Pipeline = pipeline;
         InspectBoundPipeline(pipeline);
@@ -84,7 +132,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid console root signature binding.");
         }
-
         state.RetainObject(root);
         var binding = RootFor(state, compute);
         if (binding.Signature != root)
@@ -100,7 +147,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Root descriptor table index exceeds supported limit.");
         }
-
         RootFor(StateFor(self), compute).Tables[slot] = handle;
     }
 
@@ -111,19 +157,16 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid root constants range.");
         }
-
         if (count == 0)
         {
             return;
         }
-
         var constants = RootFor(StateFor(self), compute).Constants;
         if (!constants.TryGetValue(slot, out var words))
         {
             words = new uint[MaximumRootWords];
             constants.Add(slot, words);
         }
-
         new ReadOnlySpan<uint>(values, (int)count).CopyTo(words.AsSpan((int)offset));
     }
 
@@ -133,8 +176,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Root view index exceeds supported limit.");
         }
-
         RootFor(StateFor(self), compute).Views[slot] = (kind, address);
+    }
+
+    private static nint AllocationCallbackAddress
+    {
+        get
+        {
+            return (nint)(delegate* unmanaged[Stdcall]<int>)&AcceptAllocatorCallback;
+        }
     }
 
     // Both VIctory and DexNom ignore this console command allocator setting.
@@ -158,7 +208,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid shader descriptor heap count.");
         }
-
         var state = StateFor(self);
         var next = new ReadOnlySpan<nint>(heaps, (int)count).ToArray();
         foreach (var heap in next)
@@ -167,10 +216,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Environment.FailFast("[graphics] Invalid shader descriptor heap.");
             }
-
             state.RetainObject(heap);
         }
-
         if (!state.Heaps.AsSpan().SequenceEqual(next))
         {
             state.Compute.Tables.Clear();
@@ -192,7 +239,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid vertex buffer range.");
         }
-
         var state = StateFor(self);
         for (var index = 0U; index < count; index++)
         {
@@ -214,7 +260,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid render target count.");
         }
-
         var state = StateFor(self);
         var targets = new ulong[count];
         for (var index = 0U; index < count; index++)
@@ -224,10 +269,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Environment.FailFast("[graphics] Render target handle overflow.");
             }
-
             targets[index] = oneRange != 0 ? *handles + 128UL * index : handles[index];
         }
-
         state.Targets = targets;
         state.Depth = depth == null ? null : *depth;
         if (Host(self) != 0)
@@ -236,7 +279,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 MaterializeBoundTarget(state, target, 20);
             }
-
             if (state.Depth is { } depthHandle)
             {
                 MaterializeBoundTarget(state, depthHandle, 21);
@@ -338,10 +380,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         table[36] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordGraphicsRootTable;
         table[37] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint, void>)&RecordComputeRootConstant;
         table[38] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint, void>)&RecordGraphicsRootConstant;
-        table[39] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint, void>)&RecordComputeRootConstants;
-        table[40] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint, void>)&RecordGraphicsRootConstants;
+        table[39] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint, void>)&RecordComputeRootConstants;
+        table[40] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint, void>)&RecordGraphicsRootConstants;
         table[41] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordComputeRootCbv;
         table[42] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordGraphicsRootCbv;
         table[43] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordComputeRootSrv;
@@ -349,8 +389,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         table[45] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordComputeRootUav;
         table[46] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, void>)&RecordGraphicsRootUav;
         table[47] = (nint)(delegate* unmanaged[Stdcall]<nint, RecordedBufferView*, void>)&RecordIndexBuffer;
-        table[48] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, RecordedBufferView*, void>)&RecordVertexBuffers;
+        table[48] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, RecordedBufferView*, void>)&RecordVertexBuffers;
         table[50] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong*, int, ulong*, void>)&RecordRenderTargets;
     }
 
@@ -360,7 +399,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             throw new InvalidOperationException("Allocator callback or buffer view ABI registration failed.");
         }
-
         foreach (var slot in CommandStateSlots)
         {
             if (((nint*)_listOld)[slot] == MissingAddress(slot) || ((nint*)_listNew)[slot] != ((nint*)_listOld)[slot])
@@ -370,18 +408,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
+    private static readonly int[] CommandStateSlots = [25, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50];
+
     private static string? CommandStateStatus(string kind, int slot)
     {
         if (kind == "allocator" && slot == 9)
         {
             return "registered-compatibility-noop";
         }
-
         if ((kind == "list-old" || kind == "list-new") && Array.IndexOf(CommandStateSlots, slot) >= 0)
         {
             return "registered-cpu-only";
         }
-
         return null;
     }
 
@@ -392,7 +430,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             throw new InvalidOperationException("Allocator callback acceptance failed.");
         }
-
         // Synthetic header only: no host device is needed, and Drop is never called on it.
         var list = (nint)NativeMemory.AllocZeroed(0x980);
         try
@@ -417,7 +454,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 throw new InvalidOperationException("Command state snapshot ABI failed.");
             }
-
             ReleaseCommandState(list);
             if (CommandStates.ContainsKey(list))
             {
@@ -430,58 +466,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             _ = LiveObjects.TryRemove(list, out _);
             NativeMemory.Free((void*)list);
         }
-
         Console.WriteLine("[graphics-probe] Allocator callback and command-list state ABI passed.");
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RecordedBufferView
-    {
-        public ulong Address;
-        public uint Size;
-        public uint FormatOrStride;
-    }
-
-    private sealed class RecordedRootState
-    {
-        public readonly Dictionary<uint, uint[]> Constants = new();
-        public readonly Dictionary<uint, ulong> Tables = new();
-        public readonly Dictionary<uint, (uint Kind, ulong Address)> Views = new();
-        public nint Signature;
-
-        public void ClearArguments()
-        {
-            Tables.Clear();
-            Constants.Clear();
-            Views.Clear();
-        }
-    }
-
-    private sealed class RecordedCommandState
-    {
-        public readonly RecordedRootState Compute = new();
-        public readonly RecordedRootState Graphics = new();
-        public readonly List<MemoryBoundary> MemoryBoundaries = new();
-        public readonly HashSet<nint> Owned = new();
-        public readonly Dictionary<uint, RecordedBufferView> Vertices = new();
-        public float[]? Blend;
-        public bool BlendSet;
-        public ulong? Depth;
-        public nint[] Heaps = [];
-        public RecordedBufferView? Index;
-        public nint Pipeline;
-        public RECT[]? Scissors;
-        public uint? Stencil;
-        public ulong[] Targets = [];
-        public uint? Topology;
-        public D3D12_VIEWPORT[]? Viewports;
-
-        public void RetainObject(nint value)
-        {
-            if (value != 0 && Owned.Add(value))
-            {
-                _ = Retain(value);
-            }
-        }
     }
 }

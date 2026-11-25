@@ -814,15 +814,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return;
         }
-
         if (lists == null || count > 65536)
         {
             Environment.FailFast("[graphics] Invalid command list submission.");
         }
-
         var length = checked((int)count);
         var hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
-
         for (var i = 0; i < length; i++)
         {
             var list = lists[i];
@@ -832,15 +829,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
             hosts[i] = Host(list);
         }
-
         var host = Host(self);
         var hasMemory = false;
-
         for (var i = 0; i < length; i++)
         {
             hasMemory |= HasCommandMemory(lists[i]);
         }
-
         if (hasMemory)
         {
             for (var i = 0; i < length; i++)
@@ -849,7 +843,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
             return;
         }
-
         fixed (nint* values = hosts)
         {
             ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(host, 10))(host, count, values);
@@ -951,6 +944,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         ValidateCommandStateRegistration();
         ValidateCommandMemoryRegistration();
         ValidateBarrierRegistration();
+        ValidateKnownListRegistration();
         _deviceTable = (nint)device;
     }
 
@@ -977,6 +971,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         RegisterCommandStateMethods(table);
         RegisterCommandMemoryMethods(table, newer);
         RegisterBarrierMethods(table, newer);
+        RegisterCommandOperations(table, newer);
         table[newer ? 131 : 129] = PipelineSyncAddress;
         table[newer ? 132 : 130] = PipelineSyncAddress;
         table[newer ? 139 : 137] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)&ResetListX;

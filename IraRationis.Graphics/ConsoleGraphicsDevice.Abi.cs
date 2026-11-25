@@ -247,6 +247,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             VerifyOptionalDeviceAbi((nint*)_deviceTable);
             VerifyCommandStateAbi();
             VerifyCommandMemoryAbi();
+            VerifyKnownListOperations();
         }
     }
 
@@ -303,7 +304,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
                 var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" || kind == "root-signature" || kind == "pipeline" || kind == "query-heap" || kind == "command-signature" ||
                     (kind == "device" && index is 10 or 38 or 41 or 86 or 108 or 39 or 11 or 62 or 14 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
-                var status = !bound ? "missing" : BarrierStatus(kind, index) ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index) ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
+                var status = !bound ? "missing" : CommandOperationsStatus(kind, index) ?? BarrierStatus(kind, index) ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index) ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
                 rows.Add($"{kind}\t{index}\t0x{index * 8:X}\t{method ?? "(unnamed)"}\t{status}");
             }
             writer.WriteLine($"[abi] {kind,-14}: {registered}/{count} registered; {knownRegistered}/{known} named methods registered.");
