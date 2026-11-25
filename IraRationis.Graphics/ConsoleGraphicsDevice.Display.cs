@@ -117,6 +117,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         output[21] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, DisplayMode*, int>)&DisplayModes;
         _dxgiOutputTable = (nint)output;
         _dxgiOutput = NewDisplayObject(_dxgiOutputTable);
+
+        // InitializeTables has already constructed both queue tables and holds Gate.
+        RegisterPresentationMethods();
+        ValidatePresentationRegistration();
+        RegisterFenceAddressMethods();
+        ValidateFenceAddressRegistration();
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

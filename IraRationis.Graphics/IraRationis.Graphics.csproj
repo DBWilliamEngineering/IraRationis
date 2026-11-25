@@ -9,4 +9,12 @@
         <ProjectReference Include="../IraRationis.Shaders/IraRationis.Shaders.csproj" />
         <PackageReference Include="TerraFX.Interop.Windows" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Explicit membership for new graphics infrastructure. Remove SDK glob entries first. -->
+        <Compile Remove="ConsoleGraphicsDevice.HostCompletionFence.cs;ConsoleGraphicsDevice.HostValidation.cs;ConsoleGraphicsDevice.Presentation.cs;ConsoleGraphicsDevice.FenceAddress.cs" />
+        <Compile Include="ConsoleGraphicsDevice.HostCompletionFence.cs" />
+        <Compile Include="ConsoleGraphicsDevice.HostValidation.cs" />
+        <Compile Include="ConsoleGraphicsDevice.Presentation.cs" />
+        <Compile Include="ConsoleGraphicsDevice.FenceAddress.cs" />
+    </ItemGroup>
 </Project>

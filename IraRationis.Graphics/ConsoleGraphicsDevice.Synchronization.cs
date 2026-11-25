@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Console synchronization signatures from Zettrox/ztrx and DexNom/VIctory victory-gpu/src/list.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using TerraFX.Interop.DirectX;
@@ -21,23 +22,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    // The SDK union has a pointer-sized member at offset 8 on x64.
-    // Keep its representation explicit instead of depending on a generated union member name.
-    [StructLayout(LayoutKind.Sequential)]
-    private struct GlobalBarrierGroup
-    {
-        public D3D12_BARRIER_TYPE Type;
-        public uint Count;
-        public D3D12_GLOBAL_BARRIER* Barriers;
-    }
-
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void PipelineSync(nint self, uint flags, uint control, ulong address, ulong size)
     {
         RecordConservativeGlobalBarrier(self);
         if (Interlocked.Exchange(ref _reportedPipelineSync, 1) == 0)
         {
-            Console.Error.WriteLine($"[graphics] Recorded pipeline sync: flags=0x{flags:X}, control=0x{control:X}, address=0x{address:X}, size=0x{size:X} (global barrier).");
+            Console.Error.WriteLine(
+                $"[graphics] Recorded pipeline sync: flags=0x{flags:X}, control=0x{control:X}, address=0x{address:X}, size=0x{size:X} (global barrier).");
         }
     }
 
@@ -52,7 +44,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         // This probe does not install or configure an older OS Agility SDK.
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
-            Environment.FailFast("[graphics] Pipeline synchronization requires Windows 11 22H2 or later in this revision.");
+            Environment.FailFast(
+                "[graphics] Pipeline synchronization requires Windows 11 22H2 or later in this revision.");
+
             return;
         }
 
@@ -127,16 +121,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return;
         }
+
         if (records == null)
         {
             Environment.FailFast("[graphics] Nonempty resource barrier batch has a null record pointer.");
         }
+
         RecordConservativeGlobalBarrier(self);
-        ref var reported = ref (enhanced ? ref _reportedEnhancedGroups : ref _reportedLegacyBarriers);
+        ref var reported = ref enhanced ? ref _reportedEnhancedGroups : ref _reportedLegacyBarriers;
         var calls = Interlocked.Increment(ref reported);
         if (calls <= 4 || (calls & (calls - 1)) == 0)
         {
-            Console.Error.WriteLine($"[graphics] {(enhanced ? "EnhancedBarrierGroups" : "ResourceBarrier")}: count={count}, call={calls} (global ordering only; guest layouts not translated).");
+            Console.Error.WriteLine(
+                $"[graphics] {(enhanced ? "EnhancedBarrierGroups" : "ResourceBarrier")}: count={count}, call={calls} (global ordering only; guest layouts not translated).");
         }
     }
 
@@ -158,6 +155,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             throw new InvalidOperationException("Resource barrier ABI registration failed.");
         }
+
         // Empty batches must never dereference a record pointer or query the GPU.
         ((delegate* unmanaged[Stdcall]<nint, uint, void*, void>)legacy)(0, 0, null);
         ((delegate* unmanaged[Stdcall]<nint, uint, void*, void>)enhanced)(0, 0, null);
@@ -166,7 +164,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static string? BarrierStatus(string kind, int slot)
     {
         return ((kind == "list-old" || kind == "list-new") && slot == 26) ||
-            (kind == "list-new" && slot == 146) ? "registered-conservative-barrier" : null;
+               (kind == "list-new" && slot == 146)
+            ? "registered-conservative-barrier"
+            : null;
     }
 
     // Run through the console vtable on the actual host list. The probe checks
@@ -196,5 +196,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             enhanced(list, 0, null);
             enhanced(list, 1, &group);
         }
+    }
+
+    // The SDK union has a pointer-sized member at offset 8 on x64.
+    // Keep its representation explicit instead of depending on a generated union member name.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GlobalBarrierGroup
+    {
+        public D3D12_BARRIER_TYPE Type;
+        public uint Count;
+        public D3D12_GLOBAL_BARRIER* Barriers;
     }
 }

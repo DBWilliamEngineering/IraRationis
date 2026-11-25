@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Known slot inventory based on the upstream device, list, queue, resource and DXGI tables.
+
 using System.Globalization;
 
 namespace IraRationis.Graphics;
@@ -42,7 +43,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         [41] = "SetComputeRootConstantBufferView", [42] = "SetGraphicsRootConstantBufferView",
         [43] = "SetComputeRootShaderResourceView", [44] = "SetGraphicsRootShaderResourceView",
         [45] = "SetComputeRootUnorderedAccessView", [46] = "SetGraphicsRootUnorderedAccessView",
-        [47] = "IASetIndexBuffer", [48] = "IASetVertexBuffers", [50] = "OMSetRenderTargets", [51] = "ClearDepthStencilView",
+        [47] = "IASetIndexBuffer", [48] = "IASetVertexBuffers", [50] = "OMSetRenderTargets",
+        [51] = "ClearDepthStencilView",
         [52] = "ClearRenderTargetView", [59] = "ExecuteIndirect", [60] = "CopyMemory", [68] = "DepthBounds",
         [69] = "Write32", [70] = "Write64", [71] = "WaitValue32", [72] = "WaitValue64", [73] = "PixelShaderDepthOrder",
         [78] = "DispatchX", [83] = "CopyTextureRegionX", [84] = "CopyResourceX", [98] = "DispatchMeshX",
@@ -59,23 +61,34 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static readonly Dictionary<int, string> ResourceMethods = new()
     {
-        [7] = "GetDevice", [8] = "Map", [9] = "Unmap", [10] = "GetDesc", [11] = "GetGPUVirtualAddress", [14] = "GetHeapProperties"
+        [7] = "GetDevice", [8] = "Map", [9] = "Unmap", [10] = "GetDesc", [11] = "GetGPUVirtualAddress",
+        [14] = "GetHeapProperties"
     };
 
-    private static readonly Dictionary<int, string> DescriptorHeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc", [9] = "GetCPUDescriptorHandleForHeapStart", [10] = "GetGPUDescriptorHandleForHeapStart" };
+    private static readonly Dictionary<int, string> DescriptorHeapMethods = new()
+    {
+        [7] = "GetDevice", [8] = "GetDesc", [9] = "GetCPUDescriptorHandleForHeapStart",
+        [10] = "GetGPUDescriptorHandleForHeapStart"
+    };
     private static readonly Dictionary<int, string> QueryHeapMethods = new() { [7] = "GetDevice" };
-    private static readonly Dictionary<int, string> PipelineMethods = new() { [7] = "GetDevice", [8] = "GetCachedBlob" };
+    private static readonly Dictionary<int, string>
+        PipelineMethods = new() { [7] = "GetDevice", [8] = "GetCachedBlob" };
     private static readonly Dictionary<int, string> RootSignatureMethods = new() { [7] = "GetDevice" };
     private static readonly Dictionary<int, string> HeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc" };
     private static readonly Dictionary<int, string> FenceMethods = new()
     {
-        [7] = "GetDevice", [8] = "GetCompletedValue", [9] = "SetEventOnCompletion", [10] = "Signal", [11] = "GetCreationFlags", [12] = "GetGPUVirtualAddress"
+        [7] = "GetDevice", [8] = "GetCompletedValue", [9] = "SetEventOnCompletion", [10] = "Signal",
+        [11] = "GetCreationFlags", [12] = "GetGPUVirtualAddress"
     };
-    private static readonly Dictionary<int, string> AllocatorMethods = new() { [7] = "GetDevice", [8] = "Reset", [9] = "AllocationCallback" };
+    private static readonly Dictionary<int, string> AllocatorMethods = new()
+        { [7] = "GetDevice", [8] = "Reset", [9] = "AllocationCallback" };
     private static readonly Dictionary<int, string> DxgiDeviceMethods = new() { [6] = "GetParent", [7] = "GetAdapter" };
-    private static readonly Dictionary<int, string> DxgiAdapterMethods = new() { [6] = "GetParent", [7] = "EnumOutputs", [8] = "GetDesc" };
-    private static readonly Dictionary<int, string> DxgiFactoryMethods = new() { [7] = "EnumAdapters", [12] = "EnumAdapters1" };
-    private static readonly Dictionary<int, string> DxgiOutputMethods = new() { [6] = "GetParent", [21] = "GetDisplayModeListX" };
+    private static readonly Dictionary<int, string> DxgiAdapterMethods =
+        new() { [6] = "GetParent", [7] = "EnumOutputs", [8] = "GetDesc" };
+    private static readonly Dictionary<int, string> DxgiFactoryMethods =
+        new() { [7] = "EnumAdapters", [12] = "EnumAdapters1" };
+    private static readonly Dictionary<int, string> DxgiOutputMethods = new()
+        { [6] = "GetParent", [21] = "GetDisplayModeListX" };
 
     private static string TableKind(nint table)
     {
@@ -83,13 +96,25 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return "unknown-object";
         }
-        return table == _deviceTable ? "device" : table == _queueOld ? "queue-old" :
-            table == _queueNew ? "queue-new" : table == _allocatorTable ? "allocator" :
-            table == _fenceTable ? "fence" : table == _listOld ? "list-old" : table == _listNew ? "list-new" :
-            table == _resourceTable ? "resource" : table == _heapTable ? "heap" :
-            table == _descriptorHeapTable ? "descriptor-heap" : table == _rootSignatureTable ? "root-signature" : table == _pipelineTable ? "pipeline" : table == _queryHeapTable ? "query-heap" : table == _commandSignatureTable ? "command-signature" :
-            table == _dxgiDeviceTable ? "dxgi-device" : table == _dxgiAdapterTable ? "dxgi-adapter" :
-            table == _dxgiFactoryTable ? "dxgi-factory" : table == _dxgiOutputTable ? "dxgi-output" : "unknown-object";
+
+        return table == _deviceTable ? "device" :
+            table == _queueOld ? "queue-old" :
+            table == _queueNew ? "queue-new" :
+            table == _allocatorTable ? "allocator" :
+            table == _fenceTable ? "fence" :
+            table == _listOld ? "list-old" :
+            table == _listNew ? "list-new" :
+            table == _resourceTable ? "resource" :
+            table == _heapTable ? "heap" :
+            table == _descriptorHeapTable ? "descriptor-heap" :
+            table == _rootSignatureTable ? "root-signature" :
+            table == _pipelineTable ? "pipeline" :
+            table == _queryHeapTable ? "query-heap" :
+            table == _commandSignatureTable ? "command-signature" :
+            table == _dxgiDeviceTable ? "dxgi-device" :
+            table == _dxgiAdapterTable ? "dxgi-adapter" :
+            table == _dxgiFactoryTable ? "dxgi-factory" :
+            table == _dxgiOutputTable ? "dxgi-output" : "unknown-object";
     }
 
     private static Dictionary<int, string>? Inventory(string kind)
@@ -126,6 +151,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 case 146: return "EnhancedBarrierGroups";
                 case 148: return "AllocateUpload";
             }
+
             if (index >= 61)
             {
                 index -= 2;
@@ -135,6 +161,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return null;
             }
         }
+
         if (kind == "queue-new")
         {
             if (index >= 16)
@@ -146,7 +173,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return null;
             }
         }
+
         var methods = Inventory(kind);
+
         return methods != null && methods.TryGetValue(index, out var method) ? method : null;
     }
 
@@ -183,10 +212,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 throw new InvalidOperationException($"ABI table '{name}' has not been initialized.");
             }
+
             if (count <= 0 || count > 160)
             {
                 throw new InvalidOperationException($"Invalid ABI table size for '{name}': {count}.");
             }
+
             for (var index = 0; index < count; index++)
             {
                 if (((nint*)table)[index] == 0)
@@ -199,9 +230,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void ValidateRootSignatureRegistration(nint* device)
     {
-        if (device[16] != (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature)
+        if (device[16]
+            != (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature)
         {
-            throw new InvalidOperationException("ABI device slot 0x80 (CreateRootSignature) is not registered correctly.");
+            throw new InvalidOperationException(
+                "ABI device slot 0x80 (CreateRootSignature) is not registered correctly.");
         }
     }
 
@@ -211,9 +244,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             ValidateTables([("test-missing-table", 0, 24)]);
+
             throw new InvalidOperationException("ABI validation accepted a null table.");
         }
-        catch (InvalidOperationException exception) when (exception.Message == "ABI table 'test-missing-table' has not been initialized.")
+        catch (InvalidOperationException exception) when (exception.Message
+                                                          == "ABI table 'test-missing-table' has not been initialized.")
         {
             // Expected: report the missing interface before reading any pointer.
         }
@@ -222,6 +257,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             ValidateTables([("test-null-slot", (nint)(&emptySlot), 1)]);
+
             throw new InvalidOperationException("ABI validation accepted a null slot.");
         }
         catch (InvalidOperationException exception) when (exception.Message == "Null ABI slot test-null-slot 0x0.")
@@ -235,6 +271,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 InitializeTables();
             }
+
             ValidateTables(AllTables(_deviceTable));
             ValidateRootSignatureRegistration((nint*)_deviceTable);
             ValidateComputePipelineRegistration((nint*)_deviceTable);
@@ -261,6 +298,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 InitializeTables();
             }
+
             tables = AllTables(_deviceTable);
             ValidateTables(tables);
             ValidateRootSignatureRegistration((nint*)_deviceTable);
@@ -272,6 +310,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             ValidateCommandMemoryRegistration();
             ValidateBarrierRegistration();
         }
+
         Directory.CreateDirectory(reportDirectory);
         _evidencePath = Path.Combine(reportDirectory, "blocking-slots.tsv");
         var reportPath = Path.Combine(reportDirectory, "graphics-abi.tsv");
@@ -288,12 +327,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     throw new InvalidOperationException($"Null ABI slot {kind} 0x{index * 8:X}.");
                 }
+
                 var bound = pointer != MissingAddress(index);
                 var method = MethodName(kind, index);
                 if (bound)
                 {
                     registered++;
                 }
+
                 if (method != null)
                 {
                     known++;
@@ -302,13 +343,25 @@ public static unsafe partial class ConsoleGraphicsDevice
                         knownRegistered++;
                     }
                 }
-                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" || kind == "root-signature" || kind == "pipeline" || kind == "query-heap" || kind == "command-signature" ||
-                    (kind == "device" && index is 10 or 38 or 41 or 86 or 108 or 39 or 11 or 62 or 14 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
-                var status = !bound ? "missing" : CommandOperationsStatus(kind, index) ?? BarrierStatus(kind, index) ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index) ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
+
+                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap"
+                              || kind == "root-signature" || kind == "pipeline" || kind == "query-heap"
+                              || kind == "command-signature" ||
+                              (kind == "device" && index is 10 or 38 or 41 or 86 or 108 or 39 or 11 or 62 or 14 or 16
+                                  or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71
+                                  or 76 or 127 or 133);
+                var status = !bound
+                    ? "missing"
+                    : CommandOperationsStatus(kind, index) ?? BarrierStatus(kind, index)
+                    ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index)
+                    ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
                 rows.Add($"{kind}\t{index}\t0x{index * 8:X}\t{method ?? "(unnamed)"}\t{status}");
             }
-            writer.WriteLine($"[abi] {kind,-14}: {registered}/{count} registered; {knownRegistered}/{known} named methods registered.");
+
+            writer.WriteLine(
+                $"[abi] {kind,-14}: {registered}/{count} registered; {knownRegistered}/{known} named methods registered.");
         }
+
         File.WriteAllLines(reportPath, rows);
         if (File.Exists(_evidencePath))
         {
@@ -316,17 +369,27 @@ public static unsafe partial class ConsoleGraphicsDevice
             foreach (var line in File.ReadLines(_evidencePath))
             {
                 var fields = line.Split('\t');
-                if (fields.Length < 4 || !int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out var slot) || !seen.Add((fields[1], slot)))
+                if (fields.Length < 4
+                    || !int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out var slot)
+                    || !seen.Add((fields[1], slot)))
                 {
                     continue;
                 }
+
                 var current = tables.FirstOrDefault(item => item.Name == fields[1]);
-                var status = current.Table != 0 && slot >= 0 && slot < current.Count && ((nint*)current.Table)[slot] != MissingAddress(slot) ? CommandStateStatus(fields[1], slot) ?? OptionalDeviceStatus(fields[1], slot) ?? "now registered (unverified)" : "still missing/unknown";
+                var status =
+                    current.Table != 0 && slot >= 0 && slot < current.Count
+                    && ((nint*)current.Table)[slot] != MissingAddress(slot)
+                        ? CommandStateStatus(fields[1], slot)
+                          ?? OptionalDeviceStatus(fields[1], slot) ?? "now registered (unverified)"
+                        : "still missing/unknown";
                 writer.WriteLine($"[abi] Previous blocker: {fields[1]} 0x{slot * 8:X} {fields[3]}: {status}.");
             }
         }
+
         writer.WriteLine($"[abi] Report: {reportPath}");
-        writer.WriteLine("[abi] Coverage counts registrations, not functional parity or methods the selected title necessarily calls.");
+        writer.WriteLine(
+            "[abi] Coverage counts registrations, not functional parity or methods the selected title necessarily calls.");
     }
 
     private static void Trap(int index, nint first, nint second)
@@ -336,6 +399,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             _ = LiveObjects.TryGetValue(second, out table);
         }
+
         var kind = TableKind(table);
         var method = MethodName(kind, index) ?? "unknown method";
         var path = _evidencePath;
@@ -345,7 +409,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 lock (EvidenceGate)
                 {
-                    File.AppendAllText(path, $"{DateTime.UtcNow:O}\t{kind}\t{index.ToString(CultureInfo.InvariantCulture)}\t{method}\n");
+                    File.AppendAllText(path,
+                        $"{DateTime.UtcNow:O}\t{kind}\t{index.ToString(CultureInfo.InvariantCulture)}\t{method}\n");
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -353,6 +418,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 Console.Error.WriteLine($"[abi] Could not persist blocker: {exception.Message}");
             }
         }
+
         Environment.FailFast($"[graphics] Unsupported console graphics {kind} slot 0x{index * 8:X} ({method}, C#).");
     }
 }

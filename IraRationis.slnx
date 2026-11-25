@@ -39,5 +39,11 @@
     <Folder Name="/Tests/">
         <Project Path="IraRationis.Runtime.Tests/IraRationis.Runtime.Tests.csproj" />
         <File Path="tests/smoke.py" />
+        <File Path="tests/native/input-memory.c" />
+        <File Path="tests/native/input-memory.ps1" />
+        <File Path="tests/native/probe.c" />
+        <File Path="tests/native/smoke.ps1" />
+        <File Path="tests/native/storage.c" />
+        <File Path="tests/native/storage.ps1" />
     </Folder>
 </Solution>

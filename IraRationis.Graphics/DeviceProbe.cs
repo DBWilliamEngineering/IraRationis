@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.Runtime.InteropServices;
+using IraRationis.Graphics.Textures;
+using IraRationis.Shaders;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
 
@@ -7,20 +10,11 @@ namespace IraRationis.Graphics;
 
 public static unsafe class DeviceProbe
 {
-    [StructLayout(LayoutKind.Sequential)]
-    private struct QueueDescription
-    {
-        public uint Kind;
-        public int Priority;
-        public uint Flags;
-        public uint Nodes;
-    }
-
     public static int Execute(TextWriter writer)
     {
-        IraRationis.Shaders.NativeShaderProbe.Verify();
+        NativeShaderProbe.Verify();
         writer.WriteLine("Native shader extraction and scalar diagnostic lowering passed (CPU only).");
-        Textures.TextureComputerProbe.Verify();
+        TextureComputerProbe.Verify();
         writer.WriteLine("XG texture computer ABI and layout tests passed.");
         ConsoleGraphicsDevice.VerifyAbiInitialization();
         writer.WriteLine("ABI initialization, null-table diagnostics and root signature registration passed.");
@@ -55,7 +49,8 @@ public static unsafe class DeviceProbe
                 }
 
                 var heapProperties = (delegate* unmanaged[Stdcall]<uint*, nint, uint, uint, uint*>)Slot(device, 26);
-                if (heapProperties(heap, device, 0, 2) != heap || heap[0] != 4 || heap[1] != 3 || heap[2] != 1 || heap[3] != 1 || heap[4] != 1)
+                if (heapProperties(heap, device, 0, 2) != heap || heap[0] != 4 || heap[1] != 3 || heap[2] != 1
+                    || heap[3] != 1 || heap[4] != 1)
                 {
                     throw new InvalidOperationException("Console heap property ABI check failed.");
                 }
@@ -73,29 +68,35 @@ public static unsafe class DeviceProbe
                 writer.WriteLine("Resource CPU backing, aliases, page pools and descriptor ABI passed.");
 
                 var desc = new QueueDescription { Nodes = 1 };
-                var createQueue = (delegate* unmanaged[Stdcall]<nint, QueueDescription*, Guid*, nint*, int>)Slot(device, 8);
+                var createQueue =
+                    (delegate* unmanaged[Stdcall]<nint, QueueDescription*, Guid*, nint*, int>)Slot(device, 8);
                 Check(createQueue(device, &desc, &queueId, &queue), "Queue creation");
                 var queueDesc = default(QueueDescription);
-                var describe = (delegate* unmanaged[Stdcall]<nint, QueueDescription*, void>)Slot(queue, newer ? 28 : 26);
+                var describe =
+                    (delegate* unmanaged[Stdcall]<nint, QueueDescription*, void>)Slot(queue, newer ? 28 : 26);
                 describe(queue, &queueDesc);
                 if (queueDesc.Nodes != 1 || queueDesc.Kind != 0)
                 {
                     throw new InvalidOperationException("Console queue description ABI check failed.");
                 }
+
                 var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36);
                 Check(createFence(device, 0, 0, &fenceId, &fence), "Fence creation");
+                ConsoleGraphicsDevice.VerifyFenceAddressHostProbe(device, queue, fence);
                 var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot(device, 9);
                 Check(createAllocator(device, 0, &allocatorId, &allocator), "Allocator creation");
                 var reset = (delegate* unmanaged[Stdcall]<nint, int>)Slot(allocator, 8);
                 Check(reset(allocator), "Allocator reset");
                 new Span<uint>(listDesc, 4).Clear();
                 listDesc[2] = 1;
-                var createList = (delegate* unmanaged[Stdcall]<nint, uint*, nint, nint, Guid*, nint*, int>)Slot(device, 73);
+                var createList =
+                    (delegate* unmanaged[Stdcall]<nint, uint*, nint, nint, Guid*, nint*, int>)Slot(device, 73);
                 Check(createList(device, listDesc, allocator, 0, &listId, &list), "CreateCommandListX");
                 if (*(ulong*)(list + 0x18) != 0 || *(ulong*)(list + 0x28) != 0)
                 {
                     throw new InvalidOperationException("Command list inline layout check failed.");
                 }
+
                 var viewport = new D3D12_VIEWPORT { Width = 1280, Height = 720, MaxDepth = 1 };
                 var scissor = default(RECT);
                 ((int*)&scissor)[2] = 1280;
@@ -106,24 +107,37 @@ public static unsafe class DeviceProbe
                 ((delegate* unmanaged[Stdcall]<nint, uint, RECT*, void>)Slot(list, 22))(list, 1, &scissor);
                 ((delegate* unmanaged[Stdcall]<nint, float*, void>)Slot(list, 23))(list, blend);
                 ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(list, 24))(list, 0);
-                var syncTop = (delegate* unmanaged[Stdcall]<nint, uint, uint, ulong, ulong, void>)Slot(list, newer ? 131 : 129);
-                var syncBottom = (delegate* unmanaged[Stdcall]<nint, uint, uint, ulong, ulong, void>)Slot(list, newer ? 132 : 130);
+                var syncTop =
+                    (delegate* unmanaged[Stdcall]<nint, uint, uint, ulong, ulong, void>)Slot(list, newer ? 131 : 129);
+                var syncBottom =
+                    (delegate* unmanaged[Stdcall]<nint, uint, uint, ulong, ulong, void>)Slot(list, newer ? 132 : 130);
                 syncTop(list, 0, 0, 0, 0);
                 syncBottom(list, 0, 0, 0, 0);
                 ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
 
                 var clearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list);
                 ulong marker = 0;
-                var write = (delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)Slot(list, newer ? 72 : 70);
-                var waitValue = (delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)Slot(list, newer ? 74 : 72);
+                var write = (delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)Slot(list,
+                    newer ? 72 : 70);
+                var waitValue =
+                    (delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)Slot(list, newer ? 74 : 72);
                 write(list, (ulong)&marker, 0x1234, 0, 0);
                 waitValue(list, (ulong)&marker, 3, 0x1234);
                 ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
                 write(list, (ulong)&marker, 0x5678, 0, 0);
+                var fenceAddress = ((delegate* unmanaged[Stdcall]<nint, ulong>)Slot(fence, 12))(fence);
+                write(list, fenceAddress, 9, 0, 0);
+                waitValue(list, fenceAddress, 3, 9);
+                if (Volatile.Read(ref *(ulong*)(nuint)fenceAddress) != 0)
+                {
+                    throw new InvalidOperationException("Fence packet write executed while recording.");
+                }
+
                 if (marker != 0)
                 {
                     throw new InvalidOperationException("A command memory write executed while recording.");
                 }
+
                 var close = (delegate* unmanaged[Stdcall]<nint, int>)Slot(list, 9);
                 Check(close(list), "Close command list");
                 var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10);
@@ -132,10 +146,19 @@ public static unsafe class DeviceProbe
                 {
                     throw new InvalidOperationException("Segmented command write/wait order failed.");
                 }
+
                 writer.WriteLine("[graphics-probe] GPU fence-ordered write/wait/write passed.");
-                writer.WriteLine($"[graphics-probe] {(newer ? "Legacy and enhanced" : "Legacy")} barrier recording and segmented submission passed (ordering only).");
+                writer.WriteLine(
+                    $"[graphics-probe] {(newer ? "Legacy and enhanced" : "Legacy")} barrier recording and segmented submission passed (ordering only).");
                 var signal = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(queue, newer ? 16 : 14);
                 var complete = (delegate* unmanaged[Stdcall]<nint, ulong>)Slot(fence, 8);
+                if (Volatile.Read(ref *(ulong*)(nuint)fenceAddress) != 9 || complete(fence) != 9)
+                {
+                    throw new InvalidOperationException(
+                        "Fence packet write/wait did not update both completion domains.");
+                }
+
+                writer.WriteLine("[graphics-probe] Segmented fence-address write/wait passed.");
                 var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(fence, 9);
                 using var completion = new EventWaitHandle(false, EventResetMode.AutoReset);
                 Check(setEvent(fence, 42, completion.SafeWaitHandle.DangerousGetHandle()), "Fence event registration");
@@ -143,19 +166,23 @@ public static unsafe class DeviceProbe
 
                 if (!completion.WaitOne(TimeSpan.FromSeconds(10)) || complete(fence) != 42)
                 {
-                    Environment.FailFast("Graphics device probe: fence did not complete; objects may still be in flight.");
+                    Environment.FailFast(
+                        "Graphics device probe: fence did not complete; objects may still be in flight.");
                 }
 
                 ConsoleGraphicsDevice.VerifyHostClearProbe(clearReadback);
                 ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
                 Check(reset(allocator), "Allocator reset after completion");
-                var resetList = (delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)Slot(list, newer ? 139 : 137);
+                var resetList =
+                    (delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)Slot(list, newer ? 139 : 137);
                 Check(resetList(list, allocator, 0, 0), "ResetCommandListX");
                 Check(close(list), "Close reset list");
-                writer.WriteLine($"Device ABI {(newer ? "newer" : "older")}: queue, allocator, frame clock, display enumeration, raster state, list synchronization, submission and fence passed.");
+                writer.WriteLine(
+                    $"Device ABI {(newer ? "newer" : "older")}: queue, allocator, frame clock, display enumeration, raster state, list synchronization, submission and fence passed.");
                 Release(ref list);
                 Release(ref allocator);
                 Release(ref fence);
+                ConsoleGraphicsDevice.VerifyFenceAddressProbeCleanup();
                 Release(ref queue);
                 Release(ref device);
             }
@@ -200,6 +227,7 @@ public static unsafe class DeviceProbe
         {
             throw new InvalidOperationException("Unexpected frame statistics.");
         }
+
         Check(interval(device, 0, 0, 2, 0), "Restore default frame interval");
 
         var dxgiId = new Guid("54ec77fa-1377-44e6-8c32-88fd5f44c84c");
@@ -221,6 +249,7 @@ public static unsafe class DeviceProbe
             {
                 throw new InvalidOperationException("Unexpected logical display count.");
             }
+
             Check(modes(output, 0, 0, &count, mode), "Display mode description");
             if (mode[0] != 3840 || mode[1] != 2160 || mode[2] != 60 || mode[3] != 1)
             {
@@ -258,5 +287,14 @@ public static unsafe class DeviceProbe
         {
             throw new InvalidOperationException($"{operation}: HRESULT 0x{unchecked((uint)result):X8}.");
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct QueueDescription
+    {
+        public uint Kind;
+        public int Priority;
+        public uint Flags;
+        public uint Nodes;
     }
 }
