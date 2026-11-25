@@ -9,7 +9,9 @@
         <ProjectReference Include="../IraRationis.Core/IraRationis.Core.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Remove="Rdna2VertexFetchCompiler.cs" />
+        <Compile Remove="Rdna2VertexFetchCompiler.cs;Rdna2RectangleCompiler.cs;Rdna2ColorLutCompiler.cs" />
         <Compile Include="Rdna2VertexFetchCompiler.cs" />
+        <Compile Include="Rdna2RectangleCompiler.cs" />
+        <Compile Include="Rdna2ColorLutCompiler.cs" />
     </ItemGroup>
 </Project>

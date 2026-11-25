@@ -78,12 +78,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     // Close the preceding packet range before opening the next. The guest list remains open.
     // The guest allocator owns all host command memory until its normal fence/reset lifecycle.
     private static void SealMemoryBoundary(nint self, RecordedCommandState state, MemoryWrite? write, MemoryWait? wait,
-        DeferredCopy? copy = null)
+        DeferredCopy? copy = null, R13DrawBoundary? draw = null, R14DrawBoundary? rectangle = null,
+        R16DrawBoundary? textured = null, R17ComputeBoundary? compute = null)
     {
+        using var r25Timing = BeginR25Timing(R25Stage.SealBoundary);
         var current = Host(self);
         if (current == 0) // Synthetic ABI probe only.
         {
-            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy));
+            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute));
 
             return;
         }
@@ -92,7 +94,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         var hr = ((ID3D12GraphicsCommandList*)current)->Close();
         if (hr < 0)
         {
-            var boundary = write.HasValue ? "write" : wait.HasValue ? "wait" : "copy";
+            var boundary = compute != null ? "compute" :
+                textured.HasValue ? "textured-rectangle" :
+                rectangle.HasValue ? "rectangle" :
+                draw.HasValue ? "vertex-fetch" :
+                write.HasValue ? "write" :
+                wait.HasValue ? "wait" : "copy";
             ReportHostCloseFailure(self, hr, boundary);
             Environment.FailFast($"[graphics] IRX-GFX-CLOSE-R3: closing memory segment failed: 0x{hr:X8}.");
         }
@@ -108,7 +115,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{hr:X8}.");
         }
 
-        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy));
+        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute));
         var enhanced = *(nint*)(self + ListEnhancedHost);
         if (enhanced != 0)
         {
@@ -175,10 +182,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         table[70 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)&Write64;
         table[71 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)&WaitValue32;
         table[72 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)&WaitValue64;
+
+        // InitializeTables constructs both queue tables before building either list.
+        RegisterPageMappingMethods(newer);
     }
 
     private static void ValidateCommandMemoryRegistration()
     {
+        ValidatePageMappingRegistration();
+
         for (var slot = 69; slot <= 72; slot++)
         {
             var old = ((nint*)_listOld)[slot];
@@ -205,6 +217,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void AwaitCommandMemory(MemoryWait wait)
     {
+        using var r25Timing = BeginR25Timing(R25Stage.GuestWait);
         var started = Stopwatch.GetTimestamp();
         while (true)
         {
@@ -215,6 +228,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (CompareMemory(value, wait.Reference, wait.Comparison, wait.Bytes))
             {
+                RecordR24GuestWait(Stopwatch.GetTimestamp() - started);
+
                 return;
             }
 
@@ -236,6 +251,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void SubmitWithCommandMemory(nint queue, nint list, nint hostList)
     {
+        using var r25Timing = BeginR25Timing(R25Stage.SegmentedSubmit);
         if (CommandStates.TryGetValue(list, out var state) && state.MemoryBoundaries.Count != 0)
         {
             using var completion = new HostCompletionFence();
@@ -258,6 +274,41 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     AwaitCommandMemory(wait);
                 }
+
+                if (boundary.Draw is { } draw)
+                {
+                    ExecuteR13DrawBoundary(queue, draw);
+                }
+
+                if (boundary.Rectangle is { } rectangle)
+                {
+                    ExecuteR14DrawBoundary(queue, rectangle);
+                }
+
+                if (boundary.Compute is { } compute)
+                {
+                    try
+                    {
+                        ExecuteR17Compute(queue, compute);
+                    }
+                    catch (Exception exception)
+                    {
+                        Environment.FailFast($"[graphics] R17 compute submission failed: {exception.Message}",
+                            exception);
+                    }
+                }
+
+                if (boundary.Textured is { } textured)
+                {
+                    try
+                    {
+                        ExecuteR16DrawBoundary(queue, textured);
+                    }
+                    catch (Exception exception)
+                    {
+                        Environment.FailFast($"[graphics] R16 submission failed: {exception.Message}", exception);
+                    }
+                }
             }
         }
 
@@ -267,6 +318,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void PublishCommandWrite(nint queue, MemoryWrite write)
     {
+        using var r25Timing = BeginR25Timing(R25Stage.PublishWrite);
         var value = write.Value;
         if (write.Bytes == 8 && write.Flags == 1)
         {
@@ -291,6 +343,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyCommandMemoryAbi()
     {
         ValidateCommandMemoryRegistration();
+        VerifyPageMappingPlan();
+        VerifyR16TexturePlan();
         var list = (nint)NativeMemory.AllocZeroed(0x980);
         try
         {
@@ -322,6 +376,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Command memory write width failed.");
             }
 
+            VerifyR13BoundaryRecording(list, state);
             ReleaseCommandState(list);
             if (HasCommandMemory(list))
             {
@@ -342,5 +397,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private readonly record struct MemoryWait(ulong Address, uint Comparison, ulong Reference, int Bytes);
 
-    private readonly record struct MemoryBoundary(nint Host, MemoryWrite? Write, MemoryWait? Wait, DeferredCopy? Copy);
+    private readonly record struct MemoryBoundary(
+        nint Host,
+        MemoryWrite? Write,
+        MemoryWait? Wait,
+        DeferredCopy? Copy,
+        R13DrawBoundary? Draw,
+        R14DrawBoundary? Rectangle,
+        R16DrawBoundary? Textured,
+        R17ComputeBoundary? Compute);
 }

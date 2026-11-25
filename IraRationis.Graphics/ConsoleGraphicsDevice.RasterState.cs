@@ -10,6 +10,13 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private const uint R14RectangleTopology = 17;
+
+    private static uint HostRasterTopology(uint guest)
+    {
+        return guest == R14RectangleTopology ? 4U : guest;
+    }
+
     private static nint OpenGraphicsList(nint self)
     {
         if (!IsList(self) || *(int*)(self + ListClosed) != 0 || *(uint*)(self + 0x10) != 0)
@@ -25,7 +32,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = OpenGraphicsList(self);
         StateFor(self).Topology = topology;
-        ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, topology);
+        ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, HostRasterTopology(topology));
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -82,7 +89,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var host = Host(self);
         if (state.Topology is { } topology)
         {
-            ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, topology);
+            ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, HostRasterTopology(topology));
         }
 
         if (state.Viewports is { } viewports)

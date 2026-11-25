@@ -9,6 +9,7 @@ public static class GraphicsDeviceModule
     public static HleModule Create()
     {
         ConsoleGraphicsDevice.ConfigureResourceAllocator(XMemModule.GetGraphicsAllocationHooks);
+        ConsoleGraphicsDevice.ConfigurePageMapper(PhysicalPageModule.MapAlias);
         var address = ConsoleGraphicsDevice.ExportAddress;
 
         return new HleModule("d3d12-device", ["d3d12_xs.dll"],

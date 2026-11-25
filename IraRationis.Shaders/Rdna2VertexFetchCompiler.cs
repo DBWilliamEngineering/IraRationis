@@ -412,7 +412,7 @@ public static class Rdna2VertexFetchCompiler
             return result;
         }
 
-        public void Expect(string operation, ReadOnlySpan<uint> words)
+        public void Expect(string operation, scoped ReadOnlySpan<uint> words)
         {
             foreach (var expected in words)
             {

@@ -20,23 +20,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool TryReadPresentPlane(nint address, out PresentPlanePrefix plane)
     {
-        plane = default;
-        if (address == 0)
-        {
-            return false;
-        }
-
-        var value = default(PresentPlanePrefix);
-        nuint transferred = 0;
-        var bytes = (nuint)sizeof(PresentPlanePrefix);
-        if (ReadProcessMemory(-1, (void*)address, &value, bytes, &transferred) == 0 || transferred != bytes)
-        {
-            return false;
-        }
-
-        plane = value;
-
-        return true;
+        return TryReadMappingRecord((nuint)address, out plane);
     }
 
     private static int DecodePresentSource(uint planes, nint planeParameters, out PresentPlanePrefix plane,
@@ -73,6 +57,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int PresentX(nint self, uint planes, nint planeParameters, nint parameters)
     {
+        using var r25Timing = BeginR25Timing(R25Stage.PresentX);
         if (!LiveObjects.TryGetValue(self, out var table) || (table != _queueOld && table != _queueNew))
         {
             return InvalidArgument;
@@ -80,50 +65,48 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var request = Interlocked.Increment(ref _presentRequests);
         var hr = DecodePresentSource(planes, planeParameters, out var plane, out var resource);
-        if (hr < 0)
+        if (hr < 0 || (resource != 0 && !IsResource(resource)))
         {
             Console.Error.WriteLine(
-                $"[graphics] PresentX #{request}: invalid plane prefix or resource array; planes={planes}, plane=0x{planeParameters:X}.");
-
-            return hr;
-        }
-
-        // A single checked snapshot, not a GPU submission. The guest owns the
-        // resource for the duration of this call; no pointer survives it.
-        if (resource != 0 && !IsResource(resource))
-        {
-            Console.Error.WriteLine($"[graphics] PresentX #{request}: unknown guest resource=0x{resource:X}.");
+                $"[graphics] PresentX #{request}: invalid plane prefix or resource; planes={planes}.");
 
             return InvalidArgument;
         }
 
         var sample = request <= 4 || (request & (request - 1)) == 0;
+        var queue = Host(self);
+        if (queue != 0 && *(uint*)(self + 0x10) == 0)
+        {
+            ConfigureR191Window();
+        }
+
         if (sample)
         {
             Console.Error.WriteLine(
-                $"[graphics] IRX-GFX-PRESENT-R4 request={request}, queueType={*(uint*)(self + 0x10)}, planes={planes}, token={plane.Token}, resources={plane.ResourceCount}, parameters=0x{parameters:X}.");
+                $"[graphics] IRX-GFX-PRESENT-R16: request={request}, queueType={*(uint*)(self + 0x10)}, planes={planes}, token={plane.Token}, resources={plane.ResourceCount}.");
             if (resource != 0)
             {
                 var source = (ResourceObject*)resource;
-                var description = source->Description;
+                var desc = source->Description;
                 Console.Error.WriteLine(
-                    $"[graphics] PresentX source: guest=0x{resource:X}, address=0x{source->Address:X}, dimension={description.Dimension}, size={description.Width}x{description.Height}, format={description.Format}, layout=0x{description.Layout:X}, flags=0x{description.Flags:X}, samples={description.SampleCount}, hostAllocated={source->HostResource != 0}; content authority unknown.");
-            }
-            else
-            {
-                Console.Error.WriteLine("[graphics] PresentX source: no first-plane resource.");
+                    $"[graphics] PresentX source: size={desc.Width}x{desc.Height}, format={desc.Format}, layout=0x{desc.Layout:X}, hostAllocated={source->HostResource != 0}, knownSameQueueWriter={queue != 0 && R16Writer(resource) == queue}.");
             }
         }
 
-        // Never equate a host allocation with valid rendered pixels. We have
-        // neither a production swap chain nor authoritative VUM content yet.
-        // Explicit diagnostic mode acknowledges only the call, not a frame.
+        // Only the single-plane prefix is established. Do not pretend a multi-plane
+        // video composite, a CPU-only allocation or an unknown GPU writer is a frame.
+        if (planes == 1 && plane.ResourceCount == 1 && resource != 0 && *(uint*)(self + 0x10) == 0 &&
+            (TryPresentR19(queue, resource) || TryPreviewR16Resource(queue, resource, true)))
+        {
+            return 0;
+        }
+
         if (!AllowHeadlessPresent)
         {
             if (sample)
             {
                 Console.Error.WriteLine(
-                    "[graphics] PresentX not displayed: host presentation/coherence is unimplemented (E_NOTIMPL). IRX_PRESENT_HEADLESS=1 enables diagnostic-only continuation.");
+                    "[graphics] IRX-GFX-PRESENT-R16: REFUSED: single-plane same-queue GPU-written color source and an available presenter required.");
             }
 
             return NotImplemented;
@@ -133,7 +116,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (sample)
         {
             Console.Error.WriteLine(
-                $"[graphics] PresentX headless acknowledgement #{acknowledged}; displayed=0; no GPU copy, wait, or synthetic pixels.");
+                $"[graphics] PresentX headless acknowledgement #{acknowledged}; displayed=0 (explicit diagnostic mode).");
         }
 
         return 0;
@@ -177,12 +160,21 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("PresentX invalid queue probe failed.");
         }
 
+        if (sizeof(R19SwapDescription) != 48 || sizeof(R191MonitorInfo) != 40 || sizeof(R19Rect) != 16)
+        {
+            throw new InvalidOperationException("R19 DXGI swap-chain description ABI mismatch.");
+        }
+
         Console.Error.WriteLine(
-            "[graphics-probe] PresentX old/new registration and checked plane prefix passed (CPU only; no displayed frame).");
+            $"[graphics] IRX-GFX-PRESENT-R19: swapchain={EnableR19SwapChain}, diagnosticPreview={EnableR16Window}, colorFlow={EnableR171ColorFlow}.");
+        Console.Error.WriteLine(
+            $"[graphics] IRX-GFX-WINDOW-R19.1: enabled={EnableR191Windowed1080}; requestedClient={R191ClientWidth}x{R191ClientHeight}; set IRX_PRESENT_WINDOWED_1080=0 to preserve title window size.");
+        Console.Error.WriteLine(
+            $"[performance] IRX-R24: bounded completion-fence pooling and metrics active; verboseGraphics={R24Verbose}.");
+        Console.Error.WriteLine(
+            "[graphics-probe] R16 PresentX old/new registration and plane prefix passed (CPU only).");
     }
 
-    // Only this prefix is established. Do not infer the full plane stride,
-    // placement, scaling, color space, flags, or optional parameter layout.
     [StructLayout(LayoutKind.Explicit, Size = 24)]
     private struct PresentPlanePrefix
     {

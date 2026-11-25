@@ -113,6 +113,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var root = (nint)0;
         var complete = true;
         string? incompleteReason = null;
+        R14InputElement[]? inputLayout = null;
         var seen = 0U;
         try
         {
@@ -171,6 +172,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     records.Add(new PipelineStateRecord(kind, new ReadOnlySpan<byte>(address, size).ToArray()));
                 }
+                else if (kind == 12)
+                {
+                    // Deep-copy the descriptor array and names while the creation arguments are valid.
+                    // Never retain the guest's pointer-bearing record itself.
+                    if (!TryReadR14InputLayout(Unsafe.ReadUnaligned<ulong>(address + 8),
+                            Unsafe.ReadUnaligned<uint>(address + 16), out inputLayout))
+                    {
+                        complete = false;
+                        incompleteReason ??= $"invalid input layout at byte {offset}";
+                    }
+                }
                 else if (!IsOmittablePipelineState(kind, new ReadOnlySpan<byte>(address, size)))
                 {
                     complete = false;
@@ -181,7 +193,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             return StoreGraphicsPipeline(root, stages[..count], kinds[..count], records, true, complete, iid, output,
-                incompleteReason);
+                incompleteReason, inputLayout);
         }
         catch (OutOfMemoryException)
         {
@@ -191,7 +203,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static int StoreGraphicsPipeline(nint root, ReadOnlySpan<ShaderBytecode> stages, ReadOnlySpan<uint> kinds,
         List<PipelineStateRecord> records, bool stream, bool complete, Guid* iid, nint* output,
-        string? incompleteReason = null)
+        string? incompleteReason = null, R14InputElement[]? inputLayout = null)
     {
         if (iid == null || (*iid != PipelineId && *iid != UnknownId && *iid != ObjectId && *iid != ChildId
                             && *iid != PageableId))
@@ -275,7 +287,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 GraphicsPipelines.Add((nint)pipeline,
-                    new GraphicsPipelineMetadata(root, retained, records, stream, complete, incompleteReason));
+                    new GraphicsPipelineMetadata(root, retained, records, stream, complete, incompleteReason,
+                        inputLayout));
                 LiveObjects[(nint)pipeline] = _pipelineTable;
                 published = true;
             }
@@ -352,7 +365,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private sealed record PipelineShader(uint Stage, string Hash, ShaderContainer Container);
 
-    // Only pointer-free state records are retained. Pointer-bearing state needs a deep-copy translator.
+    // Only pointer-free state records are retained. Input elements have their own managed deep copy.
     private sealed record PipelineStateRecord(uint Kind, byte[] Bytes);
 
     private sealed record GraphicsPipelineMetadata(
@@ -361,5 +374,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         List<PipelineStateRecord> State,
         bool IsStream,
         bool CompleteStream,
-        string? IncompleteReason = null);
+        string? IncompleteReason = null,
+        R14InputElement[]? InputLayout = null);
 }

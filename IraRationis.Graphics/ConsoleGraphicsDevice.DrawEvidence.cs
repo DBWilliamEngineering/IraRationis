@@ -48,7 +48,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
             }
 
-            WriteDrawEvidence(report, state, directory);
+            WriteDrawEvidence(report, state, directory, new VertexFetchDrawRange(indexed, count, instances, first,
+                baseVertex, firstInstance));
             var evidence = report.ToString();
             Console.Error.Write(evidence);
             Console.Error.Flush();
@@ -68,7 +69,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void WriteDrawEvidence(TextWriter report, RecordedCommandState state, string? directory)
+    private static void WriteDrawEvidence(TextWriter report, RecordedCommandState state, string? directory,
+        VertexFetchDrawRange? draw = null)
     {
         report.WriteLine($"pipeline=0x{(nuint)state.Pipeline:X} topology={state.Topology} " +
                          $"viewports={state.Viewports?.Length ?? 0} scissors={state.Scissors?.Length ?? 0} " +
@@ -77,8 +79,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                          $"constants={state.Graphics.Constants.Count} views={state.Graphics.Views.Count} " +
                          $"heaps={state.Heaps.Length} vertexViews={state.Vertices.Count} index={state.Index.HasValue}");
 
-        // Only read binding metadata. Do not dereference arbitrary guest buffers
-        // or dump resource contents, including constants and texture pixels.
+        // Only read binding metadata here. The optional R12 source probe is
+        // separate, bounded and restricted to a recognized shader contract.
         foreach (var (slot, handle) in state.Graphics.Tables.OrderBy(static item => item.Key))
         {
             report.WriteLine($"root table slot={slot} handle=0x{handle:X}");
@@ -134,7 +136,6 @@ public static unsafe partial class ConsoleGraphicsDevice
                 $"PSO incomplete reason: {pipeline.IncompleteReason ?? "legacy description or unknown state"}.");
         }
 
-
         WriteRootEvidence(report, pipeline.Root, "pipeline", directory);
         if (pipeline.Root != state.Graphics.Signature)
         {
@@ -143,13 +144,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         foreach (var record in pipeline.State)
         {
-            report.WriteLine($"PSO record kind={record.Kind} bytes={record.Bytes.Length} " +
-                             $"sha256={Convert.ToHexString(SHA256.HashData(record.Bytes))}");
+            var hash = Convert.ToHexString(SHA256.HashData(record.Bytes));
+            report.WriteLine($"PSO record kind={record.Kind} bytes={record.Bytes.Length} sha256={hash}");
             if (directory != null)
             {
-                File.WriteAllBytes(
-                    Path.Combine(directory,
-                        $"pso-{record.Kind}-{Convert.ToHexString(SHA256.HashData(record.Bytes))}.bin"), record.Bytes);
+                File.WriteAllBytes(Path.Combine(directory, $"pso-{record.Kind}-{hash}.bin"), record.Bytes);
             }
         }
 
@@ -158,7 +157,28 @@ public static unsafe partial class ConsoleGraphicsDevice
             WriteShaderEvidence(report, shader, directory);
         }
 
-        PrepareVertexFetchTranslation(report, state, pipeline, directory);
+        if (pipeline.InputLayout is { } layout)
+        {
+            foreach (var element in layout)
+            {
+                report.WriteLine($"R14 input: {element.Name}{element.Index}, format={element.Format}, " +
+                                 $"slot={element.Slot}, offset={element.Offset}, class={element.Class}, step={element.Step}.");
+            }
+        }
+
+        if (state.Topology == R14RectangleTopology)
+        {
+            if (state.Graphics.Tables.TryGetValue(0, out var descriptorTable))
+            {
+                WriteR16TableEvidence(report, descriptorTable);
+            }
+
+            report.WriteLine("[graphics] Rectangle execution refused; inspect preceding R14/R16 reasons.");
+
+            return;
+        }
+
+        PrepareVertexFetchTranslation(report, state, pipeline, directory, draw);
     }
 
     private static void WriteTargetEvidence(TextWriter report, RecordedCommandState state, ulong handle,
@@ -311,5 +331,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Console.WriteLine("[graphics-probe] R9 blocked-draw metadata and shader classification passed (CPU only).");
         VerifyR10VertexFetchExtent();
+        VerifyR12SourcePlanning();
+        VerifyR14InputLayout();
     }
 }

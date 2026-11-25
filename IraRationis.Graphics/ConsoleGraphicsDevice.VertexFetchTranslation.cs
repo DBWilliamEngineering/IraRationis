@@ -11,11 +11,21 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private const long R19ShaderCacheLimit = 64L << 20;
+
+    // Cache validated host bytecode, not resource bindings or native PSOs.
+    // Exact source/profile keys prevent cross-stage reuse. Failed compilations
+    // are never cached. The compiler executes outside the cache lock.
+    private static readonly Lock R19ShaderCacheGate = new();
+    private static readonly Dictionary<(string Source, string Profile), byte[]> R19ShaderCache = new();
+    private static long _r19ShaderCacheBytes;
+    private static long _r19ShaderCacheHits;
+
     // This is an executable host-bytecode preparation stage, not draw execution.
     // A successful compiler or root-signature result does not establish PSO,
     // resource binding, memory coherence or guest output correctness.
     private static void PrepareVertexFetchTranslation(TextWriter report, RecordedCommandState state,
-        GraphicsPipelineMetadata pipeline, string? directory)
+        GraphicsPipelineMetadata pipeline, string? directory, VertexFetchDrawRange? draw)
     {
         if (pipeline.Shaders.Count != 2 || pipeline.Root != state.Graphics.Signature ||
             !IsRootSignature(pipeline.Root))
@@ -67,6 +77,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             ValidateR10HostPipeline(pair, vs, ps, pipeline, report);
+            if (draw is { } range)
+            {
+                InspectR12GuestSource(pair, state, range, report);
+            }
+
             if (vs != null && ps != null)
             {
                 report.WriteLine(
@@ -87,6 +102,54 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static byte[]? CompileR10Shader(string source, string profile, TextWriter report)
+    {
+        var key = (source, profile);
+        byte[]? cached;
+        lock (R19ShaderCacheGate)
+        {
+            _ = R19ShaderCache.TryGetValue(key, out cached);
+        }
+
+        if (cached != null)
+        {
+            var hits = Interlocked.Increment(ref _r19ShaderCacheHits);
+            if (hits <= 4 || (hits & (hits - 1)) == 0)
+            {
+                report.WriteLine(
+                    $"[graphics] IRX-GFX-SHADER-R19: cache hit #{hits}, {profile}, bytes={cached.Length}.");
+            }
+
+            return cached;
+        }
+
+        BeginR18ShaderCompilation(profile);
+        var succeeded = false;
+        try
+        {
+            var bytecode = CompileR10ShaderCore(source, profile, report);
+            succeeded = bytecode != null;
+            if (bytecode != null)
+            {
+                var charge = (long)source.Length * sizeof(char) + profile.Length * sizeof(char) + bytecode.Length;
+                lock (R19ShaderCacheGate)
+                {
+                    if (R19ShaderCache.Count < 256 && charge <= R19ShaderCacheLimit - _r19ShaderCacheBytes &&
+                        R19ShaderCache.TryAdd(key, bytecode))
+                    {
+                        _r19ShaderCacheBytes += charge;
+                    }
+                }
+            }
+
+            return bytecode;
+        }
+        finally
+        {
+            EndR18ShaderCompilation(succeeded);
+        }
+    }
+
+    private static byte[]? CompileR10ShaderCore(string source, string profile, TextWriter report)
     {
         var sourceBytes = Encoding.UTF8.GetBytes(source);
         var target = Encoding.ASCII.GetBytes(profile + "\0");
@@ -182,7 +245,18 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (native != null && vs != null && ps != null)
             {
-                ValidateR10PipelineCandidate(native, vs, ps, pipeline, report);
+                var candidate = CreateR10PipelineCandidate(native, vs, ps, pipeline, report);
+                if (candidate != 0)
+                {
+                    try
+                    {
+                        VerifyR11TranslatedDraw(pair, (nint)native, candidate, report);
+                    }
+                    finally
+                    {
+                        _ = HostRelease(candidate);
+                    }
+                }
             }
         }
         finally
@@ -194,13 +268,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static byte[]? SerializeR10HostRoot(VertexFetchShaderPair pair, TextWriter report)
+    private static byte[]? SerializeR10HostRoot(VertexFetchShaderPair pair, TextWriter report, bool rectangle = false)
     {
         // Rebuild the validated version 1.1 root contract with host structures.
         // Do not rely on the console container checksum or copy guest pointers.
         var parameter = new D3D12_ROOT_PARAMETER1
         {
-            ParameterType = (D3D12_ROOT_PARAMETER_TYPE)3,
+            ParameterType = (D3D12_ROOT_PARAMETER_TYPE)(rectangle ? 2 : 3),
             ShaderVisibility = 0
         };
         parameter.Anonymous.Descriptor = new D3D12_ROOT_DESCRIPTOR1
@@ -217,7 +291,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             NumParameters = 1,
             pParameters = &parameter,
-            Flags = 0
+            Flags = (D3D12_ROOT_SIGNATURE_FLAGS)(rectangle ? 1 : 0)
         };
         var blob = (nint)0;
         var errors = (nint)0;
@@ -248,32 +322,44 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // A Windows pipeline stream candidate is constructed only when all required
     // guest state was captured. No guest pointer enters this host stream. This
-    // creates and immediately releases a host PSO, never submits a draw.
-    private static void ValidateR10PipelineCandidate(void* root, byte[] vs, byte[] ps,
-        GraphicsPipelineMetadata pipeline, TextWriter report)
+    // returns an owned host PSO; the caller must release or transfer that reference.
+    private static nint CreateR10PipelineCandidate(void* root, byte[] vs, byte[] ps,
+        GraphicsPipelineMetadata pipeline, TextWriter report, byte[]? gs = null, void* inputElements = null,
+        uint inputCount = 0)
     {
+        var rectangle = gs != null;
+        var hasInput = inputElements != null && inputCount != 0;
+        if (inputElements == null != (inputCount == 0) || (rectangle && !hasInput) ||
+            (!hasInput && pipeline.InputLayout is { Length: > 0 }))
+        {
+            report.WriteLine("[graphics] Host PSO input layout incompatible with selected shader path.");
+
+            return 0;
+        }
+
         if (!pipeline.IsStream || !pipeline.CompleteStream || pipeline.State.Count != 8 ||
             sizeof(D3D12_BLEND_DESC) != 328 || sizeof(D3D12_RASTERIZER_DESC) != 44 ||
             sizeof(D3D12_DEPTH_STENCIL_DESC1) != 56 || sizeof(D3D12_RT_FORMAT_ARRAY) != 36)
         {
             report.WriteLine("[graphics] R10 native PSO validation refused: incomplete or unsupported stream layout.");
 
-            return;
+            return 0;
         }
 
         var seen = 0U;
-        var size = 64; // root (16), VS (24), PS (24)
+        var fixedSize = 64 + (rectangle ? 24 : 0) + (hasInput ? 24 : 0);
+        var size = fixedSize;
         foreach (var record in pipeline.State)
         {
             var payload = R10PipelinePayloadSize(record.Kind);
             var expected = payload == 0 ? 0 : (payload + 4 + 7) & ~7;
             if (expected == 0 || record.Bytes.Length != expected ||
                 BinaryPrimitives.ReadUInt32LittleEndian(record.Bytes) != record.Kind ||
-                (seen & (1U << (int)record.Kind)) != 0 || !R10PipelineStateCompatible(record))
+                (seen & (1U << (int)record.Kind)) != 0 || !R10PipelineStateCompatible(record, rectangle))
             {
                 report.WriteLine($"[graphics] R10 native PSO validation refused: unsupported state {record.Kind}.");
 
-                return;
+                return 0;
             }
 
             seen |= 1U << (int)record.Kind;
@@ -288,16 +374,21 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             report.WriteLine("[graphics] R10 native PSO validation refused: required state missing.");
 
-            return;
+            return 0;
         }
 
         var stream = new byte[size];
-        var offset = 64;
+        var offset = fixedSize;
         foreach (var record in pipeline.State)
         {
             var payload = R10PipelinePayloadSize(record.Kind);
             // Copy the tag and standard payload, not guest padding or pointers.
             record.Bytes.AsSpan(0, 4 + payload).CopyTo(stream.AsSpan(offset));
+            if (rectangle && record.Kind == 14)
+            {
+                BinaryPrimitives.WriteUInt32LittleEndian(stream.AsSpan(offset + 4), 3);
+            }
+
             offset += record.Bytes.Length;
         }
 
@@ -311,18 +402,19 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 report.WriteLine($"[graphics] R10 ID3D12Device2 query HRESULT=0x{hr:X8}.");
 
-                return;
+                return 0;
             }
 
             fixed (byte* bytes = stream)
             fixed (byte* vertex = vs)
             fixed (byte* pixel = ps)
+            fixed (byte* geometry = gs)
             {
                 if (((nuint)bytes & 7U) != 0)
                 {
                     report.WriteLine("[graphics] R10 native PSO validation refused: stream is not pointer aligned.");
 
-                    return;
+                    return 0;
                 }
 
                 Unsafe.WriteUnaligned(bytes + 8, (nint)root);
@@ -332,6 +424,21 @@ public static unsafe partial class ConsoleGraphicsDevice
                 Unsafe.WriteUnaligned(bytes + 40, 2U); // PS
                 Unsafe.WriteUnaligned(bytes + 48, (nint)pixel);
                 Unsafe.WriteUnaligned(bytes + 56, (nuint)ps.Length);
+                if (rectangle)
+                {
+                    Unsafe.WriteUnaligned(bytes + 64, 5U); // GS
+                    Unsafe.WriteUnaligned(bytes + 72, (nint)geometry);
+                    Unsafe.WriteUnaligned(bytes + 80, (nuint)gs!.Length);
+                }
+
+                if (hasInput)
+                {
+                    var inputOffset = rectangle ? 88 : 64;
+                    Unsafe.WriteUnaligned(bytes + inputOffset, 12U); // INPUT_LAYOUT
+                    Unsafe.WriteUnaligned(bytes + inputOffset + 8, (nint)inputElements);
+                    Unsafe.WriteUnaligned(bytes + inputOffset + 16, inputCount);
+                }
+
                 var description = new D3D12_PIPELINE_STATE_STREAM_DESC
                 {
                     SizeInBytes = (nuint)stream.Length,
@@ -340,7 +447,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var iid = PipelineId;
                 hr = ((ID3D12Device2*)device2)->CreatePipelineState(&description, &iid, &nativePipeline);
                 report.WriteLine($"[graphics] R10 native CreatePipelineState HRESULT=0x{hr:X8}; " +
-                                 $"created={nativePipeline != null} (validation only, not bound).");
+                                 $"created={nativePipeline != null}.");
+                if (hr < 0 || nativePipeline == null)
+                {
+                    return 0;
+                }
+
+                var result = (nint)nativePipeline;
+                nativePipeline = null;
+
+                return result;
             }
         }
         finally
@@ -371,7 +487,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
     }
 
-    private static bool R10PipelineStateCompatible(PipelineStateRecord record)
+    private static bool R10PipelineStateCompatible(PipelineStateRecord record, bool rectangle = false)
     {
         var bytes = record.Bytes.AsSpan();
 
@@ -380,10 +496,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         // acceptance is not a claim of full console fixed-function parity.
         return record.Kind switch
         {
-            14 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 3,
+            14 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == (rectangle ? 19U : 3U),
             15 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 28 &&
                   BinaryPrimitives.ReadUInt32LittleEndian(bytes[36..]) == 1,
-            16 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 20,
+            16 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 20 ||
+                  (rectangle && BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 0),
             17 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 1 &&
                   BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..]) == 0,
             _ => true

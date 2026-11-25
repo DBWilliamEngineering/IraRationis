@@ -410,6 +410,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void DrawGuest(nint self, uint vertices, uint instances, uint first, uint firstInstance)
     {
+        if (StateFor(self).Topology == R14RectangleTopology
+                ? TryRecordR16GuestDraw(self, vertices, instances, first, firstInstance) ||
+                  TryRecordR14GuestDraw(self, vertices, instances, first, firstInstance)
+                : TryRecordR13GuestDraw(self, vertices, instances, first, firstInstance))
+        {
+            return;
+        }
+
         CaptureBlockedDraw(self, false, vertices, instances, first, 0, firstInstance);
         IncompleteOperation(self, "DrawInstanced", "translated graphics pipeline and native descriptor bindings");
     }
@@ -418,6 +426,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void DrawIndexedGuest(nint self, uint indices, uint instances, uint first, int baseVertex,
         uint firstInstance)
     {
+        // Both rectangle and triangle-list paths validate their shader and IA contracts.
+        if (StateFor(self).Topology is R14RectangleTopology or 4 &&
+            TryRecordR14GuestDraw(self, indices, instances, first, firstInstance, true, baseVertex))
+        {
+            return;
+        }
+
         CaptureBlockedDraw(self, true, indices, instances, first, baseVertex, firstInstance);
         IncompleteOperation(self, "DrawIndexedInstanced", "translated graphics pipeline and index buffer binding");
     }
@@ -425,6 +440,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void DispatchGuest(nint self, uint x, uint y, uint z)
     {
+        if (TryRecordR17Compute(self, x, y, z))
+        {
+            return;
+        }
+
+        CaptureR161Compute(self, x, y, z);
         IncompleteOperation(self, "Dispatch", "translated compute pipeline and native descriptor bindings");
     }
 
@@ -469,6 +490,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void DispatchGuestX(nint self, uint x, uint y, uint z, uint flags)
     {
+        if (TryRecordR17Compute(self, x, y, z, flags))
+        {
+            return;
+        }
+
+        CaptureR161Compute(self, x, y, z, flags);
         IncompleteOperation(self, "DispatchX", "translated compute pipeline and console dispatch flags");
     }
 
@@ -583,7 +610,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             15 or 17 or 60 or 84 => "registered-cpu-deferred-copy",
             68 => "registered-cpu-state-only",
             73 or 99 or 124 => "registered-optional-noop",
-            12 or 13 or 14 or 16 or 19 or 28 or 29 or 30 or 59 or 78 or 83 or 98 or 127 =>
+            12 => "registered-experimental-host-draw",
+            13 or 14 or 16 or 19 or 28 or 29 or 30 or 59 or 78 or 83 or 98 or 127 =>
                 "registered-execution-blocked",
             _ => null
         };
