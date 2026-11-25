@@ -1,0 +1,17 @@
+IRA RATIONIS | VINDEX | Windows x64
+
+1. Extract the entire irx-win-x64.zip into one directory.
+2. Keep irx.exe and irx-native.dll together. Do not copy only irx.exe.
+3. Launch irx.exe or open PowerShell in the extracted directory.
+4. Run .\irx.exe --help for available commands.
+
+No .NET SDK is needed to run the self-contained Windows x64 package.
+For the original Vindex media fixture, the experimental Windows Media Foundation
+backend requires installed H.264/AAC codecs, but no FFmpeg executable:
+
+    .\irx.exe media-probe --mf .\media\vindex-intro.mp4 --play
+
+This is independent local media playback, not guest-game playback. The previous
+FFmpeg paths remain available with a trusted separately installed decoder.
+IRX is experimental and is not a sandbox; execute only trusted, authorized files.
+Review README.md and the included license texts. No commercial game files are included.
