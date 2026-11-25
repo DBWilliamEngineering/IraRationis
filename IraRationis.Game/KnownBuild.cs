@@ -8,7 +8,10 @@ public sealed record KnownBuild(string Label, string Blake3);
 public static class KnownBuilds
 {
     // The upstream registry is intentionally empty at the reference revision.
-    public static IReadOnlyList<KnownBuild> Builds { get; } = [];
+    public static IReadOnlyList<KnownBuild> Builds
+    {
+        get;
+    } = [];
 
     public static KnownBuild? Identify(string hash)
     {

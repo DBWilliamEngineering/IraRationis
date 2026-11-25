@@ -11,102 +11,6 @@ public sealed class PeImage
     private readonly byte[] _data;
     private readonly DirectoryEntry[] _directories;
 
-    public ushort Machine { get; }
-
-    public ushort Characteristics { get; }
-
-    public uint Timestamp { get; }
-
-    public ushort Subsystem { get; }
-
-    public ushort DllCharacteristics { get; }
-
-    public ulong ImageBase { get; }
-
-    public uint SizeOfImage { get; }
-
-    public uint EntryRva { get; }
-
-    public ulong StackReserve { get; }
-
-    public ulong StackCommit { get; }
-
-    public uint SizeOfHeaders { get; }
-
-    public IReadOnlyList<SectionInfo> Sections { get; }
-
-    public IReadOnlyList<ImportModule> Imports { get; }
-
-    public IReadOnlyList<ImportModule> DelayImports { get; }
-
-    public IReadOnlyList<ExportInfo> Exports { get; }
-
-    public TlsInfo? Tls { get; }
-
-    public CodeViewInfo? CodeView { get; }
-
-    public bool IsDll
-    {
-        get
-        {
-            return (Characteristics & 0x2000) != 0;
-        }
-    }
-
-    public bool HasRelocations
-    {
-        get
-        {
-            return Directory(5).Present && (Characteristics & 1) == 0;
-        }
-    }
-
-    public bool HasExceptionTable
-    {
-        get
-        {
-            return Directory(3).Present;
-        }
-    }
-
-    public bool HasLoadConfig
-    {
-        get
-        {
-            return Directory(10).Present;
-        }
-    }
-
-    public int ImportCount
-    {
-        get
-        {
-            return Imports.Sum(module => module.Entries.Count);
-        }
-    }
-
-    public string SubsystemName
-    {
-        get
-        {
-            return Subsystem switch
-            {
-                2 => "windows-gui",
-                3 => "windows-cui",
-                14 => "xbox",
-                17 => "xbox-code-catalog",
-                _ => "other"
-            };
-        }
-    }
-
-    public static PeImage Parse(byte[] data)
-    {
-        ArgumentNullException.ThrowIfNull(data);
-
-        return new PeImage(data);
-    }
-
     private PeImage(byte[] data)
     {
         _data = (byte[])data.Clone();
@@ -190,6 +94,153 @@ public sealed class PeImage
         CodeView = ParseCodeView();
     }
 
+    public ushort Machine
+    {
+        get;
+    }
+
+    public ushort Characteristics
+    {
+        get;
+    }
+
+    public uint Timestamp
+    {
+        get;
+    }
+
+    public ushort Subsystem
+    {
+        get;
+    }
+
+    public ushort DllCharacteristics
+    {
+        get;
+    }
+
+    public ulong ImageBase
+    {
+        get;
+    }
+
+    public uint SizeOfImage
+    {
+        get;
+    }
+
+    public uint EntryRva
+    {
+        get;
+    }
+
+    public ulong StackReserve
+    {
+        get;
+    }
+
+    public ulong StackCommit
+    {
+        get;
+    }
+
+    public uint SizeOfHeaders
+    {
+        get;
+    }
+
+    public IReadOnlyList<SectionInfo> Sections
+    {
+        get;
+    }
+
+    public IReadOnlyList<ImportModule> Imports
+    {
+        get;
+    }
+
+    public IReadOnlyList<ImportModule> DelayImports
+    {
+        get;
+    }
+
+    public IReadOnlyList<ExportInfo> Exports
+    {
+        get;
+    }
+
+    public TlsInfo? Tls
+    {
+        get;
+    }
+
+    public CodeViewInfo? CodeView
+    {
+        get;
+    }
+
+    public bool IsDll
+    {
+        get
+        {
+            return (Characteristics & 0x2000) != 0;
+        }
+    }
+
+    public bool HasRelocations
+    {
+        get
+        {
+            return Directory(5).Present && (Characteristics & 1) == 0;
+        }
+    }
+
+    public bool HasExceptionTable
+    {
+        get
+        {
+            return Directory(3).Present;
+        }
+    }
+
+    public bool HasLoadConfig
+    {
+        get
+        {
+            return Directory(10).Present;
+        }
+    }
+
+    public int ImportCount
+    {
+        get
+        {
+            return Imports.Sum(module => module.Entries.Count);
+        }
+    }
+
+    public string SubsystemName
+    {
+        get
+        {
+            return Subsystem switch
+            {
+                2 => "windows-gui",
+                3 => "windows-cui",
+                14 => "xbox",
+                17 => "xbox-code-catalog",
+                _ => "other"
+            };
+        }
+    }
+
+    public static PeImage Parse(byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+
+        return new PeImage(data);
+    }
+
     public DirectoryEntry Directory(int index)
     {
         if (index < 0 || index >= _directories.Length)
@@ -219,7 +270,7 @@ public sealed class PeImage
     {
         if (rva < SizeOfHeaders)
         {
-            return BinaryData.Slice(_data, rva, Math.Min((long)SizeOfHeaders, _data.Length) - rva);
+            return BinaryData.Slice(_data, rva, Math.Min(SizeOfHeaders, _data.Length) - rva);
         }
 
         foreach (var section in Sections)
@@ -389,7 +440,7 @@ public sealed class PeImage
                 continue;
             }
 
-            var forwarded = rva >= directory.Rva && (ulong)rva < (ulong)directory.Rva + directory.Size;
+            var forwarded = rva >= directory.Rva && rva < (ulong)directory.Rva + directory.Size;
             var forward = forwarded
                 ? BinaryData.ReadNullTerminatedString(BinaryData.Slice(
                     AtRva(rva), 0, (long)((ulong)directory.Rva + directory.Size - rva)))
@@ -478,7 +529,8 @@ public sealed class PeImage
                 continue;
             }
 
-            var data = BinaryData.Slice(_data, BinaryData.ReadUInt32(table, i + 24), BinaryData.ReadUInt32(table, i + 16));
+            var data = BinaryData.Slice(_data, BinaryData.ReadUInt32(table, i + 24),
+                BinaryData.ReadUInt32(table, i + 16));
 
             if (data.Length >= 24 && data[..4].SequenceEqual("RSDS"u8))
             {

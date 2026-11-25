@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
@@ -22,8 +23,10 @@ internal static unsafe class ExecutableMemory
     {
         var oldProtection = 0U;
 
-        WindowsNative.Check(WindowsNative.VirtualProtect(address, size, WindowsNative.ExecuteRead, &oldProtection), "Seal executable memory");
-        WindowsNative.Check(WindowsNative.FlushInstructionCache(WindowsNative.GetCurrentProcess(), address, size), "Flush instruction cache");
+        WindowsNative.Check(WindowsNative.VirtualProtect(address, size, WindowsNative.ExecuteRead, &oldProtection),
+            "Seal executable memory");
+        WindowsNative.Check(WindowsNative.FlushInstructionCache(WindowsNative.GetCurrentProcess(), address, size),
+            "Flush instruction cache");
     }
 
     internal static void Write(nint address, ReadOnlySpan<byte> data, bool executable)
@@ -31,7 +34,8 @@ internal static unsafe class ExecutableMemory
         var previous = 0U;
         var protection = executable ? WindowsNative.ExecuteReadWrite : WindowsNative.ReadWrite;
 
-        WindowsNative.Check(WindowsNative.VirtualProtect(address, (nuint)data.Length, protection, &previous), "Change memory protection");
+        WindowsNative.Check(WindowsNative.VirtualProtect(address, (nuint)data.Length, protection, &previous),
+            "Change memory protection");
 
         try
         {
@@ -40,12 +44,15 @@ internal static unsafe class ExecutableMemory
         finally
         {
             var ignored = 0U;
-            WindowsNative.Check(WindowsNative.VirtualProtect(address, (nuint)data.Length, previous, &ignored), "Restore memory protection");
+            WindowsNative.Check(WindowsNative.VirtualProtect(address, (nuint)data.Length, previous, &ignored),
+                "Restore memory protection");
         }
 
         if (executable)
         {
-            WindowsNative.Check(WindowsNative.FlushInstructionCache(WindowsNative.GetCurrentProcess(), address, (nuint)data.Length), "Flush instruction cache");
+            WindowsNative.Check(
+                WindowsNative.FlushInstructionCache(WindowsNative.GetCurrentProcess(), address, (nuint)data.Length),
+                "Flush instruction cache");
         }
     }
 }

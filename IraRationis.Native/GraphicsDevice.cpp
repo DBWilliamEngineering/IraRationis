@@ -18,6 +18,7 @@
 namespace
 {
     using namespace irx;
+
     struct Device
     {
         void** table;
@@ -26,6 +27,7 @@ namespace
         UINT64 nullConstantBuffer;
         UINT outOfLine[16];
     };
+
     static_assert(sizeof(Device) == 0x58);
     static_assert(offsetof(Device, outOfLine) == 0x18);
     ComPtr<IDXGIFactory6> factory;
@@ -38,6 +40,7 @@ namespace
         __uuidof(ID3D12Device6), __uuidof(ID3D12Device7), __uuidof(ID3D12Device8),
         __uuidof(ID3D12Device11), __uuidof(IUnknown)
     };
+
     bool Known(const GUID* iid)
     {
         if (!iid)
@@ -53,10 +56,12 @@ namespace
         }
         return false;
     }
+
     ULONG WINAPI AddRef(Device* self)
     {
         return static_cast<ULONG>(InterlockedIncrement(&self->references));
     }
+
     ULONG WINAPI Release(Device* self)
     {
         // Process-lifetime singleton, as in upstream. Never destroy its table.
@@ -72,6 +77,7 @@ namespace
         }
         return 0;
     }
+
     HRESULT WINAPI Query(Device* self, const GUID* iid, void** out)
     {
         if (!out)
@@ -87,18 +93,22 @@ namespace
         AddRef(self);
         return S_OK;
     }
+
     HRESULT WINAPI Name(Device*, LPCWSTR name)
     {
         return host->SetName(name);
     }
+
     UINT WINAPI NodeCount(Device*)
     {
         return host->GetNodeCount();
     }
+
     UINT WINAPI Increment(Device*, D3D12_DESCRIPTOR_HEAP_TYPE type)
     {
         return host->GetDescriptorHandleIncrementSize(type);
     }
+
     HRESULT WINAPI Feature(Device*, UINT feature, void* data, UINT size)
     {
         if (!data)
@@ -109,7 +119,8 @@ namespace
         {
             // Console OPTIONS has one additional field at index 11.
             D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
-            const auto hr = host->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, static_cast<UINT>(sizeof(options)));
+            const auto hr = host->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options,
+                                                      static_cast<UINT>(sizeof(options)));
             if (FAILED(hr))
             {
                 return hr;
@@ -145,18 +156,22 @@ namespace
         }
         return E_NOTIMPL;
     }
+
     HRESULT WINAPI GetPrivate(Device*, const GUID* id, UINT* size, void* data)
     {
         return id ? host->GetPrivateData(*id, size, data) : E_INVALIDARG;
     }
+
     HRESULT WINAPI SetPrivate(Device*, const GUID* id, UINT size, const void* data)
     {
         return id ? host->SetPrivateData(*id, size, data) : E_INVALIDARG;
     }
+
     // Upstream resource.rs: console heap properties describe the logical
     // unified-memory model, not the physical heap of the Windows adapter.
     // The 20-byte aggregate is returned through the hidden result pointer.
     static_assert(sizeof(D3D12_HEAP_PROPERTIES) == 20);
+
     D3D12_HEAP_PROPERTIES* WINAPI CustomHeapProperties(
         D3D12_HEAP_PROPERTIES* out, Device*, UINT nodes, D3D12_HEAP_TYPE kind)
     {
@@ -181,11 +196,14 @@ namespace
         *out = D3D12_HEAP_PROPERTIES{
             D3D12_HEAP_TYPE_CUSTOM, pages,
             pages == D3D12_CPU_PAGE_PROPERTY_UNKNOWN ? D3D12_MEMORY_POOL_UNKNOWN : D3D12_MEMORY_POOL_L0,
-            mask, mask};
+            mask, mask
+        };
         return out;
     }
+
     enum class ObjectKind { Device, QueueOld, QueueNew, Fence, Allocator };
-    template<ObjectKind Kind>
+
+    template <ObjectKind Kind>
     constexpr const char* ObjectName()
     {
         if constexpr (Kind == ObjectKind::Device)
@@ -211,17 +229,23 @@ namespace
             return "allocator";
         }
     }
-    template<ObjectKind Kind, size_t Slot> HRESULT WINAPI Missing()
+
+    template <ObjectKind Kind, size_t Slot>
+ HRESULT WINAPI Missing()
     {
         // Unknown return types make returning HRESULT unsafe. Stop at the first unknown slot.
-        std::fprintf(stderr, "[graphics] Unsupported console graphics %s slot 0x%zx\n", ObjectName<Kind>(), Slot * sizeof(void*));
+        std::fprintf(stderr, "[graphics] Unsupported console graphics %s slot 0x%zx\n", ObjectName<Kind>(),
+                     Slot * sizeof(void*));
         std::fflush(stderr);
         std::abort();
     }
-    template<ObjectKind Kind, size_t... Slots> std::array<void*, sizeof...(Slots)> MakeTable(std::index_sequence<Slots...>)
+
+    template <ObjectKind Kind, size_t... Slots>
+    std::array<void*, sizeof...(Slots)> MakeTable(std::index_sequence<Slots...>)
     {
         return {reinterpret_cast<void*>(&Missing<Kind, Slots>)...};
     }
+
     auto table = MakeTable<ObjectKind::Device>(std::make_index_sequence<160>{});
     Device device{table.data(), 0, 0, 0, {1}};
     // Child object headers retain the console's bookkeeping layout. Host COM
@@ -232,7 +256,9 @@ namespace
         UINT bits;
         volatile LONG refs;
     };
+
     static_assert(sizeof(Header) == 16);
+
     struct Queue
     {
         Header header;
@@ -240,6 +266,7 @@ namespace
         D3D12_COMMAND_QUEUE_DESC desc;
         ComPtr<ID3D12CommandQueue> host;
     };
+
     struct Fence
     {
         Header header;
@@ -247,21 +274,27 @@ namespace
         UINT flags;
         ComPtr<ID3D12Fence> host;
     };
+
     struct Allocator
     {
         Header header;
         UINT kind;
         ComPtr<ID3D12CommandAllocator> host;
     };
+
     static_assert(offsetof(Queue, kind) == 0x10);
     static_assert(offsetof(Fence, value) == 0x10);
     static_assert(offsetof(Allocator, kind) == 0x10);
     std::atomic<bool> newer = false;
-    template<class T> ULONG WINAPI ChildAddRef(T* self)
+
+    template <class T>
+ ULONG WINAPI ChildAddRef(T* self)
     {
         return static_cast<ULONG>(InterlockedIncrement(&self->header.refs));
     }
-    template<class T> ULONG WINAPI ChildRelease(T* self)
+
+    template <class T>
+ ULONG WINAPI ChildRelease(T* self)
     {
         const auto refs = InterlockedDecrement(&self->header.refs);
         if (refs == 0)
@@ -270,16 +303,29 @@ namespace
         }
         return static_cast<ULONG>(refs);
     }
-    template<class T> const GUID& ChildId();
-    template<> const GUID& ChildId<Queue>() { return __uuidof(ID3D12CommandQueue); }
-    template<> const GUID& ChildId<Fence>() { return __uuidof(ID3D12Fence); }
-    template<> const GUID& ChildId<Allocator>() { return __uuidof(ID3D12CommandAllocator); }
-    template<class T> bool ChildKnown(const GUID* iid)
+
+    template <class T>
+    const GUID& ChildId();
+
+    template <>
+    const GUID& ChildId<Queue>() { return __uuidof(ID3D12CommandQueue); }
+
+    template <>
+    const GUID& ChildId<Fence>() { return __uuidof(ID3D12Fence); }
+
+    template <>
+    const GUID& ChildId<Allocator>() { return __uuidof(ID3D12CommandAllocator); }
+
+    template <class T>
+    bool ChildKnown(const GUID* iid)
     {
         return iid && (IsEqualGUID(*iid, ChildId<T>()) || IsEqualGUID(*iid, __uuidof(ID3D12Pageable)) ||
-            IsEqualGUID(*iid, __uuidof(ID3D12DeviceChild)) || IsEqualGUID(*iid, __uuidof(ID3D12Object)) || IsEqualGUID(*iid, __uuidof(IUnknown)));
+            IsEqualGUID(*iid, __uuidof(ID3D12DeviceChild)) || IsEqualGUID(*iid, __uuidof(ID3D12Object)) || IsEqualGUID(
+                *iid, __uuidof(IUnknown)));
     }
-    template<class T> HRESULT WINAPI ChildQuery(T* self, const GUID* iid, void** out)
+
+    template <class T>
+ HRESULT WINAPI ChildQuery(T* self, const GUID* iid, void** out)
     {
         if (!out)
         {
@@ -294,23 +340,33 @@ namespace
         ChildAddRef(self);
         return S_OK;
     }
-    template<class T> HRESULT WINAPI ChildName(T* self, LPCWSTR name)
+
+    template <class T>
+ HRESULT WINAPI ChildName(T* self, LPCWSTR name)
     {
         return self->host->SetName(name);
     }
-    template<class T> HRESULT WINAPI ChildGetPrivate(T* self, const GUID* iid, UINT* size, void* data)
+
+    template <class T>
+ HRESULT WINAPI ChildGetPrivate(T* self, const GUID* iid, UINT* size, void* data)
     {
         return iid ? self->host->GetPrivateData(*iid, size, data) : E_INVALIDARG;
     }
-    template<class T> HRESULT WINAPI ChildSetPrivate(T* self, const GUID* iid, UINT size, const void* data)
+
+    template <class T>
+ HRESULT WINAPI ChildSetPrivate(T* self, const GUID* iid, UINT size, const void* data)
     {
         return iid ? self->host->SetPrivateData(*iid, size, data) : E_INVALIDARG;
     }
-    template<class T> HRESULT WINAPI Parent(T*, const GUID* iid, void** out)
+
+    template <class T>
+ HRESULT WINAPI Parent(T*, const GUID* iid, void** out)
     {
         return Query(&device, iid, out);
     }
-    template<class T, size_t N> void ChildTable(std::array<void*, N>& t)
+
+    template <class T, size_t N>
+    void ChildTable(std::array<void*, N>& t)
     {
         t[0] = reinterpret_cast<void*>(&ChildQuery<T>);
         t[1] = reinterpret_cast<void*>(&ChildAddRef<T>);
@@ -320,6 +376,7 @@ namespace
         t[6] = reinterpret_cast<void*>(&ChildName<T>);
         t[7] = reinterpret_cast<void*>(&Parent<T>);
     }
+
     // Unlike an Xbox fence, an ordinary D3D12 fence has no CPU-addressable GPU
     // value slot. Direct address access remains unsupported; refresh on query.
     UINT64 WINAPI Completed(Fence* self)
@@ -328,10 +385,12 @@ namespace
         InterlockedExchange64(&self->value, static_cast<LONG64>(value));
         return value;
     }
+
     HRESULT WINAPI FenceEvent(Fence* self, UINT64 value, HANDLE event)
     {
         return self->host->SetEventOnCompletion(value, event);
     }
+
     HRESULT WINAPI FenceSignal(Fence* self, UINT64 value)
     {
         const auto hr = self->host->Signal(value);
@@ -341,22 +400,27 @@ namespace
         }
         return hr;
     }
+
     UINT WINAPI FenceFlags(Fence* self)
     {
         return self->flags;
     }
+
     HRESULT WINAPI QueueSignal(Queue* self, Fence* fence, UINT64 value)
     {
         return fence ? self->host->Signal(fence->host.Get(), value) : E_INVALIDARG;
     }
+
     HRESULT WINAPI QueueWait(Queue* self, Fence* fence, UINT64 value)
     {
         return fence ? self->host->Wait(fence->host.Get(), value) : E_INVALIDARG;
     }
+
     HRESULT WINAPI QueueFrequency(Queue* self, UINT64* out)
     {
         return out ? self->host->GetTimestampFrequency(out) : E_INVALIDARG;
     }
+
     // The console queue description uses an explicit out parameter after
     // this, unlike the device's hidden aggregate result pointer.
     void WINAPI QueueDescription(Queue* self, D3D12_COMMAND_QUEUE_DESC* out)
@@ -366,14 +430,17 @@ namespace
             *out = self->desc;
         }
     }
+
     HRESULT WINAPI AllocatorReset(Allocator* self)
     {
         return self->host->Reset();
     }
+
     auto queueOld = MakeTable<ObjectKind::QueueOld>(std::make_index_sequence<36>{});
     auto queueNew = MakeTable<ObjectKind::QueueNew>(std::make_index_sequence<36>{});
     auto fenceTable = MakeTable<ObjectKind::Fence>(std::make_index_sequence<24>{});
     auto allocatorTable = MakeTable<ObjectKind::Allocator>(std::make_index_sequence<24>{});
+
     HRESULT WINAPI CreateQueue(Device*, const D3D12_COMMAND_QUEUE_DESC* desc, const GUID* iid, void** out)
     {
         if (out)
@@ -388,7 +455,7 @@ namespace
         {
             return E_NOINTERFACE;
         }
-        auto* child = new (std::nothrow) Queue{};
+        auto* child = new(std::nothrow) Queue{};
         if (!child)
         {
             return E_OUTOFMEMORY;
@@ -407,7 +474,12 @@ namespace
         std::fprintf(stderr, "[graphics] Command queue type %u created.\n", child->kind);
         return S_OK;
     }
-    struct QueueDescX { UINT kind, flags, engine, queue; };
+
+    struct QueueDescX
+    {
+        UINT kind, flags, engine, queue;
+    };
+
     HRESULT WINAPI CreateQueueX(Device* self, const QueueDescX* desc, const GUID* iid, void** out)
     {
         if (!desc)
@@ -424,6 +496,7 @@ namespace
         d.NodeMask = 1;
         return CreateQueue(self, &d, iid, out);
     }
+
     HRESULT WINAPI CreateFence(Device*, UINT64 initial, UINT flags, const GUID* iid, void** out)
     {
         if (out)
@@ -434,7 +507,7 @@ namespace
         {
             return E_NOINTERFACE;
         }
-        auto* child = new (std::nothrow) Fence{};
+        auto* child = new(std::nothrow) Fence{};
         if (!child)
         {
             return E_OUTOFMEMORY;
@@ -452,6 +525,7 @@ namespace
         *out = child;
         return S_OK;
     }
+
     HRESULT WINAPI CreateAllocator(Device*, UINT kind, const GUID* iid, void** out)
     {
         if (out)
@@ -462,7 +536,7 @@ namespace
         {
             return E_NOINTERFACE;
         }
-        auto* child = new (std::nothrow) Allocator{};
+        auto* child = new(std::nothrow) Allocator{};
         if (!child)
         {
             return E_OUTOFMEMORY;
@@ -470,7 +544,8 @@ namespace
         child->header.table = allocatorTable.data();
         child->header.refs = 1;
         child->kind = kind;
-        const auto hr = host->CreateCommandAllocator(static_cast<D3D12_COMMAND_LIST_TYPE>(kind), IID_PPV_ARGS(&child->host));
+        const auto hr = host->CreateCommandAllocator(static_cast<D3D12_COMMAND_LIST_TYPE>(kind),
+                                                     IID_PPV_ARGS(&child->host));
         if (FAILED(hr) || !out)
         {
             delete child;
@@ -479,6 +554,7 @@ namespace
         *out = child;
         return S_OK;
     }
+
     void InitializeTable()
     {
         table[0] = reinterpret_cast<void*>(&Query);
@@ -511,7 +587,8 @@ namespace
     }
 }
 
-extern "C" __declspec(dllexport) HRESULT WINAPI irx_graphics_create(const void*, const UINT* parameters, const GUID* iid, void** out)
+extern "C" __declspec(dllexport) HRESULT WINAPI irx_graphics_create(const void*, const UINT* parameters,
+                                                                    const GUID* iid, void** out)
 {
     if (out)
     {

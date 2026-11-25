@@ -10,7 +10,8 @@ internal static class InspectCommand
     {
         var image = PeImage.Parse(data);
 
-        writer.WriteLine($"AMD64 {image.SubsystemName} base=0x{image.ImageBase:X} entry=0x{image.EntryRva:X} size=0x{image.SizeOfImage:X}");
+        writer.WriteLine(
+            $"AMD64 {image.SubsystemName} base=0x{image.ImageBase:X} entry=0x{image.EntryRva:X} size=0x{image.SizeOfImage:X}");
 
         foreach (var section in image.Sections)
         {
@@ -27,7 +28,8 @@ internal static class InspectCommand
             writer.WriteLine($"export #{export.Ordinal} {export.Name} {target}");
         }
 
-        writer.WriteLine($"relocations={image.HasRelocations} exceptions={image.HasExceptionTable} loadconfig={image.HasLoadConfig}");
+        writer.WriteLine(
+            $"relocations={image.HasRelocations} exceptions={image.HasExceptionTable} loadconfig={image.HasLoadConfig}");
 
         if (image.Tls is { } tls)
         {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Console synchronization signature from Zettrox/ztrx victory-gpu/src/list.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using TerraFX.Interop.DirectX;
@@ -19,16 +20,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    // The SDK union has a pointer-sized member at offset 8 on x64.
-    // Keep its representation explicit instead of depending on a generated union member name.
-    [StructLayout(LayoutKind.Sequential)]
-    private struct GlobalBarrierGroup
-    {
-        public D3D12_BARRIER_TYPE Type;
-        public uint Count;
-        public D3D12_GLOBAL_BARRIER* Barriers;
-    }
-
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void PipelineSync(nint self, uint flags, uint control, ulong address, ulong size)
     {
@@ -41,7 +32,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         // This probe does not install or configure an older OS Agility SDK.
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
-            Environment.FailFast("[graphics] Pipeline synchronization requires Windows 11 22H2 or later in this revision.");
+            Environment.FailFast(
+                "[graphics] Pipeline synchronization requires Windows 11 22H2 or later in this revision.");
+
             return;
         }
 
@@ -96,7 +89,18 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (Interlocked.Exchange(ref _reportedPipelineSync, 1) == 0)
         {
-            Console.Error.WriteLine($"[graphics] Recorded pipeline sync: flags=0x{flags:X}, control=0x{control:X}, address=0x{address:X}, size=0x{size:X} (global barrier).");
+            Console.Error.WriteLine(
+                $"[graphics] Recorded pipeline sync: flags=0x{flags:X}, control=0x{control:X}, address=0x{address:X}, size=0x{size:X} (global barrier).");
         }
+    }
+
+    // The SDK union has a pointer-sized member at offset 8 on x64.
+    // Keep its representation explicit instead of depending on a generated union member name.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GlobalBarrierGroup
+    {
+        public D3D12_BARRIER_TYPE Type;
+        public uint Count;
+        public D3D12_GLOBAL_BARRIER* Barriers;
     }
 }

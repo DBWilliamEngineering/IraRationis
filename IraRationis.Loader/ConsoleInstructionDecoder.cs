@@ -72,15 +72,18 @@ public static class ConsoleInstructionDecoder
             {
                 case 0x66:
                     operandSize = true;
+
                     break;
 
                 case 0xF2:
                     repeat = 0xF2;
+
                     break;
 
                 case 0xF3:
                     hasF3 = true;
                     repeat = 0xF3;
+
                     break;
 
                 case 0x2E:
@@ -94,6 +97,7 @@ public static class ConsoleInstructionDecoder
 
                 default:
                     isPrefix = false;
+
                     break;
             }
 
@@ -133,7 +137,7 @@ public static class ConsoleInstructionDecoder
             return DecodeSystemInstruction(code, offset, modRm);
         }
 
-        if ((opcode is 0x78 or 0x79) && mode == 3 && (repeat == 0xF2 || (repeat == 0 && operandSize)))
+        if (opcode is 0x78 or 0x79 && mode == 3 && (repeat == 0xF2 || (repeat == 0 && operandSize)))
         {
             return DecodeSse4A(code, offset, opcode, repeat == 0xF2, register, operand, rex);
         }
@@ -166,10 +170,11 @@ public static class ConsoleInstructionDecoder
         {
             case 0xFC:
                 if (code.Length - offset >= 12 && !code[..offset].Contains((byte)0x67)
-                    && code[offset + 3] == 0x48 && code[offset + 4] == 0x83
-                    && code[offset + 5] == 0xC0 && code[offset + 6] == 0x40
-                    && (code[offset + 7] is 0x48 or 0x4C) && code[offset + 8] == 0x39
-                    && (code[offset + 9] & 0xC7) == 0xC0 && code[offset + 10] == 0x72 && code[offset + 11] == 0xF4)
+                                               && code[offset + 3] == 0x48 && code[offset + 4] == 0x83
+                                               && code[offset + 5] == 0xC0 && code[offset + 6] == 0x40
+                                               && code[offset + 7] is 0x48 or 0x4C && code[offset + 8] == 0x39
+                                               && (code[offset + 9] & 0xC7) == 0xC0 && code[offset + 10] == 0x72
+                                               && code[offset + 11] == 0xF4)
                 {
                     var endRegister = ((code[offset + 9] >> 3) & 7) | (code[offset + 7] == 0x4C ? 8 : 0);
 

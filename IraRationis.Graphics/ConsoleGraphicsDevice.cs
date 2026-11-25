@@ -18,6 +18,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static ID3D12Device* _host;
     private static volatile bool _newer;
     private static readonly ConcurrentDictionary<nint, nint> LiveObjects = new();
+    private static bool _tableInitializationStarted;
     private static nint _deviceTable, _queueOld, _queueNew, _allocatorTable, _fenceTable, _listOld, _listNew;
     private static readonly Guid UnknownId = new("00000000-0000-0000-c000-000000000046");
     private static readonly Guid ObjectId = new("c4fec28f-7966-4e95-9f94-f431cb56c3b8");
@@ -157,6 +158,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
         while (Interlocked.CompareExchange(ref references, observed - 1, observed) != observed);
+        if (observed == 1 && IsRootSignature(value))
+        {
+            ReleaseRootSignature(value);
+            return 0;
+        }
         if (observed == 1 && IsDescriptorHeap(value))
         {
             ReleaseDescriptorHeap(value);
@@ -213,6 +219,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return Array.IndexOf(ListIds, id) >= 0;
         }
+        if (IsRootSignature(value))
+        {
+            return id == RootSignatureId;
+        }
         if (IsDescriptorHeap(value))
         {
             return id == PageableId || id == DescriptorHeapId;
@@ -267,7 +277,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int Name(nint self, char* name)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
         {
             // Names are diagnostic metadata, not a GPU operation.
             return 0;
@@ -279,7 +289,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int GetPrivate(nint self, Guid* id, uint* size, void* data)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
         {
             return GetResourcePrivate(self, id, size, data);
         }
@@ -290,7 +300,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int SetPrivate(nint self, Guid* id, uint size, void* data)
     {
-        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self))
+        if (IsResource(self) || IsHeap(self) || IsDescriptorHeap(self) || IsRootSignature(self))
         {
             return SetResourcePrivate(self, id, size, data);
         }
@@ -772,8 +782,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast("[graphics] Invalid command list submission.");
         }
         var length = checked((int)count);
-        var hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
-
+        Span<nint> hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
         for (var i = 0; i < length; i++)
         {
             var list = lists[i];
@@ -827,6 +836,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void InitializeTables()
     {
+        // Both callers hold Gate. Never reuse or rebuild partially initialized tables.
+        if (_tableInitializationStarted)
+        {
+            throw new InvalidOperationException("Graphics ABI initialization previously started but did not complete. Restart the process.");
+        }
+        _tableInitializationStarted = true;
+
         if (sizeof(Header) != 16 || sizeof(QueueDescription) != 16 || sizeof(ListDescription) != 16 || sizeof(HeapProperties) != 20)
         {
             Environment.FailFast("Unexpected console graphics ABI structure size.");
@@ -846,7 +862,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         RegisterFrameMethods(device);
         RegisterResourceMethods(device);
         RegisterDescriptorMethods(device);
-        _deviceTable = (nint)device;
+        RegisterRootSignatureMethods(device);
         _queueOld = (nint)BuildQueue(false);
         _queueNew = (nint)BuildQueue(true);
         var allocator = ChildTable(24);
@@ -861,6 +877,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         _listOld = (nint)BuildList(false);
         _listNew = (nint)BuildList(true);
         InitializeDisplayObjects();
+
+        ValidateTables(AllTables((nint)device));
+        ValidateRootSignatureRegistration(device);
+        _deviceTable = (nint)device;
     }
 
     private static nint* BuildQueue(bool newer)

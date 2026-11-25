@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/xmem.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
@@ -22,18 +23,16 @@ public static unsafe partial class PhysicalPageModule
     private static readonly SortedDictionary<ulong, View> Views = [];
     private static ulong _nextPage = 0x100000;
 
-    private sealed record Slice(SafeFileHandle Section, ulong Index);
-    private sealed record View(ulong Size, Slice Slice);
-    private sealed record Run(Slice First, ulong Count);
-
     public static HleModule Create()
     {
         return new HleModule("physical-pages", ["xmem.dll"],
         [
-            new HleExport("XMemAllocatePhysicalPages", (nuint)(delegate* unmanaged[Stdcall]<ulong, nuint*, nuint*, int>)&Allocate),
+            new HleExport("XMemAllocatePhysicalPages",
+                (nuint)(delegate* unmanaged[Stdcall]<ulong, nuint*, nuint*, int>)&Allocate),
             new HleExport("XMemFreePhysicalPages", (nuint)(delegate* unmanaged[Stdcall]<nuint, nuint*, int>)&Free),
             new HleExport("XMemMapPhysicalPages", (nuint)(delegate* unmanaged[Stdcall]<nint, nuint, nuint*, nint>)&Map),
-            new HleExport("XMemMapPhysicalPagesScatter", (nuint)(delegate* unmanaged[Stdcall]<nint*, nuint, nuint*, int>)&Scatter)
+            new HleExport("XMemMapPhysicalPagesScatter",
+                (nuint)(delegate* unmanaged[Stdcall]<nint*, nuint, nuint*, int>)&Scatter)
         ]);
     }
 
@@ -58,7 +57,8 @@ public static unsafe partial class PhysicalPageModule
                 }
 
                 var size = requested * PageSize;
-                var handle = CreateFileMappingW(-1, 0, PageReadWrite | SectionReserve, (uint)(size >> 32), (uint)size, null);
+                var handle = CreateFileMappingW(-1, 0, PageReadWrite | SectionReserve, (uint)(size >> 32), (uint)size,
+                    null);
 
                 if (handle == 0)
                 {
@@ -89,12 +89,14 @@ public static unsafe partial class PhysicalPageModule
                     }
 
                     section.Dispose();
+
                     throw;
                 }
 
                 _nextPage += requested * FramesPerPage;
                 *count = (nuint)requested;
-                Console.WriteLine($"[xmem] Allocated {requested} physical pages ({size >> 20} MiB reserved, flags 0x{flags:X}).");
+                Console.WriteLine(
+                    $"[xmem] Allocated {requested} physical pages ({size >> 20} MiB reserved, flags 0x{flags:X}).");
 
                 return 1;
             }
@@ -120,7 +122,7 @@ public static unsafe partial class PhysicalPageModule
             for (nuint index = 0; index < count; index++)
             {
                 // Existing views retain their section reference.
-                Pages.Remove((ulong)pages[index]);
+                Pages.Remove(pages[index]);
             }
         }
 
@@ -134,7 +136,7 @@ public static unsafe partial class PhysicalPageModule
         {
             lock (Gate)
             {
-                return MapCore(address, (ulong)count, pages);
+                return MapCore(address, count, pages);
             }
         }
         catch (Exception exception)
@@ -182,7 +184,8 @@ public static unsafe partial class PhysicalPageModule
     {
         var start = (ulong)(nuint)address;
 
-        if (address == 0 || (start & (PageSize - 1)) != 0 || count > (ulong.MaxValue - start) / PageSize || count > LastPage / FramesPerPage)
+        if (address == 0 || (start & (PageSize - 1)) != 0 || count > (ulong.MaxValue - start) / PageSize
+            || count > LastPage / FramesPerPage)
         {
             return 0;
         }
@@ -199,7 +202,7 @@ public static unsafe partial class PhysicalPageModule
         {
             for (ulong index = 0; index < count; index++)
             {
-                if (!Pages.TryGetValue((ulong)pages[index], out var slice))
+                if (!Pages.TryGetValue(pages[index], out var slice))
                 {
                     return 0;
                 }
@@ -236,7 +239,8 @@ public static unsafe partial class PhysicalPageModule
         {
             var previous = runs[^1];
 
-            if (ReferenceEquals(previous.First.Section, slice.Section) && previous.First.Index + previous.Count == slice.Index)
+            if (ReferenceEquals(previous.First.Section, slice.Section)
+                && previous.First.Index + previous.Count == slice.Index)
             {
                 runs[^1] = previous with { Count = previous.Count + 1 };
 
@@ -274,7 +278,8 @@ public static unsafe partial class PhysicalPageModule
                 return false;
             }
 
-            if (viewEnd > end && !MapView(end, viewEnd - end, view.Slice with { Index = view.Slice.Index + (end - address) / PageSize }))
+            if (viewEnd > end && !MapView(end, viewEnd - end,
+                    view.Slice with { Index = view.Slice.Index + (end - address) / PageSize }))
             {
                 return false;
             }
@@ -337,7 +342,8 @@ public static unsafe partial class PhysicalPageModule
 
     public static bool MapAlias(ulong destination, ulong source, ulong size)
     {
-        if (destination == 0 || ((destination | source | size) & (PageSize - 1)) != 0 || size > ulong.MaxValue - destination || size > ulong.MaxValue - source)
+        if (destination == 0 || ((destination | source | size) & (PageSize - 1)) != 0
+                             || size > ulong.MaxValue - destination || size > ulong.MaxValue - source)
         {
             return false;
         }
@@ -365,6 +371,7 @@ public static unsafe partial class PhysicalPageModule
                         if (address - start < view.Size)
                         {
                             slice = view.Slice with { Index = view.Slice.Index + (address - start) / PageSize };
+
                             break;
                         }
                     }
@@ -421,7 +428,7 @@ public static unsafe partial class PhysicalPageModule
 
             for (ulong index = 0; index < count; index++)
             {
-                if (!Pages.TryGetValue((ulong)pages[index], out var slice))
+                if (!Pages.TryGetValue(pages[index], out var slice))
                 {
                     return false;
                 }
@@ -450,7 +457,7 @@ public static unsafe partial class PhysicalPageModule
                 {
                     if (VirtualAlloc(view, (nuint)length, MemCommit, PageReadWrite) == 0)
                     {
-                        Report("VirtualAlloc (storage commit)", (ulong)(nuint)view, length);
+                        Report("VirtualAlloc (storage commit)", (nuint)view, length);
 
                         return false;
                     }
@@ -486,11 +493,13 @@ public static unsafe partial class PhysicalPageModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint CreateFileMappingW(nint file, nint attributes, uint protection, uint sizeHigh, uint sizeLow, char* name);
+    private static partial nint CreateFileMappingW(nint file, nint attributes, uint protection, uint sizeHigh,
+        uint sizeLow, char* name);
 
     [LibraryImport("kernelbase.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint MapViewOfFile3(nint mapping, nint process, nint address, ulong offset, nuint size, uint allocation, uint protection, nint parameters, uint count);
+    private static partial nint MapViewOfFile3(nint mapping, nint process, nint address, ulong offset, nuint size,
+        uint allocation, uint protection, nint parameters, uint count);
 
     [LibraryImport("kernelbase.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -507,4 +516,10 @@ public static unsafe partial class PhysicalPageModule
     [LibraryImport("kernel32.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nint GetCurrentProcess();
+
+    private sealed record Slice(SafeFileHandle Section, ulong Index);
+
+    private sealed record View(ulong Size, Slice Slice);
+
+    private sealed record Run(Slice First, ulong Count);
 }

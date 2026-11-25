@@ -48,7 +48,7 @@ public static class ImagePreparation
             {
                 var terminator = checked(rva + (uint)info.Imports.Count * ImportDescriptorSize);
                 var terminatorOffset = info.RvaToFileOffset(terminator)
-                    ?? throw new InvalidDataException("Import terminator is not file-backed.");
+                                       ?? throw new InvalidDataException("Import terminator is not file-backed.");
 
                 if (BinaryData.Slice(bytes, terminatorOffset, ImportDescriptorSize).IndexOfAnyExcept((byte)0) >= 0)
                 {
@@ -70,7 +70,7 @@ public static class ImagePreparation
         if (info.Tls is { CallbacksVa: not 0 } tls)
         {
             var offset = info.RvaToFileOffset(tls.DirectoryRva)
-                ?? throw new InvalidDataException("TLS directory is not file-backed.");
+                         ?? throw new InvalidDataException("TLS directory is not file-backed.");
             var fieldRva = checked(tls.DirectoryRva + TlsCallbackOffset);
 
             BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(checked((int)offset + TlsCallbackOffset), 8), 0);
@@ -131,7 +131,7 @@ public static class ImagePreparation
             {
                 var value = BinaryData.ReadUInt16(bytes, entry);
 
-                if ((value >> 12) == 10 && (ulong)page + (uint)(value & 0xFFF) == fieldRva)
+                if (value >> 12 == 10 && (ulong)page + (uint)(value & 0xFFF) == fieldRva)
                 {
                     WriteUInt16(bytes, checked((int)entry), 0);
                 }

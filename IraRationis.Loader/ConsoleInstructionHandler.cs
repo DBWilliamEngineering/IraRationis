@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace IraRationis.Loader;
@@ -9,21 +11,9 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
     private readonly delegate* unmanaged[Stdcall]<void> _disable;
     private bool _installed;
 
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct ImageRange
-    {
-        public readonly nuint Start;
-        public readonly nuint End;
-
-        public ImageRange(nuint start, nuint end)
-        {
-            Start = start;
-            End = end;
-        }
-    }
-
     public ConsoleInstructionHandler(IEnumerable<LoadedImage> images)
-        : this(images.Select(image => new ImageRange(image.BaseAddress, checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray())
+        : this(images.Select(image =>
+            new ImageRange(image.BaseAddress, checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray())
     {
     }
 
@@ -33,12 +23,14 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
 
         if (!File.Exists(path))
         {
-            throw new FileNotFoundException("Native VEH component not found. Build with the Visual Studio C++ workload installed.", path);
+            throw new FileNotFoundException(
+                "Native VEH component not found. Build with the Visual Studio C++ workload installed.", path);
         }
 
         // Intentionally keep the native DLL loaded for the process lifetime.
         var module = NativeLibrary.Load(path);
-        var install = (delegate* unmanaged[Stdcall]<ImageRange*, uint, uint>)NativeLibrary.GetExport(module, "IrxInstallHandler");
+        var install =
+            (delegate* unmanaged[Stdcall]<ImageRange*, uint, uint>)NativeLibrary.GetExport(module, "IrxInstallHandler");
         _disable = (delegate* unmanaged[Stdcall]<void>)NativeLibrary.GetExport(module, "IrxDisableHandler");
 
         fixed (ImageRange* pointer = ranges)
@@ -52,6 +44,15 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         }
 
         _installed = true;
+    }
+
+    public void Dispose()
+    {
+        if (_installed)
+        {
+            _disable();
+            _installed = false;
+        }
     }
 
     public static void VerifyManagedExceptionDispatch()
@@ -71,18 +72,22 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         throw new InvalidOperationException("VEH probe did not catch the expected managed exception.");
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowProbeException()
     {
         throw new InvalidOperationException("VEH probe");
     }
 
-    public void Dispose()
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct ImageRange
     {
-        if (_installed)
+        public readonly nuint Start;
+        public readonly nuint End;
+
+        public ImageRange(nuint start, nuint end)
         {
-            _disable();
-            _installed = false;
+            Start = start;
+            End = end;
         }
     }
 }

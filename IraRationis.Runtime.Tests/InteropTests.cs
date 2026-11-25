@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using IraRationis.HLE;
 
 namespace IraRationis.Runtime.Tests;
@@ -7,7 +8,7 @@ internal static unsafe class InteropTests
 {
     internal static void Run()
     {
-        Require(XMemModule.AddressRange(4) == (0UL, (ulong)uint.MaxValue), "32-bit address range");
+        Require(XMemModule.AddressRange(4) == (0UL, uint.MaxValue), "32-bit address range");
         Require(XMemModule.AddressRange(0) == (1UL << 32, (1UL << 40) - 1), "Default address range");
         var pointer = XMemModule.AllocateDefaultCore(4096, 8UL << 24);
 
@@ -32,8 +33,10 @@ internal static unsafe class InteropTests
 
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "irx-files-test"));
         FileSystemModule.Mount('G', root);
-        Require(FileSystemModule.Translate(@"g:\foo\..\test.dat") == Path.Combine(root, "test.dat"), "Virtual drive normalization");
-        Require(FileSystemModule.Translate(@"G:\..\test.dat") == Path.Combine(root, "test.dat"), "Virtual drive parent clamping");
+        Require(FileSystemModule.Translate(@"g:\foo\..\test.dat") == Path.Combine(root, "test.dat"),
+            "Virtual drive normalization");
+        Require(FileSystemModule.Translate(@"G:\..\test.dat") == Path.Combine(root, "test.dat"),
+            "Virtual drive parent clamping");
         Require(FileSystemModule.Translate(@"Z:\other.dat") is null, "Unmapped drive");
     }
 
@@ -56,7 +59,8 @@ internal static unsafe class InteropTests
             new Span<float>(samples, 1024).Fill(1);
             var command = new DspModule.Command { Output = samples };
             var ticket = 0U;
-            Require(DspModule.SubmitCore(stream, &command, &ticket) == 0 && ticket == 1 && status->Completed == ticket, "DSP completion");
+            Require(DspModule.SubmitCore(stream, &command, &ticket) == 0 && ticket == 1 && status->Completed == ticket,
+                "DSP completion");
 
             foreach (var sample in new ReadOnlySpan<float>(samples, 1024))
             {

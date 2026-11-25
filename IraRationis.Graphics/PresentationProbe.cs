@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.Globalization;
 using System.Runtime.InteropServices;
 
@@ -19,10 +20,12 @@ public static unsafe class PresentationProbe
             if (option == "--gpu-upload")
             {
                 gpuUpload = true;
+
                 continue;
             }
 
-            if (i + 1 >= args.Length || !uint.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+            if (i + 1 >= args.Length
+                || !uint.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
             {
                 throw new ArgumentException($"Expected an integer for {option}.");
             }
@@ -31,10 +34,12 @@ public static unsafe class PresentationProbe
             {
                 case "--seconds" when value is >= 1 and <= 120:
                     seconds = value;
+
                     break;
 
                 case "--fps" when value is >= 1 and <= 240:
                     fps = value;
+
                     break;
 
                 default:
@@ -43,7 +48,8 @@ public static unsafe class PresentationProbe
         }
 
         var module = NativeLibrary.Load(Path.Combine(AppContext.BaseDirectory, "irx-native.dll"));
-        var run = (delegate* unmanaged[Stdcall]<uint, uint, uint, int>)NativeLibrary.GetExport(module, "irx_present_probe");
+        var run = (delegate* unmanaged[Stdcall]<uint, uint, uint, int>)NativeLibrary.GetExport(module,
+            "irx_present_probe");
 
         try
         {

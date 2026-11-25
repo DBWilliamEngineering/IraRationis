@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.ComponentModel;
 using IraRationis.Graphics;
 using IraRationis.Loader;
@@ -10,7 +11,7 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        if (args.Length == 1 && (args[0] is "--help" or "-h"))
+        if (args.Length == 1 && args[0] is "--help" or "-h")
         {
             PrintUsage(Console.Out);
 
@@ -42,12 +43,15 @@ internal static class Program
                 return 0;
             }
 
-            if (args.Length == 0 || args[0] == "run" || (args.Length == 1 && Path.GetExtension(args[0]).Equals(".exe", StringComparison.OrdinalIgnoreCase)))
+            if (args.Length == 0 || args[0] == "run" || (args.Length == 1
+                                                         && Path.GetExtension(args[0]).Equals(".exe",
+                                                             StringComparison.OrdinalIgnoreCase)))
             {
                 return Run(args);
             }
 
-            if (args.Length > 2 || args[0] is not ("inspect" or "shader" or "archive") || (args[0] != "inspect" && args.Length != 2))
+            if (args.Length > 2 || args[0] is not ("inspect" or "shader" or "archive")
+                                || (args[0] != "inspect" && args.Length != 2))
             {
                 PrintUsage(Console.Error);
 
@@ -67,20 +71,27 @@ internal static class Program
             {
                 case "inspect":
                     InspectCommand.Execute(data, Console.Out);
+
                     break;
 
                 case "shader":
                     ShaderCommand.Execute(data, Console.Out);
+
                     break;
 
                 case "archive":
                     ArchiveCommand.Execute(data, Console.Out);
+
                     break;
             }
 
             return 0;
         }
-        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or OverflowException or InvalidOperationException or PlatformNotSupportedException or Win32Exception or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        catch (Exception exception) when (exception is InvalidDataException or IOException
+                                              or UnauthorizedAccessException or ArgumentException or OverflowException
+                                              or InvalidOperationException or PlatformNotSupportedException
+                                              or Win32Exception or DllNotFoundException or EntryPointNotFoundException
+                                              or BadImageFormatException)
         {
             Console.Error.WriteLine(exception.Message);
 
@@ -103,10 +114,12 @@ internal static class Program
             {
                 case "--bind-only":
                     bindOnly = true;
+
                     break;
 
                 case "--strict":
                     strict = true;
+
                     break;
 
                 case "--execute":
@@ -119,6 +132,7 @@ internal static class Program
                         "series-s" => ConsoleModel.SeriesS,
                         _ => throw new ArgumentException("Expected series-x or series-s.")
                     };
+
                     break;
 
                 case "--unimplemented" when i + 1 < args.Length:
@@ -128,6 +142,7 @@ internal static class Program
                         "zero" => UnimplementedPolicy.ReturnZero,
                         _ => throw new ArgumentException("Expected trap or zero.")
                     };
+
                     break;
 
                 default:
@@ -137,6 +152,7 @@ internal static class Program
                     }
 
                     path = args[i];
+
                     break;
             }
         }
@@ -151,13 +167,15 @@ internal static class Program
     private static void PrintUsage(TextWriter writer)
     {
         writer.WriteLine("Ira Rationis | Vindex | 0.1.0");
-        writer.WriteLine("Usage: irx [file] | irx run [file] [--bind-only] [--strict] [--console series-x|series-s] [--unimplemented trap|zero]");
+        writer.WriteLine(
+            "Usage: irx [file] | irx run [file] [--bind-only] [--strict] [--console series-x|series-s] [--unimplemented trap|zero]");
         writer.WriteLine("       irx veh-probe");
         writer.WriteLine("       irx graphics-probe");
         writer.WriteLine("       irx present-probe [--seconds 1..120] [--fps 1..240] [--gpu-upload]");
         writer.WriteLine("       irx memory-probe [--mib 1..256] [--iterations 1..100] [--adapter N]");
         writer.WriteLine("       irx memory-probe --self-test");
         writer.WriteLine("       irx inspect [file] | irx shader <file> | irx archive <file>");
-        writer.WriteLine("Omit the run path to open the Windows executable picker. Run only trusted title files; this is not a sandbox.");
+        writer.WriteLine(
+            "Omit the run path to open the Windows executable picker. Run only trusted title files; this is not a sandbox.");
     }
 }

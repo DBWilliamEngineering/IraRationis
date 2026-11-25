@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from apps/victory/src/run.rs; runtime bring-up, not gameplay parity.
+
 using IraRationis.Core;
 using IraRationis.Graphics;
 using IraRationis.HLE;
@@ -9,7 +10,8 @@ namespace IraRationis.Cli;
 
 internal static class RunCommand
 {
-    internal static int Execute(string executable, bool bindOnly, bool strict, ConsoleModel console, UnimplementedPolicy policy)
+    internal static int Execute(string executable, bool bindOnly, bool strict, ConsoleModel console,
+        UnimplementedPolicy policy)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -17,7 +19,8 @@ internal static class RunCommand
         }
 
         var path = Path.GetFullPath(executable);
-        var titleDirectory = Path.GetDirectoryName(path) ?? throw new InvalidDataException("Title directory not found.");
+        var titleDirectory =
+            Path.GetDirectoryName(path) ?? throw new InvalidDataException("Title directory not found.");
         var config = RuntimeConfig.Load();
         var cache = config.CacheSubdirectory("images");
         ConsoleConfiguration.Current = console;
@@ -26,11 +29,17 @@ internal static class RunCommand
         RuntimeState.SetImagePath(main.BaseAddress, path);
 
         var threads = new TitleThreads();
-        var modules = new[] { KernelThreadModule.Create(threads), KernelImageModule.Create(), XMemModule.Create(), DspModule.Create(), RootSignatureModule.Create(), FileSystemModule.Create(), GameInputModule.Create(), PhysicalPageModule.Create(), DirectStorageModule.Create(), GraphicsDeviceModule.Create() };
+        var modules = new[]
+        {
+            KernelThreadModule.Create(threads), KernelImageModule.Create(), XMemModule.Create(), DspModule.Create(),
+            RootSignatureModule.Create(), FileSystemModule.Create(), GameInputModule.Create(),
+            PhysicalPageModule.Create(), DirectStorageModule.Create(), GraphicsDeviceModule.Create()
+        };
         var registry = new HleRegistry(modules);
         var host = strict ? new HostPolicy([]) : new HostPolicy();
         var resolver = new HleResolver(registry, host);
-        var dependencies = new TitleImages(titleDirectory, cache, dll => !host.Allows(dll) && !modules.Any(module => module.Serves(dll)), resolver);
+        var dependencies = new TitleImages(titleDirectory, cache,
+            dll => !host.Allows(dll) && !modules.Any(module => module.Serves(dll)), resolver);
         dependencies.MapDependencies(main.Info);
 
         foreach (var image in dependencies.Ordered)
@@ -63,7 +72,8 @@ internal static class RunCommand
             return 0;
         }
 
-        Console.WriteLine("Entering native title code (experimental runtime; unresolved calls may terminate execution).");
+        Console.WriteLine(
+            "Entering native title code (experimental runtime; unresolved calls may terminate execution).");
         Console.WriteLine("Platform HLE and graphics translation are not yet complete.");
 
         using var timers = new ConsoleTimers();
@@ -85,8 +95,10 @@ internal static class RunCommand
         }
 
         Console.WriteLine($"Build: {prepared.OriginalHash}");
-        Console.WriteLine($"[abi] Main image: {prepared.Info.ImportCount} regular import slots; {prepared.Info.DelayImports.Sum(module => module.Entries.Count)} delay import slots.");
-        ConsoleGraphicsDevice.Preflight(Console.Out, config.CacheSubdirectory($"compatibility/{prepared.OriginalHash}"));
+        Console.WriteLine(
+            $"[abi] Main image: {prepared.Info.ImportCount} regular import slots; {prepared.Info.DelayImports.Sum(module => module.Entries.Count)} delay import slots.");
+        ConsoleGraphicsDevice.Preflight(Console.Out,
+            config.CacheSubdirectory($"compatibility/{prepared.OriginalHash}"));
         var main = LoadedImage.Load(prepared, cache);
         Console.WriteLine($"Mapped {path} at 0x{main.BaseAddress:X} (preferred 0x{main.Info.ImageBase:X})");
 
@@ -95,7 +107,8 @@ internal static class RunCommand
 
     private static void PrintReport(LoadedImage image, BindReport report)
     {
-        Console.WriteLine($"Bound {Path.GetFileName(image.Path)}: {report.Hle} HLE, {report.Host} host, {report.Title} title, {report.Missing.Count} missing.");
+        Console.WriteLine(
+            $"Bound {Path.GetFileName(image.Path)}: {report.Hle} HLE, {report.Host} host, {report.Title} title, {report.Missing.Count} missing.");
 
         foreach (var missing in report.Missing)
         {

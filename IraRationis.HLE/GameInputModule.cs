@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/gameinput.rs.
+
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -27,6 +28,20 @@ public static unsafe partial class GameInputModule
     private static readonly Lazy<Hub> Shared = new(() => new Hub());
     private static long _token;
 
+    private static readonly (ushort Host, uint Guest)[] PadButtons =
+    [
+        (0x0010, 1), (0x0020, 2), (0x1000, 4), (0x2000, 8), (0x4000, 16), (0x8000, 32),
+        (0x0001, 64), (0x0002, 128), (0x0004, 256), (0x0008, 512), (0x0100, 1024),
+        (0x0200, 2048), (0x0040, 4096), (0x0080, 8192)
+    ];
+
+    private static readonly (byte Key, uint Guest)[] FallbackButtons =
+    [
+        (0x1B, 1), (0x09, 2), (0x0D, 4), (0x08, 8), ((byte)'X', 16), ((byte)'Y', 32),
+        (0x26, 64), (0x28, 128), (0x25, 256), (0x27, 512), ((byte)'Q', 1024),
+        ((byte)'E', 2048), ((byte)'F', 4096), ((byte)'H', 8192)
+    ];
+
     public static HleModule Create()
     {
         var address = (nuint)(delegate* unmanaged[Stdcall]<nint*, int>)&CreateInput;
@@ -36,238 +51,6 @@ public static unsafe partial class GameInputModule
             new HleExport("#1", address),
             new HleExport("GameInputCreate", address)
         ]);
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public record struct PadState(uint Buttons, float LeftTrigger, float RightTrigger, float LeftX, float LeftY, float RightX, float RightY);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct KeyState(uint ScanCode, uint CodePoint, byte VirtualKey, byte DeadKey);
-
-    [StructLayout(LayoutKind.Explicit, Size = 320)]
-    private struct DeviceInfo
-    {
-        [FieldOffset(0)] public uint Size;
-        [FieldOffset(32)] public fixed byte Id[32];
-        [FieldOffset(64)] public fixed byte RootId[32];
-        [FieldOffset(104)] public uint SupportedInput;
-        [FieldOffset(108)] public uint RumbleMotors;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Device
-    {
-        public nint Table;
-        public int Index;
-        public DeviceInfo Info;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Reading
-    {
-        public nint Table;
-        public int References;
-        public nint State;
-    }
-
-    private sealed record Snapshot(int Index, ulong Sequence, ulong Timestamp, PadState? Pad, KeyState[] Keys)
-    {
-        public uint Kind
-        {
-            get
-            {
-                return Index == Keyboard ? KeyboardKind : GamepadKind;
-            }
-        }
-    }
-
-    private sealed class Slot
-    {
-        public bool Connected;
-        public ulong Sequence;
-        public List<Snapshot> History { get; } = [];
-    }
-
-    private sealed record Registration(ulong Token, nint Device, uint Kind, uint Status, nint Context, nint Callback);
-    private sealed record Notification(Registration Registration, int Index, ulong Timestamp, uint Current, uint Previous);
-
-    private sealed class Hub
-    {
-        public readonly object Gate = new();
-        public readonly Slot[] Slots = Enumerable.Range(0, DeviceCount).Select(_ => new Slot()).ToArray();
-        public readonly nint[] Devices = new nint[DeviceCount];
-        public readonly List<Registration> Registrations = [];
-        public readonly List<Notification> Pending = [];
-        public readonly List<(ulong Token, int Thread)> Running = [];
-        public readonly nint Object;
-        public readonly nint ReadingTable;
-        private readonly long[] _retryAt = new long[4];
-
-        public Hub()
-        {
-            var inputTable = CreateInputTable();
-            var deviceTable = CreateDeviceTable();
-            ReadingTable = CreateReadingTable();
-            var input = (nint*)NativeMemory.Alloc((nuint)sizeof(nint));
-            *input = inputTable;
-            Object = (nint)input;
-
-            for (var index = 0; index < DeviceCount; index++)
-            {
-                var device = (Device*)NativeMemory.AllocZeroed((nuint)sizeof(Device));
-                device->Table = deviceTable;
-                device->Index = index;
-                device->Info.Size = (uint)sizeof(DeviceInfo);
-                device->Info.SupportedInput = Kind(index);
-                device->Info.RumbleMotors = index < 4 ? 3U : 0U;
-                "victory"u8.CopyTo(new Span<byte>(device->Info.Id, 32));
-                device->Info.Id[31] = (byte)(index + 1);
-                new ReadOnlySpan<byte>(device->Info.Id, 32).CopyTo(new Span<byte>(device->Info.RootId, 32));
-                Devices[index] = (nint)device;
-            }
-
-            Poll();
-            var thread = new Thread(PollLoop) { IsBackground = true, Name = "irx input poll" };
-            thread.Start();
-        }
-
-        private void PollLoop()
-        {
-            while (true)
-            {
-                Thread.Sleep(8);
-
-                try
-                {
-                    Poll();
-                }
-                catch (Exception exception)
-                {
-                    Console.Error.WriteLine($"[input] Poll failed: {exception.Message}");
-                    Thread.Sleep(1000);
-                }
-            }
-        }
-
-        private void Poll()
-        {
-            var pads = new PadState?[4];
-            var now = Environment.TickCount64;
-
-            for (var index = 0; index < pads.Length; index++)
-            {
-                if (now < _retryAt[index])
-                {
-                    continue;
-                }
-
-                if (XInputGetState((uint)index, out var state) == 0)
-                {
-                    pads[index] = ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger, state.LeftX, state.LeftY, state.RightX, state.RightY);
-                }
-                else
-                {
-                    _retryAt[index] = now + 1000;
-                }
-            }
-
-            var keys = ReadKeys();
-            List<Notification> events;
-
-            lock (Gate)
-            {
-                events = new List<Notification>(Pending);
-                Pending.Clear();
-                var timestamp = Now();
-
-                for (var index = 0; index < pads.Length; index++)
-                {
-                    Update(index, pads[index].HasValue, pads[index], [], timestamp, events);
-                }
-
-                var useFallback = !pads.Any(pad => pad.HasValue);
-                Update(Fallback, useFallback, useFallback ? FallbackPad(keys) : null, [], timestamp, events);
-                Update(Keyboard, true, null, keys, timestamp, events);
-            }
-
-            Deliver(events);
-        }
-
-        private void Update(int index, bool connected, PadState? pad, KeyState[] keys, ulong timestamp, List<Notification> events)
-        {
-            var slot = Slots[index];
-            var previous = slot.Connected;
-            slot.Connected = connected;
-            var last = slot.History.Count == 0 ? null : slot.History[^1];
-
-            if (connected && (!previous || last is null || last.Pad != pad || !last.Keys.AsSpan().SequenceEqual(keys)))
-            {
-                slot.History.Add(new Snapshot(index, ++slot.Sequence, timestamp, pad, keys));
-
-                if (slot.History.Count > HistoryLimit)
-                {
-                    slot.History.RemoveAt(0);
-                }
-            }
-
-            if (previous == connected)
-            {
-                return;
-            }
-
-            foreach (var registration in Registrations)
-            {
-                if (Matches(registration, index) && (registration.Status & Connected) != 0)
-                {
-                    events.Add(new Notification(registration, index, timestamp, connected ? Connected : 0, previous ? Connected : 0));
-                }
-            }
-        }
-
-        public bool Matches(Registration registration, int index)
-        {
-            return (registration.Kind & Kind(index)) != 0 && (registration.Device == 0 || registration.Device == Devices[index]);
-        }
-
-        public void Deliver(IEnumerable<Notification> events)
-        {
-            var thread = Environment.CurrentManagedThreadId;
-
-            foreach (var notification in events)
-            {
-                var registration = notification.Registration;
-
-                lock (Gate)
-                {
-                    if (!Registrations.Any(value => value.Token == registration.Token))
-                    {
-                        continue;
-                    }
-
-                    Running.Add((registration.Token, thread));
-                }
-
-                try
-                {
-                    var callback = (delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void>)registration.Callback;
-                    callback(registration.Token, registration.Context, Devices[notification.Index], notification.Timestamp, notification.Current, notification.Previous);
-                }
-                finally
-                {
-                    lock (Gate)
-                    {
-                        Running.Remove((registration.Token, thread));
-                        Monitor.PulseAll(Gate);
-                    }
-                }
-            }
-        }
-
-        public void Forget(ulong token)
-        {
-            Registrations.RemoveAll(value => value.Token == token);
-            Pending.RemoveAll(value => value.Registration.Token == token);
-        }
     }
 
     private static uint Kind(int index)
@@ -437,7 +220,8 @@ public static unsafe partial class GameInputModule
                 {
                     var slot = hub.Slots[index];
 
-                    if ((requested >= 0 && requested != index) || !slot.Connected || slot.History.Count == 0 || (Kind(index) & kind) == 0)
+                    if ((requested >= 0 && requested != index) || !slot.Connected || slot.History.Count == 0
+                        || (Kind(index) & kind) == 0)
                     {
                         continue;
                     }
@@ -511,7 +295,8 @@ public static unsafe partial class GameInputModule
 
     // Upstream does not deliver reading, guide-button or keyboard-layout callbacks.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int RegisterReading(nint self, nint device, uint kind, float threshold, nint context, nint callback, nint output)
+    private static int RegisterReading(nint self, nint device, uint kind, float threshold, nint context, nint callback,
+        nint output)
     {
         _ = NextToken(output);
         Console.Error.WriteLine("[input] Reading callbacks are not delivered (upstream limitation).");
@@ -520,7 +305,8 @@ public static unsafe partial class GameInputModule
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int RegisterDevice(nint self, nint device, uint kind, uint status, uint enumeration, nint context, nint callback, nint output)
+    private static int RegisterDevice(nint self, nint device, uint kind, uint status, uint enumeration, nint context,
+        nint callback, nint output)
     {
         if (callback == 0)
         {
@@ -610,7 +396,7 @@ public static unsafe partial class GameInputModule
                 }
 
                 var remaining = timeout - elapsed;
-                var milliseconds = (int)Math.Clamp(remaining / 1000, 1UL, (ulong)int.MaxValue);
+                var milliseconds = (int)Math.Clamp(remaining / 1000, 1UL, int.MaxValue);
                 Monitor.Wait(hub.Gate, milliseconds);
             }
 
@@ -815,7 +601,8 @@ public static unsafe partial class GameInputModule
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint*, int>)&Previous;
         table[7] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, nint, nint*, int>)&Temporal;
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, float, nint, nint, nint, int>)&RegisterReading;
-        table[9] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, uint, nint, nint, nint, int>)&RegisterDevice;
+        table[9] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, uint, nint, nint, nint, int>)&RegisterDevice;
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, nint, nint, int>)&RegisterOther;
         table[11] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, nint, nint, int>)&RegisterOther;
         table[12] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, void>)&Stop;
@@ -894,21 +681,8 @@ public static unsafe partial class GameInputModule
         return (nint)table;
     }
 
-    private static readonly (ushort Host, uint Guest)[] PadButtons =
-    [
-        (0x0010, 1), (0x0020, 2), (0x1000, 4), (0x2000, 8), (0x4000, 16), (0x8000, 32),
-        (0x0001, 64), (0x0002, 128), (0x0004, 256), (0x0008, 512), (0x0100, 1024),
-        (0x0200, 2048), (0x0040, 4096), (0x0080, 8192)
-    ];
-
-    private static readonly (byte Key, uint Guest)[] FallbackButtons =
-    [
-        (0x1B, 1), (0x09, 2), (0x0D, 4), (0x08, 8), ((byte)'X', 16), ((byte)'Y', 32),
-        (0x26, 64), (0x28, 128), (0x25, 256), (0x27, 512), ((byte)'Q', 1024),
-        ((byte)'E', 2048), ((byte)'F', 4096), ((byte)'H', 8192)
-    ];
-
-    public static PadState ConvertPad(ushort buttons, byte leftTrigger, byte rightTrigger, short leftX, short leftY, short rightX, short rightY)
+    public static PadState ConvertPad(ushort buttons, byte leftTrigger, byte rightTrigger, short leftX, short leftY,
+        short rightX, short rightY)
     {
         var guest = 0U;
 
@@ -920,7 +694,8 @@ public static unsafe partial class GameInputModule
             }
         }
 
-        return new PadState(guest, leftTrigger / 255F, rightTrigger / 255F, Normalize(leftX), Normalize(leftY), Normalize(rightX), Normalize(rightY));
+        return new PadState(guest, leftTrigger / 255F, rightTrigger / 255F, Normalize(leftX), Normalize(leftY),
+            Normalize(rightX), Normalize(rightY));
     }
 
     private static float Normalize(short value)
@@ -974,26 +749,6 @@ public static unsafe partial class GameInputModule
         return keys.ToArray();
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct XInputState
-    {
-        public uint Packet;
-        public ushort Buttons;
-        public byte LeftTrigger;
-        public byte RightTrigger;
-        public short LeftX;
-        public short LeftY;
-        public short RightX;
-        public short RightY;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Vibration
-    {
-        public ushort Left;
-        public ushort Right;
-    }
-
     [LibraryImport("xinput1_4.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint XInputGetState(uint index, out XInputState state);
@@ -1024,5 +779,280 @@ public static unsafe partial class GameInputModule
         {
             throw new InvalidOperationException("GameInput ABI layout mismatch.");
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public record struct PadState(
+        uint Buttons,
+        float LeftTrigger,
+        float RightTrigger,
+        float LeftX,
+        float LeftY,
+        float RightX,
+        float RightY);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly record struct KeyState(uint ScanCode, uint CodePoint, byte VirtualKey, byte DeadKey);
+
+    [StructLayout(LayoutKind.Explicit, Size = 320)]
+    private struct DeviceInfo
+    {
+        [FieldOffset(0)] public uint Size;
+        [FieldOffset(32)] public fixed byte Id[32];
+        [FieldOffset(64)] public fixed byte RootId[32];
+        [FieldOffset(104)] public uint SupportedInput;
+        [FieldOffset(108)] public uint RumbleMotors;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Device
+    {
+        public nint Table;
+        public int Index;
+        public DeviceInfo Info;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Reading
+    {
+        public nint Table;
+        public int References;
+        public nint State;
+    }
+
+    private sealed record Snapshot(int Index, ulong Sequence, ulong Timestamp, PadState? Pad, KeyState[] Keys)
+    {
+        public uint Kind
+        {
+            get
+            {
+                return Index == Keyboard ? KeyboardKind : GamepadKind;
+            }
+        }
+    }
+
+    private sealed class Slot
+    {
+        public bool Connected;
+        public ulong Sequence;
+
+        public List<Snapshot> History
+        {
+            get;
+        } = [];
+    }
+
+    private sealed record Registration(ulong Token, nint Device, uint Kind, uint Status, nint Context, nint Callback);
+
+    private sealed record Notification(
+        Registration Registration,
+        int Index,
+        ulong Timestamp,
+        uint Current,
+        uint Previous);
+
+    private sealed class Hub
+    {
+        public readonly nint[] Devices = new nint[DeviceCount];
+        public readonly object Gate = new();
+        public readonly nint Object;
+        public readonly List<Notification> Pending = [];
+        public readonly nint ReadingTable;
+        public readonly List<Registration> Registrations = [];
+        public readonly List<(ulong Token, int Thread)> Running = [];
+        public readonly Slot[] Slots = Enumerable.Range(0, DeviceCount).Select(_ => new Slot()).ToArray();
+        private readonly long[] _retryAt = new long[4];
+
+        public Hub()
+        {
+            var inputTable = CreateInputTable();
+            var deviceTable = CreateDeviceTable();
+            ReadingTable = CreateReadingTable();
+            var input = (nint*)NativeMemory.Alloc((nuint)sizeof(nint));
+            *input = inputTable;
+            Object = (nint)input;
+
+            for (var index = 0; index < DeviceCount; index++)
+            {
+                var device = (Device*)NativeMemory.AllocZeroed((nuint)sizeof(Device));
+                device->Table = deviceTable;
+                device->Index = index;
+                device->Info.Size = (uint)sizeof(DeviceInfo);
+                device->Info.SupportedInput = Kind(index);
+                device->Info.RumbleMotors = index < 4 ? 3U : 0U;
+                "victory"u8.CopyTo(new Span<byte>(device->Info.Id, 32));
+                device->Info.Id[31] = (byte)(index + 1);
+                new ReadOnlySpan<byte>(device->Info.Id, 32).CopyTo(new Span<byte>(device->Info.RootId, 32));
+                Devices[index] = (nint)device;
+            }
+
+            Poll();
+            var thread = new Thread(PollLoop) { IsBackground = true, Name = "irx input poll" };
+            thread.Start();
+        }
+
+        private void PollLoop()
+        {
+            while (true)
+            {
+                Thread.Sleep(8);
+
+                try
+                {
+                    Poll();
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine($"[input] Poll failed: {exception.Message}");
+                    Thread.Sleep(1000);
+                }
+            }
+        }
+
+        private void Poll()
+        {
+            var pads = new PadState?[4];
+            var now = Environment.TickCount64;
+
+            for (var index = 0; index < pads.Length; index++)
+            {
+                if (now < _retryAt[index])
+                {
+                    continue;
+                }
+
+                if (XInputGetState((uint)index, out var state) == 0)
+                {
+                    pads[index] = ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger, state.LeftX,
+                        state.LeftY, state.RightX, state.RightY);
+                }
+                else
+                {
+                    _retryAt[index] = now + 1000;
+                }
+            }
+
+            var keys = ReadKeys();
+            List<Notification> events;
+
+            lock (Gate)
+            {
+                events = new List<Notification>(Pending);
+                Pending.Clear();
+                var timestamp = Now();
+
+                for (var index = 0; index < pads.Length; index++)
+                {
+                    Update(index, pads[index].HasValue, pads[index], [], timestamp, events);
+                }
+
+                var useFallback = !pads.Any(pad => pad.HasValue);
+                Update(Fallback, useFallback, useFallback ? FallbackPad(keys) : null, [], timestamp, events);
+                Update(Keyboard, true, null, keys, timestamp, events);
+            }
+
+            Deliver(events);
+        }
+
+        private void Update(int index, bool connected, PadState? pad, KeyState[] keys, ulong timestamp,
+            List<Notification> events)
+        {
+            var slot = Slots[index];
+            var previous = slot.Connected;
+            slot.Connected = connected;
+            var last = slot.History.Count == 0 ? null : slot.History[^1];
+
+            if (connected && (!previous || last is null || last.Pad != pad || !last.Keys.AsSpan().SequenceEqual(keys)))
+            {
+                slot.History.Add(new Snapshot(index, ++slot.Sequence, timestamp, pad, keys));
+
+                if (slot.History.Count > HistoryLimit)
+                {
+                    slot.History.RemoveAt(0);
+                }
+            }
+
+            if (previous == connected)
+            {
+                return;
+            }
+
+            foreach (var registration in Registrations)
+            {
+                if (Matches(registration, index) && (registration.Status & Connected) != 0)
+                {
+                    events.Add(new Notification(registration, index, timestamp, connected ? Connected : 0,
+                        previous ? Connected : 0));
+                }
+            }
+        }
+
+        public bool Matches(Registration registration, int index)
+        {
+            return (registration.Kind & Kind(index)) != 0
+                   && (registration.Device == 0 || registration.Device == Devices[index]);
+        }
+
+        public void Deliver(IEnumerable<Notification> events)
+        {
+            var thread = Environment.CurrentManagedThreadId;
+
+            foreach (var notification in events)
+            {
+                var registration = notification.Registration;
+
+                lock (Gate)
+                {
+                    if (!Registrations.Any(value => value.Token == registration.Token))
+                    {
+                        continue;
+                    }
+
+                    Running.Add((registration.Token, thread));
+                }
+
+                try
+                {
+                    var callback =
+                        (delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void>)registration.Callback;
+                    callback(registration.Token, registration.Context, Devices[notification.Index],
+                        notification.Timestamp, notification.Current, notification.Previous);
+                }
+                finally
+                {
+                    lock (Gate)
+                    {
+                        Running.Remove((registration.Token, thread));
+                        Monitor.PulseAll(Gate);
+                    }
+                }
+            }
+        }
+
+        public void Forget(ulong token)
+        {
+            Registrations.RemoveAll(value => value.Token == token);
+            Pending.RemoveAll(value => value.Registration.Token == token);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XInputState
+    {
+        public uint Packet;
+        public ushort Buttons;
+        public byte LeftTrigger;
+        public byte RightTrigger;
+        public short LeftX;
+        public short LeftY;
+        public short RightX;
+        public short RightY;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Vibration
+    {
+        public ushort Left;
+        public ushort Right;
     }
 }

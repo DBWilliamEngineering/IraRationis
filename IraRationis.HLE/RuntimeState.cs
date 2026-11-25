@@ -9,7 +9,10 @@ namespace IraRationis.HLE;
 
 public sealed record Title(uint Id, string StoreId, string Storage, ulong StorageBytes)
 {
-    public static Title Empty { get; } = new(0, string.Empty, string.Empty, 0);
+    public static Title Empty
+    {
+        get;
+    } = new(0, string.Empty, string.Empty, 0);
 
     public static Title FromManifest(string text)
     {
@@ -23,7 +26,8 @@ public sealed record Title(uint Id, string StoreId, string Storage, ulong Storag
         try
         {
             using var input = new StringReader(text.TrimStart('\uFEFF'));
-            using var reader = XmlReader.Create(input, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+            using var reader = XmlReader.Create(input,
+                new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
             var root = XDocument.Load(reader).Root;
 
             if (root is null || root.Name != "Game")

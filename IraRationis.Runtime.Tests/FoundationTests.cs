@@ -6,8 +6,8 @@ using Blake3;
 using IraRationis.Core;
 using IraRationis.Game;
 using IraRationis.Loader;
-using IraRationis.Pipeline;
 using IraRationis.PE;
+using IraRationis.Pipeline;
 
 namespace IraRationis.Runtime.Tests;
 
@@ -71,8 +71,11 @@ internal static class FoundationTests
 
             Require(first == second && converter.Runs == 1, "Cache reuse");
             Require(File.ReadAllText(first) == "ABC", "Cache payload");
-            Require(CacheKey.Create(converter, "x"u8) != CacheKey.Create(new UpperConverter(2), "x"u8), "Cache version");
-            Require(Hasher.Hash("BLAKE3"u8).ToString() == "f890484173e516bfd935ef3d22b912dc9738de38743993cfedf2c9473b3216a4", "BLAKE3 known vector");
+            Require(CacheKey.Create(converter, "x"u8) != CacheKey.Create(new UpperConverter(2), "x"u8),
+                "Cache version");
+            Require(
+                Hasher.Hash("BLAKE3"u8).ToString()
+                == "f890484173e516bfd935ef3d22b912dc9738de38743993cfedf2c9473b3216a4", "BLAKE3 known vector");
 
             File.WriteAllText(Path.Combine(root, AssetPolicy.RootMarker), string.Empty);
             var rejected = false;
@@ -99,7 +102,8 @@ internal static class FoundationTests
 
     private static void TestConfiguration()
     {
-        var paths = new ConfigPaths { GameDirectory = "file-game", CacheDirectory = "file-cache", TestTitles = ["file-title"] };
+        var paths = new ConfigPaths
+            { GameDirectory = "file-game", CacheDirectory = "file-cache", TestTitles = ["file-title"] };
         var config = RuntimeConfig.Resolve(paths, null, key => key == "GAME_DIR" ? "env-game" : string.Empty);
 
         Require(config.GameDirectory == "env-game" && config.CacheDirectory == "file-cache", "Config precedence");
@@ -157,11 +161,21 @@ internal static class FoundationTests
 
     private sealed class UpperConverter(uint version) : IConverter
     {
-        public string Id { get; } = "test.upper";
+        public int Runs
+        {
+            get;
+            private set;
+        }
 
-        public uint Version { get; } = version;
+        public string Id
+        {
+            get;
+        } = "test.upper";
 
-        public int Runs { get; private set; }
+        public uint Version
+        {
+            get;
+        } = version;
 
         public byte[] Convert(ReadOnlySpan<byte> input)
         {

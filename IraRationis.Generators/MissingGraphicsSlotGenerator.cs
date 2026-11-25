@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
@@ -27,6 +28,7 @@ public sealed class MissingGraphicsSlotGenerator : IIncrementalGenerator
             {
                 source.AppendLine($"        (nint)(delegate* unmanaged[Stdcall]<nint, nint, void>)&Missing{index},");
             }
+
             source.AppendLine("    ];");
             source.AppendLine("    private static nint MissingAddress(int index)");
             source.AppendLine("    {");
@@ -40,6 +42,7 @@ public sealed class MissingGraphicsSlotGenerator : IIncrementalGenerator
                 source.AppendLine($"        Trap({index}, first, second);");
                 source.AppendLine("    }");
             }
+
             source.AppendLine("}");
             output.AddSource("ConsoleGraphicsDevice.Missing.g.cs", SourceText.From(source.ToString(), Encoding.UTF8));
         });

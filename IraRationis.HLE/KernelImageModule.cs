@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Title-aware GetModuleHandle and GetModuleFileName overrides.
+
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace IraRationis.HLE;
@@ -12,12 +14,14 @@ public static unsafe partial class KernelImageModule
         [
             new HleExport("GetModuleHandleW", (nuint)(delegate* unmanaged[Stdcall]<char*, nint>)&GetTitleModuleW),
             new HleExport("GetModuleHandleA", (nuint)(delegate* unmanaged[Stdcall]<byte*, nint>)&GetTitleModuleA),
-            new HleExport("GetModuleFileNameW", (nuint)(delegate* unmanaged[Stdcall]<nint, char*, uint, uint>)&GetTitlePathW),
-            new HleExport("GetModuleFileNameA", (nuint)(delegate* unmanaged[Stdcall]<nint, byte*, uint, uint>)&GetTitlePathA)
+            new HleExport("GetModuleFileNameW",
+                (nuint)(delegate* unmanaged[Stdcall]<nint, char*, uint, uint>)&GetTitlePathW),
+            new HleExport("GetModuleFileNameA",
+                (nuint)(delegate* unmanaged[Stdcall]<nint, byte*, uint, uint>)&GetTitlePathA)
         ]);
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint GetTitleModuleW(char* name)
     {
         try
@@ -38,7 +42,7 @@ public static unsafe partial class KernelImageModule
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint GetTitleModuleA(byte* name)
     {
         try
@@ -59,7 +63,7 @@ public static unsafe partial class KernelImageModule
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static uint GetTitlePathW(nint module, char* buffer, uint size)
     {
         try
@@ -95,7 +99,7 @@ public static unsafe partial class KernelImageModule
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static uint GetTitlePathA(nint module, byte* buffer, uint size)
     {
         try
@@ -126,7 +130,8 @@ public static unsafe partial class KernelImageModule
 
                 fixed (byte* output = bytes)
                 {
-                    if (required > 0 && WideCharToMultiByte(0, 0, text, path.Length, output, required, null, null) != required)
+                    if (required > 0 && WideCharToMultiByte(0, 0, text, path.Length, output, required, null, null)
+                        != required)
                     {
                         return 0;
                     }
@@ -170,7 +175,8 @@ public static unsafe partial class KernelImageModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int WideCharToMultiByte(uint codePage, uint flags, char* wide, int wideLength, byte* output, int outputLength, byte* defaultChar, int* usedDefault);
+    private static partial int WideCharToMultiByte(uint codePage, uint flags, char* wide, int wideLength, byte* output,
+        int outputLength, byte* defaultChar, int* usedDefault);
 
     [LibraryImport("kernel32.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

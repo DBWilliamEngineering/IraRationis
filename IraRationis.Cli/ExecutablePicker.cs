@@ -67,7 +67,8 @@ internal static unsafe partial class ExecutablePicker
 
             var path = new string(file);
 
-            if (!File.Exists(path) || !string.Equals(Path.GetExtension(path), ".exe", StringComparison.OrdinalIgnoreCase))
+            if (!File.Exists(path)
+                || !string.Equals(Path.GetExtension(path), ".exe", StringComparison.OrdinalIgnoreCase))
             {
                 throw new IOException("Select an existing executable file.");
             }
@@ -75,6 +76,14 @@ internal static unsafe partial class ExecutablePicker
             return path;
         }
     }
+
+    [LibraryImport("comdlg32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int GetOpenFileNameW(OpenFileName* options);
+
+    [LibraryImport("comdlg32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint CommDlgExtendedError();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct OpenFileName
@@ -103,12 +112,4 @@ internal static unsafe partial class ExecutablePicker
         public uint ReservedValue;
         public uint ExtendedFlags;
     }
-
-    [LibraryImport("comdlg32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int GetOpenFileNameW(OpenFileName* options);
-
-    [LibraryImport("comdlg32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint CommDlgExtendedError();
 }

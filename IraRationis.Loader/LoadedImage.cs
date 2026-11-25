@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from victory-loader/src/windows.rs.
+
 using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -15,6 +16,13 @@ public sealed unsafe class LoadedImage
     private readonly nint _module;
     private bool _bound;
 
+    private LoadedImage(nint module, string path, PeImage info)
+    {
+        _module = module;
+        Path = path;
+        Info = info;
+    }
+
     public nuint BaseAddress
     {
         get
@@ -23,14 +31,14 @@ public sealed unsafe class LoadedImage
         }
     }
 
-    public PeImage Info { get; }
-    public string Path { get; }
-
-    private LoadedImage(nint module, string path, PeImage info)
+    public PeImage Info
     {
-        _module = module;
-        Path = path;
-        Info = info;
+        get;
+    }
+
+    public string Path
+    {
+        get;
     }
 
     public static LoadedImage Load(PreparedImage prepared, string directory)
@@ -79,6 +87,7 @@ public sealed unsafe class LoadedImage
         catch
         {
             _ = WindowsNative.FreeLibrary(module);
+
             throw;
         }
 
@@ -131,12 +140,17 @@ public sealed unsafe class LoadedImage
                 {
                     case ImportProvenance.Hle:
                         hle++;
+
                         break;
+
                     case ImportProvenance.Host:
                         host++;
+
                         break;
+
                     case ImportProvenance.Title:
                         title++;
+
                         break;
                 }
 
@@ -161,7 +175,7 @@ public sealed unsafe class LoadedImage
         foreach (var (rva, address) in slots)
         {
             var slot = AddressAt(rva, 8);
-            BinaryPrimitives.WriteUInt64LittleEndian(bytes, (ulong)address);
+            BinaryPrimitives.WriteUInt64LittleEndian(bytes, address);
             ExecutableMemory.Write((nint)slot, bytes, false);
         }
 
@@ -221,7 +235,9 @@ public sealed unsafe class LoadedImage
 
     private nuint ExecutableAddressAt(uint rva)
     {
-        if (!Info.Sections.Any(section => (section.Characteristics & 0x20000000) != 0 && rva >= section.Rva && (ulong)rva - section.Rva < section.VirtualSize))
+        if (!Info.Sections.Any(section =>
+                (section.Characteristics & 0x20000000) != 0 && rva >= section.Rva
+                                                            && (ulong)rva - section.Rva < section.VirtualSize))
         {
             throw new InvalidDataException($"Entry point 0x{rva:X} is not executable.");
         }

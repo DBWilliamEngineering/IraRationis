@@ -13,6 +13,7 @@ namespace
     using namespace irx;
     constexpr UINT Width = 1280, Height = 720, Count = 2;
     using Clock = std::chrono::steady_clock;
+
     LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w, LPARAM l)
     {
         if (message == WM_CLOSE)
@@ -22,9 +23,11 @@ namespace
         }
         return DefWindowProcW(window, message, w, l);
     }
+
     struct Window
     {
         HWND handle = nullptr;
+
         ~Window()
         {
             if (IsWindow(handle))
@@ -33,6 +36,7 @@ namespace
             }
             UnregisterClassW(L"IrxPresentationProbe", GetModuleHandleW(nullptr));
         }
+
         HRESULT Create()
         {
             const auto instance = GetModuleHandleW(nullptr);
@@ -49,7 +53,8 @@ namespace
             constexpr DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
             AdjustWindowRect(&rect, style, FALSE);
             handle = CreateWindowExW(0, cls.lpszClassName, L"Ira Rationis | First Light | Synthetic frame probe", style,
-                CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, instance, nullptr);
+                                     CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top,
+                                     nullptr, nullptr, instance, nullptr);
             if (!handle)
             {
                 return HRESULT_FROM_WIN32(GetLastError());
@@ -58,9 +63,11 @@ namespace
             return S_OK;
         }
     };
+
     struct Event
     {
         HANDLE handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
         ~Event()
         {
             if (handle)
@@ -69,6 +76,7 @@ namespace
             }
         }
     };
+
     struct Frame
     {
         ComPtr<ID3D12Resource> target, upload;
@@ -76,6 +84,7 @@ namespace
         unsigned char* data = nullptr;
         UINT64 fence = 0;
     };
+
     void Wait(ID3D12Fence* fence, UINT64 value, HANDLE event)
     {
         if (fence->GetCompletedValue() == UINT64_MAX)
@@ -91,6 +100,7 @@ namespace
             }
         }
     }
+
     D3D12_RESOURCE_BARRIER Barrier(ID3D12Resource* target, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to)
     {
         D3D12_RESOURCE_BARRIER barrier{};
@@ -101,6 +111,7 @@ namespace
         barrier.Transition.StateAfter = to;
         return barrier;
     }
+
     // A synthetic moving frame, using full sequential writes and no read-modify-write of mapped VRAM.
     void Fill(Frame& frame, UINT pitch, UINT number)
     {
@@ -116,6 +127,7 @@ namespace
             }
         }
     }
+
     HRESULT Run(UINT seconds, UINT fps, bool gpuUpload)
     {
         ComPtr<IDXGIFactory6> factory;
@@ -134,7 +146,9 @@ namespace
         if (gpuUpload)
         {
             D3D12_FEATURE_DATA_D3D12_OPTIONS16 options{};
-            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options, static_cast<UINT>(sizeof(options)))) || !options.GPUUploadHeapSupported)
+            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options,
+                                                   static_cast<UINT>(sizeof(options)))) || !options.
+                GPUUploadHeapSupported)
             {
                 return DXGI_ERROR_UNSUPPORTED;
             }
@@ -196,7 +210,9 @@ namespace
             buffer.DepthOrArraySize = buffer.MipLevels = 1;
             buffer.SampleDesc.Count = 1;
             buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-            hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&frame.upload));
+            hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer,
+                                                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                 IID_PPV_ARGS(&frame.upload));
             if (FAILED(hr))
             {
                 return hr;
@@ -216,7 +232,8 @@ namespace
             }
         }
         ComPtr<ID3D12GraphicsCommandList> list;
-        hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, frames[0].allocator.Get(), nullptr, IID_PPV_ARGS(&list));
+        hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, frames[0].allocator.Get(), nullptr,
+                                       IID_PPV_ARGS(&list));
         if (FAILED(hr))
         {
             return hr;
@@ -322,8 +339,10 @@ namespace
         Wait(fence.Get(), serial, event.handle);
         const auto elapsed = std::chrono::duration<double>(Clock::now() - start).count();
         const auto divisor = static_cast<double>(count ? count : 1);
-        std::printf("[present] %s frames=%u elapsed=%.3fs submit_fps=%.2f late=%u fill_ms=%.3f fence_ms=%.3f present_ms=%.3f\n",
-            gpuUpload ? "GPU_UPLOAD" : "UPLOAD", count, elapsed, static_cast<double>(count) / elapsed, late, fillMs / divisor, waitMs / divisor, presentMs / divisor);
+        std::printf(
+            "[present] %s frames=%u elapsed=%.3fs submit_fps=%.2f late=%u fill_ms=%.3f fence_ms=%.3f present_ms=%.3f\n",
+            gpuUpload ? "GPU_UPLOAD" : "UPLOAD", count, elapsed, static_cast<double>(count) / elapsed, late,
+            fillMs / divisor, waitMs / divisor, presentMs / divisor);
         std::fflush(stdout);
         if (SUCCEEDED(hr) && count == 0)
         {
@@ -332,6 +351,7 @@ namespace
         return hr;
     }
 }
+
 extern "C" __declspec(dllexport) HRESULT WINAPI irx_present_probe(UINT seconds, UINT fps, UINT gpuUpload)
 {
     if (seconds < 1 || seconds > 120 || fps < 1 || fps > 240 || gpuUpload > 1)

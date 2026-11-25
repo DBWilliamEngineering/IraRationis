@@ -9,7 +9,12 @@
 
 namespace
 {
-    struct ImageRange { ULONG_PTR start; ULONG_PTR end; };
+    struct ImageRange
+    {
+        ULONG_PTR start;
+        ULONG_PTR end;
+    };
+
     constexpr unsigned MaxRanges = 256;
     ImageRange ranges[MaxRanges]{};
     unsigned rangeCount = 0;
@@ -21,12 +26,14 @@ namespace
     ULONG_PTR RegionEnd(ULONG_PTR address, bool writable) noexcept
     {
         MEMORY_BASIC_INFORMATION info{};
-        if (!VirtualQuery(reinterpret_cast<void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+        if (!VirtualQuery(reinterpret_cast<void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT || (info.
+            Protect & (PAGE_GUARD | PAGE_NOACCESS)))
         {
             return 0;
         }
         const auto protection = info.Protect & 0xff;
-        const bool write = protection == PAGE_READWRITE || protection == PAGE_WRITECOPY || protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
+        const bool write = protection == PAGE_READWRITE || protection == PAGE_WRITECOPY || protection ==
+            PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
         const bool read = write || protection == PAGE_READONLY || protection == PAGE_EXECUTE_READ;
         if ((writable && !write) || (!writable && !read))
         {
@@ -61,37 +68,40 @@ namespace
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
-        const auto size = end-rip < 16 ? end-rip : 16;
+        const auto size = end - rip < 16 ? end - rip : 16;
         const auto instruction = irx::Decode(reinterpret_cast<const std::uint8_t*>(rip), size);
         if (instruction.kind == irx::Kind::Unknown || instruction.kind == irx::Kind::Ud2)
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
-        DWORD64* registers[] = {&ctx.Rax,&ctx.Rcx,&ctx.Rdx,&ctx.Rbx,&ctx.Rsp,&ctx.Rbp,&ctx.Rsi,&ctx.Rdi,&ctx.R8,&ctx.R9,&ctx.R10,&ctx.R11,&ctx.R12,&ctx.R13,&ctx.R14,&ctx.R15};
+        DWORD64* registers[] = {
+            &ctx.Rax, &ctx.Rcx, &ctx.Rdx, &ctx.Rbx, &ctx.Rsp, &ctx.Rbp, &ctx.Rsi, &ctx.Rdi, &ctx.R8, &ctx.R9, &ctx.R10,
+            &ctx.R11, &ctx.R12, &ctx.R13, &ctx.R14, &ctx.R15
+        };
         auto* xmm = ctx.FltSave.XmmRegisters;
         switch (instruction.kind)
         {
-            case irx::Kind::Clwb:
-            case irx::Kind::Monitorx:
-                break;
-            case irx::Kind::Mwaitx:
-                _mm_pause();
-                break;
-            case irx::Kind::Clzero:
-            case irx::Kind::ClzeroLoop:
+        case irx::Kind::Clwb:
+        case irx::Kind::Monitorx:
+            break;
+        case irx::Kind::Mwaitx:
+            _mm_pause();
+            break;
+        case irx::Kind::Clzero:
+        case irx::Kind::ClzeroLoop:
             {
                 // Execute one cache line; the original ADD/CMP/JB preserve exact flag and loop semantics.
                 const auto address = instruction.address32 ? ctx.Rax & UINT32_MAX : ctx.Rax;
                 const auto line = static_cast<ULONG_PTR>(address) & ~static_cast<ULONG_PTR>(63);
-                if (line > UINTPTR_MAX-64 || RegionEnd(line, true) < line+64)
+                if (line > UINTPTR_MAX - 64 || RegionEnd(line, true) < line + 64)
                 {
                     return EXCEPTION_CONTINUE_SEARCH;
                 }
                 std::memset(reinterpret_cast<void*>(line), 0, 64);
-                ctx.Rip += instruction.kind == irx::Kind::ClzeroLoop ? instruction.length-9 : instruction.length;
+                ctx.Rip += instruction.kind == irx::Kind::ClzeroLoop ? instruction.length - 9 : instruction.length;
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
-            case irx::Kind::Rdpru:
+        case irx::Kind::Rdpru:
             {
                 LARGE_INTEGER counter{};
                 QueryPerformanceCounter(&counter);
@@ -100,10 +110,10 @@ namespace
                 ctx.Rdx = value >> 32;
                 break;
             }
-            case irx::Kind::Rdpid:
-                *registers[instruction.destination] = GetCurrentProcessorNumber();
-                break;
-            case irx::Kind::Extrq:
+        case irx::Kind::Rdpid:
+            *registers[instruction.destination] = GetCurrentProcessorNumber();
+            break;
+        case irx::Kind::Extrq:
             {
                 auto length = instruction.fieldLength;
                 auto index = instruction.fieldIndex;
@@ -114,23 +124,27 @@ namespace
                     index = static_cast<unsigned>((fields >> 8) & 0xff);
                 }
                 auto& dst = xmm[instruction.destination];
-                dst.Low = irx::Extract(dst.Low,length,index);
+                dst.Low = irx::Extract(dst.Low, length, index);
                 dst.High = 0;
                 break;
             }
-            case irx::Kind::Insertq:
+        case irx::Kind::Insertq:
             {
                 auto& dst = xmm[instruction.destination];
                 const auto src = xmm[instruction.source];
                 const auto fields = static_cast<ULONGLONG>(src.High);
-                const auto length = instruction.registerField ? static_cast<unsigned>(fields & 0xff) : instruction.fieldLength;
-                const auto index = instruction.registerField ? static_cast<unsigned>((fields >> 8) & 0xff) : instruction.fieldIndex;
-                dst.Low = irx::Insert(dst.Low,src.Low,length,index);
+                const auto length = instruction.registerField
+                                        ? static_cast<unsigned>(fields & 0xff)
+                                        : instruction.fieldLength;
+                const auto index = instruction.registerField
+                                       ? static_cast<unsigned>((fields >> 8) & 0xff)
+                                       : instruction.fieldIndex;
+                dst.Low = irx::Insert(dst.Low, src.Low, length, index);
                 dst.High = 0;
                 break;
             }
-            default:
-                return EXCEPTION_CONTINUE_SEARCH;
+        default:
+            return EXCEPTION_CONTINUE_SEARCH;
         }
         ctx.Rip += instruction.length;
         return EXCEPTION_CONTINUE_EXECUTION;
@@ -193,7 +207,8 @@ namespace
 
     LONG CALLBACK Handle(EXCEPTION_POINTERS* exception) noexcept
     {
-        if (!exception || !exception->ExceptionRecord || !exception->ContextRecord || InterlockedCompareExchange(&active, 0, 0) == 0)
+        if (!exception || !exception->ExceptionRecord || !exception->ContextRecord ||
+            InterlockedCompareExchange(&active, 0, 0) == 0)
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }

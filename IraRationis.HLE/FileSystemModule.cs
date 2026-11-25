@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx victory-hle/src/modules/files.rs. Wide/narrow Win32 path subset.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -99,29 +100,50 @@ public static unsafe partial class FileSystemModule
 
     public static HleModule Create()
     {
-        return new HleModule("files", ["kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-*", "api-ms-win-core-processenvironment-*"],
-        [
-            new HleExport("CreateFileW", (nuint)(delegate* unmanaged[Stdcall]<char*, uint, uint, nint, uint, uint, nint, nint>)&OverrideCreateFileW),
-            new HleExport("CreateFile2", (nuint)(delegate* unmanaged[Stdcall]<char*, uint, uint, uint, nint, nint>)&OverrideCreateFile2),
-            new HleExport("GetFileAttributesW", (nuint)(delegate* unmanaged[Stdcall]<char*, uint>)&OverrideGetFileAttributesW),
-            new HleExport("GetFileAttributesExW", (nuint)(delegate* unmanaged[Stdcall]<char*, int, nint, int>)&OverrideGetFileAttributesExW),
-            new HleExport("SetFileAttributesW", (nuint)(delegate* unmanaged[Stdcall]<char*, uint, int>)&OverrideSetFileAttributesW),
-            new HleExport("DeleteFileW", (nuint)(delegate* unmanaged[Stdcall]<char*, int>)&OverrideDeleteFileW),
-            new HleExport("RemoveDirectoryW", (nuint)(delegate* unmanaged[Stdcall]<char*, int>)&OverrideRemoveDirectoryW),
-            new HleExport("CreateDirectoryW", (nuint)(delegate* unmanaged[Stdcall]<char*, nint, int>)&OverrideCreateDirectoryW),
-            new HleExport("GetDiskFreeSpaceExW", (nuint)(delegate* unmanaged[Stdcall]<char*, ulong*, ulong*, ulong*, int>)&OverrideGetDiskFreeSpaceExW),
-            new HleExport("GetDiskFreeSpaceW", (nuint)(delegate* unmanaged[Stdcall]<char*, uint*, uint*, uint*, uint*, int>)&OverrideGetDiskFreeSpaceW),
-            new HleExport("FindFirstFileW", (nuint)(delegate* unmanaged[Stdcall]<char*, nint, nint>)&OverrideFindFirstFileW),
-            new HleExport("FindFirstFileExW", (nuint)(delegate* unmanaged[Stdcall]<char*, int, nint, int, nint, uint, nint>)&OverrideFindFirstFileExW),
-            new HleExport("CreateFileA", (nuint)(delegate* unmanaged[Stdcall]<byte*, uint, uint, nint, uint, uint, nint, nint>)&OverrideCreateFileA),
-            new HleExport("GetFileAttributesA", (nuint)(delegate* unmanaged[Stdcall]<byte*, uint>)&OverrideGetFileAttributesA),
-            new HleExport("DeleteFileA", (nuint)(delegate* unmanaged[Stdcall]<byte*, int>)&OverrideDeleteFileA),
-            new HleExport("MoveFileExW", (nuint)(delegate* unmanaged[Stdcall]<char*, char*, uint, int>)&OverrideMoveFileExW)
-        ]);
+        return new HleModule("files",
+            ["kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-*", "api-ms-win-core-processenvironment-*"],
+            [
+                new HleExport("CreateFileW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, uint, uint, nint, uint, uint, nint, nint>)
+                    &OverrideCreateFileW),
+                new HleExport("CreateFile2",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, uint, uint, uint, nint, nint>)&OverrideCreateFile2),
+                new HleExport("GetFileAttributesW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, uint>)&OverrideGetFileAttributesW),
+                new HleExport("GetFileAttributesExW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, int, nint, int>)&OverrideGetFileAttributesExW),
+                new HleExport("SetFileAttributesW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, uint, int>)&OverrideSetFileAttributesW),
+                new HleExport("DeleteFileW", (nuint)(delegate* unmanaged[Stdcall]<char*, int>)&OverrideDeleteFileW),
+                new HleExport("RemoveDirectoryW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, int>)&OverrideRemoveDirectoryW),
+                new HleExport("CreateDirectoryW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, nint, int>)&OverrideCreateDirectoryW),
+                new HleExport("GetDiskFreeSpaceExW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, ulong*, ulong*, ulong*, int>)
+                    &OverrideGetDiskFreeSpaceExW),
+                new HleExport("GetDiskFreeSpaceW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, uint*, uint*, uint*, uint*, int>)
+                    &OverrideGetDiskFreeSpaceW),
+                new HleExport("FindFirstFileW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, nint, nint>)&OverrideFindFirstFileW),
+                new HleExport("FindFirstFileExW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, int, nint, int, nint, uint, nint>)
+                    &OverrideFindFirstFileExW),
+                new HleExport("CreateFileA",
+                    (nuint)(delegate* unmanaged[Stdcall]<byte*, uint, uint, nint, uint, uint, nint, nint>)
+                    &OverrideCreateFileA),
+                new HleExport("GetFileAttributesA",
+                    (nuint)(delegate* unmanaged[Stdcall]<byte*, uint>)&OverrideGetFileAttributesA),
+                new HleExport("DeleteFileA", (nuint)(delegate* unmanaged[Stdcall]<byte*, int>)&OverrideDeleteFileA),
+                new HleExport("MoveFileExW",
+                    (nuint)(delegate* unmanaged[Stdcall]<char*, char*, uint, int>)&OverrideMoveFileExW)
+            ]);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static nint OverrideCreateFileW(char* path, uint access, uint share, nint security, uint disposition, uint flags, nint template)
+    private static nint OverrideCreateFileW(char* path, uint access, uint share, nint security, uint disposition,
+        uint flags, nint template)
     {
         try
         {
@@ -129,7 +151,8 @@ public static unsafe partial class FileSystemModule
 
             fixed (char* mapped = translated)
             {
-                var result = CreateFileW(translated is null ? path : mapped, access, share, security, disposition, flags, template);
+                var result = CreateFileW(translated is null ? path : mapped, access, share, security, disposition,
+                    flags, template);
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -139,7 +162,7 @@ public static unsafe partial class FileSystemModule
         {
             SetLastError(123);
 
-            return (nint)(-1);
+            return -1;
         }
     }
 
@@ -162,7 +185,7 @@ public static unsafe partial class FileSystemModule
         {
             SetLastError(123);
 
-            return (nint)(-1);
+            return -1;
         }
     }
 
@@ -369,7 +392,7 @@ public static unsafe partial class FileSystemModule
         {
             SetLastError(123);
 
-            return (nint)(-1);
+            return -1;
         }
     }
 
@@ -392,12 +415,13 @@ public static unsafe partial class FileSystemModule
         {
             SetLastError(123);
 
-            return (nint)(-1);
+            return -1;
         }
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static nint OverrideCreateFileA(byte* path, uint access, uint share, nint security, uint disposition, uint flags, nint template)
+    private static nint OverrideCreateFileA(byte* path, uint access, uint share, nint security, uint disposition,
+        uint flags, nint template)
     {
         try
         {
@@ -423,7 +447,7 @@ public static unsafe partial class FileSystemModule
         {
             SetLastError(123);
 
-            return (nint)(-1);
+            return -1;
         }
     }
 
@@ -499,7 +523,8 @@ public static unsafe partial class FileSystemModule
 
             fixed (char* mappedFrom = translatedFrom, mappedTo = translatedTo)
             {
-                var result = MoveFileExW(translatedFrom is null ? from : mappedFrom, translatedTo is null ? to : mappedTo, flags);
+                var result = MoveFileExW(translatedFrom is null ? from : mappedFrom,
+                    translatedTo is null ? to : mappedTo, flags);
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -515,7 +540,8 @@ public static unsafe partial class FileSystemModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint CreateFileW(char* path, uint access, uint share, nint security, uint disposition, uint flags, nint template);
+    private static partial nint CreateFileW(char* path, uint access, uint share, nint security, uint disposition,
+        uint flags, nint template);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -563,7 +589,8 @@ public static unsafe partial class FileSystemModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint CreateFileA(byte* path, uint access, uint share, nint security, uint disposition, uint flags, nint template);
+    private static partial nint CreateFileA(byte* path, uint access, uint share, nint security, uint disposition,
+        uint flags, nint template);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

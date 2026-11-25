@@ -18,6 +18,9 @@ public static unsafe class DeviceProbe
 
     public static int Execute(TextWriter writer)
     {
+        ConsoleGraphicsDevice.VerifyAbiInitialization();
+        writer.WriteLine("ABI initialization, null-table diagnostics and root signature registration passed.");
+
         var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)ConsoleGraphicsDevice.ExportAddress;
         var version = 0x00020004U;
         var deviceId = new Guid("189819f1-1db6-4b57-be54-1821339b85f7");
@@ -56,6 +59,8 @@ public static unsafe class DeviceProbe
                 VerifyFrameAndDisplay(device);
                 ConsoleGraphicsDevice.VerifyResourceAbi(device);
                 ConsoleGraphicsDevice.VerifyDescriptorAbi(device);
+                ConsoleGraphicsDevice.VerifyRootSignatureAbi(device);
+                writer.WriteLine("Root signature blob ownership and interface ABI passed.");
                 writer.WriteLine("Resource CPU backing, aliases, page pools and descriptor ABI passed.");
 
                 var desc = new QueueDescription { Nodes = 1 };

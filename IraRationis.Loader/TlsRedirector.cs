@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from victory-loader/src/tls.rs.
+
 using System.Buffers.Binary;
 using IraRationis.PE;
 
@@ -90,8 +91,9 @@ public static unsafe class TlsRedirector
             var rex = instruction[1];
             var register = ((instruction[3] >> 3) & 7) | ((rex & 4) << 1);
 
-            if (instruction[0] == 0x65 && (rex is 0x48 or 0x4C) && instruction[2] == 0x8B
-                && (instruction[3] & 0xC7) == 4 && instruction[4] == 0x25 && instruction[5] == 0x58 && instruction[6] == 0 && instruction[7] == 0 && instruction[8] == 0 && register != 4)
+            if (instruction[0] == 0x65 && rex is 0x48 or 0x4C && instruction[2] == 0x8B
+                && (instruction[3] & 0xC7) == 4 && instruction[4] == 0x25 && instruction[5] == 0x58
+                && instruction[6] == 0 && instruction[7] == 0 && instruction[8] == 0 && register != 4)
             {
                 var relative = checked((long)thunks + register * ThunkSize - ((long)address + offset + 5));
                 instruction[0] = 0xE8;
@@ -116,11 +118,11 @@ public static unsafe class TlsRedirector
     {
         var high = register >> 3;
         var low = register & 7;
-        var load = new byte[] { 0x65, (byte)(0x48 | high << 2), 0x8B, (byte)(low << 3 | 4), 0x25, 0x58, 0, 0, 0 };
+        var load = new byte[] { 0x65, (byte)(0x48 | (high << 2)), 0x8B, (byte)((low << 3) | 4), 0x25, 0x58, 0, 0, 0 };
         load.CopyTo(code);
-        code[9] = (byte)(0x48 | high << 2 | high);
+        code[9] = (byte)(0x48 | (high << 2) | high);
         code[10] = 0x8D;
-        code[11] = (byte)(0x80 | low << 3 | low);
+        code[11] = (byte)(0x80 | (low << 3) | low);
         var cursor = 12;
 
         if (low == 4)
@@ -149,7 +151,8 @@ public static unsafe class TlsRedirector
 
             if (address > delta)
             {
-                var below = WindowsNative.VirtualAlloc((nint)(address - delta), 4096, WindowsNative.CommitReserve, WindowsNative.ReadWrite);
+                var below = WindowsNative.VirtualAlloc((nint)(address - delta), 4096, WindowsNative.CommitReserve,
+                    WindowsNative.ReadWrite);
 
                 if (below != 0)
                 {
@@ -157,7 +160,8 @@ public static unsafe class TlsRedirector
                 }
             }
 
-            var page = WindowsNative.VirtualAlloc((nint)(above + (nuint)i * granule), 4096, WindowsNative.CommitReserve, WindowsNative.ReadWrite);
+            var page = WindowsNative.VirtualAlloc((nint)(above + (nuint)i * granule), 4096, WindowsNative.CommitReserve,
+                WindowsNative.ReadWrite);
 
             if (page != 0)
             {

@@ -14,7 +14,10 @@ public sealed record CacheKey
         Hex = hex;
     }
 
-    public string Hex { get; }
+    public string Hex
+    {
+        get;
+    }
 
     public static CacheKey Create(IConverter converter, ReadOnlySpan<byte> input)
     {

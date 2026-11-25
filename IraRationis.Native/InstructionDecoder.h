@@ -31,7 +31,8 @@ namespace irx
         return (value >> (index & 63)) & Mask(length);
     }
 
-    inline std::uint64_t Insert(std::uint64_t destination, std::uint64_t source, unsigned length, unsigned index) noexcept
+    inline std::uint64_t Insert(std::uint64_t destination, std::uint64_t source, unsigned length,
+                                unsigned index) noexcept
     {
         const auto mask = Mask(length) << (index & 63);
         return (destination & ~mask) | ((source << (index & 63)) & mask);
@@ -62,7 +63,8 @@ namespace irx
             {
                 address32 = true;
             }
-            else if (prefix != 0x2e && prefix != 0x3e && prefix != 0x26 && prefix != 0x36 && prefix != 0x64 && prefix != 0x65)
+            else if (prefix != 0x2e && prefix != 0x3e && prefix != 0x26 && prefix != 0x36 && prefix != 0x64 && prefix !=
+                0x65)
             {
                 break;
             }
@@ -87,16 +89,18 @@ namespace irx
         {
             switch (m)
             {
-                case 0xfc:
-                    if (!address32 && size - i >= 12 && code[i+3] == 0x48 && code[i+4] == 0x83 && code[i+5] == 0xc0 && code[i+6] == 0x40 && (code[i+7] == 0x48 || code[i+7] == 0x4c) && code[i+8] == 0x39 && (code[i+9] & 0xc7) == 0xc0 && code[i+10] == 0x72 && code[i+11] == 0xf4)
-                    {
-                        return {Kind::ClzeroLoop, i+12, ((code[i+9] >> 3) & 7U) | (code[i+7] == 0x4c ? 8U : 0U)};
-                    }
-                    return {Kind::Clzero, i+3, 0, -1, false, 0, 0, address32};
-                case 0xfd: return {Kind::Rdpru, i+3};
-                case 0xfa: return {Kind::Monitorx, i+3};
-                case 0xfb: return {Kind::Mwaitx, i+3};
-                default: return {};
+            case 0xfc:
+                if (!address32 && size - i >= 12 && code[i + 3] == 0x48 && code[i + 4] == 0x83 && code[i + 5] == 0xc0 &&
+                    code[i + 6] == 0x40 && (code[i + 7] == 0x48 || code[i + 7] == 0x4c) && code[i + 8] == 0x39 && (code[
+                        i + 9] & 0xc7) == 0xc0 && code[i + 10] == 0x72 && code[i + 11] == 0xf4)
+                {
+                    return {Kind::ClzeroLoop, i + 12, ((code[i + 9] >> 3) & 7U) | (code[i + 7] == 0x4c ? 8U : 0U)};
+                }
+                return {Kind::Clzero, i + 3, 0, -1, false, 0, 0, address32};
+            case 0xfd: return {Kind::Rdpru, i + 3};
+            case 0xfa: return {Kind::Monitorx, i + 3};
+            case 0xfb: return {Kind::Mwaitx, i + 3};
+            default: return {};
             }
         }
         if ((op == 0x78 || op == 0x79) && mode == 3 && (repeat == 0xf2 || (repeat == 0 && operandSize)))
@@ -109,8 +113,8 @@ namespace irx
             const auto dst = reg | ((rex & 4) << 1);
             const auto src = rm | ((rex & 1) << 3);
             const auto length = i + (immediate ? 5U : 3U);
-            const unsigned fieldLength = immediate ? code[i+3] : 0;
-            const unsigned fieldIndex = immediate ? code[i+4] : 0;
+            const unsigned fieldLength = immediate ? code[i + 3] : 0;
+            const unsigned fieldIndex = immediate ? code[i + 4] : 0;
             if (repeat == 0xf2)
             {
                 return {Kind::Insertq, length, dst, static_cast<int>(src), !immediate, fieldLength, fieldIndex};
@@ -134,18 +138,18 @@ namespace irx
                 {
                     return {};
                 }
-                base = code[i+3] & 7;
+                base = code[i + 3] & 7;
                 ++length;
             }
             length += mode == 0 ? (base == 5 ? 4 : 0) : (mode == 1 ? 1 : 4);
             if (size - i >= 2 + length)
             {
-                return {Kind::Clwb, i+2+length};
+                return {Kind::Clwb, i + 2 + length};
             }
         }
         if (op == 0xc7 && repeat == 0xf3 && reg == 7 && mode == 3)
         {
-            return {Kind::Rdpid, i+3, rm | ((rex & 1) << 3)};
+            return {Kind::Rdpid, i + 3, rm | ((rex & 1) << 3)};
         }
         return {};
     }

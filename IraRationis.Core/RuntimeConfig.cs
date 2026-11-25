@@ -7,7 +7,12 @@ using Tomlyn.Serialization;
 
 namespace IraRationis.Core;
 
-public sealed record RuntimeConfig(string? GameDirectory, string CacheDirectory, string DataDirectory, IReadOnlyList<string> TestTitles, string? Source)
+public sealed record RuntimeConfig(
+    string? GameDirectory,
+    string CacheDirectory,
+    string DataDirectory,
+    IReadOnlyList<string> TestTitles,
+    string? Source)
 {
     public static RuntimeConfig Load()
     {
@@ -81,22 +86,42 @@ public sealed record RuntimeConfig(string? GameDirectory, string CacheDirectory,
 public sealed class ConfigDocument
 {
     [JsonPropertyName("paths")]
-    public ConfigPaths Paths { get; set; } = new();
+    public ConfigPaths Paths
+    {
+        get;
+        set;
+    } = new();
 }
 
 public sealed class ConfigPaths
 {
     [JsonPropertyName("game_dir")]
-    public string? GameDirectory { get; set; }
+    public string? GameDirectory
+    {
+        get;
+        set;
+    }
 
     [JsonPropertyName("cache_dir")]
-    public string? CacheDirectory { get; set; }
+    public string? CacheDirectory
+    {
+        get;
+        set;
+    }
 
     [JsonPropertyName("data_dir")]
-    public string? DataDirectory { get; set; }
+    public string? DataDirectory
+    {
+        get;
+        set;
+    }
 
     [JsonPropertyName("test_titles")]
-    public string[] TestTitles { get; set; } = [];
+    public string[] TestTitles
+    {
+        get;
+        set;
+    } = [];
 }
 
 [TomlSerializable(typeof(ConfigDocument))]

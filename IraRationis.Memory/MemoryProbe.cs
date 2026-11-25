@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -12,19 +13,9 @@ public static unsafe partial class MemoryProbe
     private const int RandomReads = 4096;
     private const int Unsupported = unchecked((int)0x887A0004);
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Sample
-    {
-        public double StagingMs;
-        public double CopyMs;
-        public double ComputeMs;
-        public double SubmitMs;
-        public uint Mismatches;
-        public uint Reserved;
-    }
-
     [LibraryImport("irx-native", EntryPoint = "irx_memory_create")]
-    private static partial int Create(uint adapter, uint mode, ulong bytes, out nint session, out nuint cpu, out ulong gpu);
+    private static partial int Create(uint adapter, uint mode, ulong bytes, out nint session, out nuint cpu,
+        out ulong gpu);
 
     [LibraryImport("irx-native", EntryPoint = "irx_memory_run")]
     private static partial int Run(nint session, uint seed, out Sample sample);
@@ -58,7 +49,8 @@ public static unsafe partial class MemoryProbe
         {
             var option = args[i];
 
-            if (i + 1 >= args.Length || !int.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+            if (i + 1 >= args.Length
+                || !int.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
             {
                 throw new ArgumentException($"Expected an integer for {option}.");
             }
@@ -67,13 +59,19 @@ public static unsafe partial class MemoryProbe
             {
                 case "--mib" when value is >= 1 and <= 256:
                     sizes = [value];
+
                     break;
+
                 case "--iterations" when value is >= 1 and <= 100:
                     iterations = value;
+
                     break;
+
                 case "--adapter" when value >= 0:
                     adapter = (uint)value;
+
                     break;
+
                 default:
                     throw new ArgumentException($"Invalid probe argument: {option} {value}.");
             }
@@ -95,10 +93,14 @@ public static unsafe partial class MemoryProbe
             throw new InvalidOperationException($"Adapter {adapter} discovery failed: 0x{status:X8}.");
         }
 
-        writer.WriteLine($"Adapter {adapter}: {new string(name.AsSpan(0, Array.IndexOf(name, '\0')))}; dedicated memory {vram / (1024 * 1024)} MiB");
-        writer.WriteLine("Each mode uses identical full-buffer writes and GPU checksum dispatches; one warmup is excluded.");
-        writer.WriteLine("CPU read latency is a separate sampled random-read test. GPU copy/compute use GPU timestamps.");
-        writer.WriteLine("mode,mib,iteration,cpu_write_ms,staging_ms,gpu_copy_ms,gpu_compute_ms,submit_wait_ms,cycle_ms,random_read_ns,checksum_errors");
+        writer.WriteLine(
+            $"Adapter {adapter}: {new string(name.AsSpan(0, Array.IndexOf(name, '\0')))}; dedicated memory {vram / (1024 * 1024)} MiB");
+        writer.WriteLine(
+            "Each mode uses identical full-buffer writes and GPU checksum dispatches; one warmup is excluded.");
+        writer.WriteLine(
+            "CPU read latency is a separate sampled random-read test. GPU copy/compute use GPU timestamps.");
+        writer.WriteLine(
+            "mode,mib,iteration,cpu_write_ms,staging_ms,gpu_copy_ms,gpu_compute_ms,submit_wait_ms,cycle_ms,random_read_ns,checksum_errors");
 
         var failed = false;
 
@@ -123,7 +125,8 @@ public static unsafe partial class MemoryProbe
 
         if (status < 0)
         {
-            var optional = mode == MemoryResidency.ExistingSystemHeap || (mode == MemoryResidency.GpuUpload && status == Unsupported);
+            var optional = mode == MemoryResidency.ExistingSystemHeap
+                           || (mode == MemoryResidency.GpuUpload && status == Unsupported);
             writer.WriteLine($"# {mode} {mib} MiB: {(optional ? "SKIPPED" : "FAILED")} HRESULT 0x{status:X8}");
 
             return optional;
@@ -179,7 +182,8 @@ public static unsafe partial class MemoryProbe
 
                 // Do not include these reads in the upload or GPU timing.
                 var randomNs = ReadLatency(cpu, bytes, seed);
-                writer.WriteLine(FormattableString.Invariant($"{mode},{mib},{iteration},{writeMs:F4},{sample.StagingMs:F4},{sample.CopyMs:F4},{sample.ComputeMs:F4},{sample.SubmitMs:F4},{cycleMs:F4},{randomNs:F2},{sample.Mismatches}"));
+                writer.WriteLine(FormattableString.Invariant(
+                    $"{mode},{mib},{iteration},{writeMs:F4},{sample.StagingMs:F4},{sample.CopyMs:F4},{sample.ComputeMs:F4},{sample.SubmitMs:F4},{cycleMs:F4},{randomNs:F2},{sample.Mismatches}"));
             }
 
             table.Unmap(GuestBase, bytes);
@@ -232,7 +236,9 @@ public static unsafe partial class MemoryProbe
         var size = VirtualPageTable.PageSize;
         table.Map(GuestBase, 0x200000, 0x300000, size * 2, MemoryResidency.GpuUpload);
 
-        if (!table.TryTranslate(GuestBase + size + 7, out var page) || page.CpuAddress != 0x210007 || page.GpuAddress != 0x310007 || page.Residency != MemoryResidency.GpuUpload)
+        if (!table.TryTranslate(GuestBase + size + 7, out var page) || page.CpuAddress != 0x210007
+                                                                    || page.GpuAddress != 0x310007
+                                                                    || page.Residency != MemoryResidency.GpuUpload)
         {
             throw new InvalidOperationException("Page offset translation failed.");
         }
@@ -259,5 +265,16 @@ public static unsafe partial class MemoryProbe
         {
             throw new InvalidOperationException("Unmap failed.");
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Sample
+    {
+        public double StagingMs;
+        public double CopyMs;
+        public double ComputeMs;
+        public double SubmitMs;
+        public uint Mismatches;
+        public uint Reserved;
     }
 }

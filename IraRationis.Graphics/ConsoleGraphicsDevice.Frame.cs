@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Frame clock semantics derived from Zettrox/ztrx victory-gpu/src/frame.rs.
+
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -33,7 +34,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             _frameInterval = IntervalTicks(interval);
         }
 
-        Console.Error.WriteLine($"[graphics] Frame interval {interval} us ({1_000_000.0 / interval:F2} Hz), period={period}, flags=0x{flags:X}.");
+        Console.Error.WriteLine(
+            $"[graphics] Frame interval {interval} us ({1_000_000.0 / interval:F2} Hz), period={period}, flags=0x{flags:X}.");
+
         return 0;
     }
 
@@ -43,7 +46,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         // Like upstream, all event kinds are scheduled at the tick; offsets are not yet modeled.
         if ((offset != 0 || list != 0 || flags != 0) && Interlocked.Exchange(ref _reportedEventOffsets, 1) == 0)
         {
-            Console.Error.WriteLine($"[graphics] Frame event kind={kind}, offset={offset}, flags=0x{flags:X}; using clock-only scheduling.");
+            Console.Error.WriteLine(
+                $"[graphics] Frame event kind={kind}, offset={offset}, flags=0x{flags:X}; using clock-only scheduling.");
         }
 
         return 0;

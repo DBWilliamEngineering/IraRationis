@@ -7,7 +7,7 @@ using IraRationis.PE;
 
 namespace IraRationis.HLE;
 
-public sealed partial class HostPolicy
+public sealed unsafe partial class HostPolicy
 {
     private const uint LoadLibrarySearchSystem32 = 0x00000800;
 
@@ -64,7 +64,7 @@ public sealed partial class HostPolicy
         return ResolveSystemFunction(dll, symbol);
     }
 
-    private static unsafe nuint? ResolveSystemFunction(string dll, ImportSymbol symbol)
+    private static nuint? ResolveSystemFunction(string dll, ImportSymbol symbol)
     {
         if (dll.Length == 0 || dll.Contains('\0') || dll.Contains('/') || dll.Contains('\\') || dll.Contains(':'))
         {
@@ -96,7 +96,7 @@ public sealed partial class HostPolicy
         }
         else
         {
-            address = GetProcAddress(handle, (byte*)(nuint)symbol.HintOrOrdinal);
+            address = GetProcAddress(handle, (byte*)symbol.HintOrOrdinal);
         }
 
         return address == 0 ? null : (nuint)address;

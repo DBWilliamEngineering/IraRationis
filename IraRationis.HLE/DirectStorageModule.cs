@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/dstorage.rs.
 // Ordered per-queue workers; weighted shared scheduling and BCPack are not yet ported.
+
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -31,188 +32,6 @@ public static unsafe class DirectStorageModule
     private static long _stagingBytes = 32L << 20;
     private static readonly object StagingGate = new();
     private static long _staged;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeObject
-    {
-        public nint Table;
-        public nint State;
-        public int References;
-    }
-
-    [StructLayout(LayoutKind.Explicit, Size = 0x20)]
-    private struct QueueDescription
-    {
-        [FieldOffset(0)] public ulong SourceType;
-        [FieldOffset(8)] public ushort Capacity;
-        [FieldOffset(10)] public sbyte Priority;
-        [FieldOffset(16)] public nint Name;
-        [FieldOffset(24)] public ulong Unknown;
-    }
-
-    [StructLayout(LayoutKind.Explicit, Size = 0x48)]
-    private struct Request
-    {
-        [FieldOffset(0)] public ulong Options;
-        [FieldOffset(8)] public nint Destination;
-        [FieldOffset(16)] public ulong PageOffset;
-        [FieldOffset(24)] public uint DestinationSize;
-        [FieldOffset(32)] public nint Source;
-        [FieldOffset(40)] public ulong Offset;
-        [FieldOffset(48)] public uint SourceSize;
-        [FieldOffset(52)] public uint IntermediateSize;
-        [FieldOffset(56)] public ulong Tag;
-        [FieldOffset(64)] public nint Name;
-    }
-
-    private sealed record StatusArray(int[] Entries);
-    private sealed record Command(Request Request, nint File, nint Status, uint Index);
-
-    private sealed class StorageQueue : IDisposable
-    {
-        private readonly object _gate = new();
-        private readonly int _capacity;
-        private readonly List<Command> _pending = [];
-        private readonly Queue<Command> _submitted = new();
-        private readonly Thread _worker;
-        private bool _closed;
-        private bool _running;
-        private int _firstFailure;
-
-        public StorageQueue(int capacity)
-        {
-            _capacity = Math.Max(2, capacity);
-            _worker = new Thread(Work) { IsBackground = true, Name = "irx-storage" };
-            _worker.Start();
-        }
-
-        public void Enqueue(Command command)
-        {
-            lock (_gate)
-            {
-                while (!_closed && _pending.Count + _submitted.Count + (_running ? 1 : 0) >= _capacity - 1)
-                {
-                    SubmitCore();
-                    Monitor.Wait(_gate);
-                }
-
-                if (_closed)
-                {
-                    Discard(command);
-                    return;
-                }
-
-                _pending.Add(command);
-
-                if (_pending.Count >= Math.Max(1, _capacity / 2))
-                {
-                    SubmitCore();
-                }
-            }
-        }
-
-        private void SubmitCore()
-        {
-            foreach (var command in _pending)
-            {
-                _submitted.Enqueue(command);
-            }
-
-            _pending.Clear();
-            Monitor.PulseAll(_gate);
-        }
-
-        public void Submit()
-        {
-            lock (_gate)
-            {
-                if (!_closed)
-                {
-                    SubmitCore();
-                }
-            }
-        }
-
-        private void Work()
-        {
-            while (true)
-            {
-                Command command;
-
-                lock (_gate)
-                {
-                    while (!_closed && _submitted.Count == 0)
-                    {
-                        Monitor.Wait(_gate);
-                    }
-
-                    if (_closed)
-                    {
-                        return;
-                    }
-
-                    command = _submitted.Dequeue();
-                    _running = true;
-                }
-
-                try
-                {
-                    if (command.Status != 0)
-                    {
-                        var array = State<StatusArray>(command.Status);
-                        Volatile.Write(ref array.Entries[command.Index], _firstFailure);
-                        _firstFailure = 0;
-                    }
-                    else
-                    {
-                        var result = Execute(command.Request, command.File);
-
-                        if (result < 0 && _firstFailure == 0)
-                        {
-                            _firstFailure = result;
-                        }
-                    }
-                }
-                finally
-                {
-                    Drop(command);
-
-                    lock (_gate)
-                    {
-                        _running = false;
-                        Monitor.PulseAll(_gate);
-                    }
-                }
-            }
-        }
-
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                if (!_closed)
-                {
-                    _closed = true;
-
-                    foreach (var command in _pending)
-                    {
-                        Discard(command);
-                    }
-
-                    _pending.Clear();
-
-                    while (_submitted.TryDequeue(out var command))
-                    {
-                        Discard(command);
-                    }
-
-                    Monitor.PulseAll(_gate);
-                }
-            }
-
-            _worker.Join();
-        }
-    }
 
     public static HleModule Create()
     {
@@ -372,7 +191,8 @@ public static unsafe class DirectStorageModule
         {
             var original = new string(path);
             var translated = FileSystemModule.Translate(original) ?? original;
-            var file = File.OpenHandle(translated, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess);
+            var file = File.OpenHandle(translated, FileMode.Open, FileAccess.Read, FileShare.Read,
+                FileOptions.RandomAccess);
 
             try
             {
@@ -381,6 +201,7 @@ public static unsafe class DirectStorageModule
             catch
             {
                 file.Dispose();
+
                 throw;
             }
 
@@ -437,10 +258,12 @@ public static unsafe class DirectStorageModule
             catch
             {
                 queue.Dispose();
+
                 throw;
             }
 
-            Console.WriteLine($"[dstorage] Queue created: capacity={description->Capacity}, priority={description->Priority} (serial worker).");
+            Console.WriteLine(
+                $"[dstorage] Queue created: capacity={description->Capacity}, priority={description->Priority} (serial worker).");
 
             return 0;
         }
@@ -540,7 +363,8 @@ public static unsafe class DirectStorageModule
 
             if (result < 0)
             {
-                Console.Error.WriteLine($"[dstorage] Request failed: 0x{result:X8}, options=0x{request.Options:X}, source={request.SourceSize}, destination={request.DestinationSize}.");
+                Console.Error.WriteLine(
+                    $"[dstorage] Request failed: 0x{result:X8}, options=0x{request.Options:X}, source={request.SourceSize}, destination={request.DestinationSize}.");
             }
 
             return result;
@@ -553,12 +377,14 @@ public static unsafe class DirectStorageModule
 
     private static int ExecuteCore(Request request, nint file)
     {
-        if ((request.Options & ~(Zlib | BcPack | PageDestination | MemorySource)) != 0 || (request.Options & BcPack) != 0)
+        if ((request.Options & ~(Zlib | BcPack | PageDestination | MemorySource)) != 0
+            || (request.Options & BcPack) != 0)
         {
             return NotImplemented;
         }
 
-        if (request.Source == 0 || request.Destination == 0 || request.SourceSize > int.MaxValue || request.DestinationSize > int.MaxValue)
+        if (request.Source == 0 || request.Destination == 0 || request.SourceSize > int.MaxValue
+            || request.DestinationSize > int.MaxValue)
         {
             return InvalidArgument;
         }
@@ -594,7 +420,10 @@ public static unsafe class DirectStorageModule
 
             if (!compressed)
             {
-                return PhysicalPageModule.WritePhysical((nuint*)request.Destination, request.PageOffset & 0xFFFF, source) ? 0 : InvalidArgument;
+                return PhysicalPageModule.WritePhysical((nuint*)request.Destination, request.PageOffset & 0xFFFF,
+                    source)
+                    ? 0
+                    : InvalidArgument;
             }
 
             using var input = new MemoryStream(source, false);
@@ -620,7 +449,10 @@ public static unsafe class DirectStorageModule
                 return InvalidData;
             }
 
-            return !physical || PhysicalPageModule.WritePhysical((nuint*)request.Destination, request.PageOffset & 0xFFFF, output[..written]) ? 0 : InvalidArgument;
+            return !physical || PhysicalPageModule.WritePhysical((nuint*)request.Destination,
+                request.PageOffset & 0xFFFF, output[..written])
+                ? 0
+                : InvalidArgument;
         }
         finally
         {
@@ -637,7 +469,7 @@ public static unsafe class DirectStorageModule
             return 0;
         }
 
-        if (file == 0 || request.Offset > (ulong)long.MaxValue - (ulong)destination.Length)
+        if (file == 0 || request.Offset > long.MaxValue - (ulong)destination.Length)
         {
             return InvalidArgument;
         }
@@ -732,5 +564,189 @@ public static unsafe class DirectStorageModule
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, void>)&Close;
 
         return (nint)table;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeObject
+    {
+        public nint Table;
+        public nint State;
+        public int References;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 0x20)]
+    private struct QueueDescription
+    {
+        [FieldOffset(0)] public ulong SourceType;
+        [FieldOffset(8)] public ushort Capacity;
+        [FieldOffset(10)] public sbyte Priority;
+        [FieldOffset(16)] public nint Name;
+        [FieldOffset(24)] public ulong Unknown;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 0x48)]
+    private struct Request
+    {
+        [FieldOffset(0)] public ulong Options;
+        [FieldOffset(8)] public nint Destination;
+        [FieldOffset(16)] public ulong PageOffset;
+        [FieldOffset(24)] public uint DestinationSize;
+        [FieldOffset(32)] public nint Source;
+        [FieldOffset(40)] public ulong Offset;
+        [FieldOffset(48)] public uint SourceSize;
+        [FieldOffset(52)] public uint IntermediateSize;
+        [FieldOffset(56)] public ulong Tag;
+        [FieldOffset(64)] public nint Name;
+    }
+
+    private sealed record StatusArray(int[] Entries);
+
+    private sealed record Command(Request Request, nint File, nint Status, uint Index);
+
+    private sealed class StorageQueue : IDisposable
+    {
+        private readonly int _capacity;
+        private readonly object _gate = new();
+        private readonly List<Command> _pending = [];
+        private readonly Queue<Command> _submitted = new();
+        private readonly Thread _worker;
+        private bool _closed;
+        private int _firstFailure;
+        private bool _running;
+
+        public StorageQueue(int capacity)
+        {
+            _capacity = Math.Max(2, capacity);
+            _worker = new Thread(Work) { IsBackground = true, Name = "irx-storage" };
+            _worker.Start();
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (!_closed)
+                {
+                    _closed = true;
+
+                    foreach (var command in _pending)
+                    {
+                        Discard(command);
+                    }
+
+                    _pending.Clear();
+
+                    while (_submitted.TryDequeue(out var command))
+                    {
+                        Discard(command);
+                    }
+
+                    Monitor.PulseAll(_gate);
+                }
+            }
+
+            _worker.Join();
+        }
+
+        public void Enqueue(Command command)
+        {
+            lock (_gate)
+            {
+                while (!_closed && _pending.Count + _submitted.Count + (_running ? 1 : 0) >= _capacity - 1)
+                {
+                    SubmitCore();
+                    Monitor.Wait(_gate);
+                }
+
+                if (_closed)
+                {
+                    Discard(command);
+
+                    return;
+                }
+
+                _pending.Add(command);
+
+                if (_pending.Count >= Math.Max(1, _capacity / 2))
+                {
+                    SubmitCore();
+                }
+            }
+        }
+
+        private void SubmitCore()
+        {
+            foreach (var command in _pending)
+            {
+                _submitted.Enqueue(command);
+            }
+
+            _pending.Clear();
+            Monitor.PulseAll(_gate);
+        }
+
+        public void Submit()
+        {
+            lock (_gate)
+            {
+                if (!_closed)
+                {
+                    SubmitCore();
+                }
+            }
+        }
+
+        private void Work()
+        {
+            while (true)
+            {
+                Command command;
+
+                lock (_gate)
+                {
+                    while (!_closed && _submitted.Count == 0)
+                    {
+                        Monitor.Wait(_gate);
+                    }
+
+                    if (_closed)
+                    {
+                        return;
+                    }
+
+                    command = _submitted.Dequeue();
+                    _running = true;
+                }
+
+                try
+                {
+                    if (command.Status != 0)
+                    {
+                        var array = State<StatusArray>(command.Status);
+                        Volatile.Write(ref array.Entries[command.Index], _firstFailure);
+                        _firstFailure = 0;
+                    }
+                    else
+                    {
+                        var result = Execute(command.Request, command.File);
+
+                        if (result < 0 && _firstFailure == 0)
+                        {
+                            _firstFailure = result;
+                        }
+                    }
+                }
+                finally
+                {
+                    Drop(command);
+
+                    lock (_gate)
+                    {
+                        _running = false;
+                        Monitor.PulseAll(_gate);
+                    }
+                }
+            }
+        }
     }
 }

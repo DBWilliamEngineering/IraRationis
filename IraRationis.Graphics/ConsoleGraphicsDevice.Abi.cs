@@ -63,6 +63,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     };
 
     private static readonly Dictionary<int, string> DescriptorHeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc", [9] = "GetCPUDescriptorHandleForHeapStart", [10] = "GetGPUDescriptorHandleForHeapStart" };
+    private static readonly Dictionary<int, string> RootSignatureMethods = new() { [7] = "GetDevice" };
     private static readonly Dictionary<int, string> HeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc" };
     private static readonly Dictionary<int, string> FenceMethods = new()
     {
@@ -84,7 +85,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             table == _queueNew ? "queue-new" : table == _allocatorTable ? "allocator" :
             table == _fenceTable ? "fence" : table == _listOld ? "list-old" : table == _listNew ? "list-new" :
             table == _resourceTable ? "resource" : table == _heapTable ? "heap" :
-            table == _descriptorHeapTable ? "descriptor-heap" :
+            table == _descriptorHeapTable ? "descriptor-heap" : table == _rootSignatureTable ? "root-signature" :
             table == _dxgiDeviceTable ? "dxgi-device" : table == _dxgiAdapterTable ? "dxgi-adapter" :
             table == _dxgiFactoryTable ? "dxgi-factory" : table == _dxgiOutputTable ? "dxgi-output" : "unknown-object";
     }
@@ -99,6 +100,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             "resource" => ResourceMethods,
             "heap" => HeapMethods,
             "descriptor-heap" => DescriptorHeapMethods,
+            "root-signature" => RootSignatureMethods,
             "fence" => FenceMethods,
             "allocator" => AllocatorMethods,
             "dxgi-device" => DxgiDeviceMethods,
@@ -143,30 +145,113 @@ public static unsafe partial class ConsoleGraphicsDevice
         return methods != null && methods.TryGetValue(index, out var method) ? method : null;
     }
 
-    private static (nint Table, int Count)[] AllTables()
+    private static (string Name, nint Table, int Count)[] AllTables(nint deviceTable)
     {
-        return [(_deviceTable, 160), (_queueOld, 36), (_queueNew, 36), (_listOld, 160), (_listNew, 160),
-            (_allocatorTable, 24), (_fenceTable, 24), (_resourceTable, 32), (_heapTable, 24), (_descriptorHeapTable, 24),
-            (_dxgiDeviceTable, 32), (_dxgiAdapterTable, 24), (_dxgiFactoryTable, 32), (_dxgiOutputTable, 32)];
+        return
+        [
+            ("device", deviceTable, 160),
+            ("queue-old", _queueOld, 36),
+            ("queue-new", _queueNew, 36),
+            ("list-old", _listOld, 160),
+            ("list-new", _listNew, 160),
+            ("allocator", _allocatorTable, 24),
+            ("fence", _fenceTable, 24),
+            ("resource", _resourceTable, 32),
+            ("heap", _heapTable, 24),
+            ("descriptor-heap", _descriptorHeapTable, 24),
+            ("root-signature", _rootSignatureTable, 24),
+            ("dxgi-device", _dxgiDeviceTable, 32),
+            ("dxgi-adapter", _dxgiAdapterTable, 24),
+            ("dxgi-factory", _dxgiFactoryTable, 32),
+            ("dxgi-output", _dxgiOutputTable, 32)
+        ];
     }
 
-    // Preflight constructs tables only. No graphics device, title mapping or title callbacks.
-    public static void Preflight(TextWriter writer, string reportDirectory)
+    private static void ValidateTables((string Name, nint Table, int Count)[] tables)
     {
+        foreach (var (name, table, count) in tables)
+        {
+            if (table == 0)
+            {
+                throw new InvalidOperationException($"ABI table '{name}' has not been initialized.");
+            }
+            if (count <= 0 || count > 160)
+            {
+                throw new InvalidOperationException($"Invalid ABI table size for '{name}': {count}.");
+            }
+            for (var index = 0; index < count; index++)
+            {
+                if (((nint*)table)[index] == 0)
+                {
+                    throw new InvalidOperationException($"Null ABI slot {name} 0x{index * 8:X}.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateRootSignatureRegistration(nint* device)
+    {
+        if (device[16] != (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature)
+        {
+            throw new InvalidOperationException("ABI device slot 0x80 (CreateRootSignature) is not registered correctly.");
+        }
+    }
+
+    // GPU-independent regression check; called before creating the host device in graphics-probe.
+    internal static void VerifyAbiInitialization()
+    {
+        try
+        {
+            ValidateTables([("test-missing-table", 0, 24)]);
+            throw new InvalidOperationException("ABI validation accepted a null table.");
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "ABI table 'test-missing-table' has not been initialized.")
+        {
+            // Expected: report the missing interface before reading any pointer.
+        }
+
+        var emptySlot = (nint)0;
+        try
+        {
+            ValidateTables([("test-null-slot", (nint)(&emptySlot), 1)]);
+            throw new InvalidOperationException("ABI validation accepted a null slot.");
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "Null ABI slot test-null-slot 0x0.")
+        {
+            // Expected: report the interface and slot offset.
+        }
+
         lock (Gate)
         {
             if (_deviceTable == 0)
             {
                 InitializeTables();
             }
+            ValidateTables(AllTables(_deviceTable));
+            ValidateRootSignatureRegistration((nint*)_deviceTable);
+        }
+    }
+
+    // Preflight constructs tables only. No graphics device, title mapping or title callbacks.
+    public static void Preflight(TextWriter writer, string reportDirectory)
+    {
+        (string Name, nint Table, int Count)[] tables;
+        lock (Gate)
+        {
+            if (_deviceTable == 0)
+            {
+                InitializeTables();
+            }
+            tables = AllTables(_deviceTable);
+            ValidateTables(tables);
+            ValidateRootSignatureRegistration((nint*)_deviceTable);
         }
         Directory.CreateDirectory(reportDirectory);
         _evidencePath = Path.Combine(reportDirectory, "blocking-slots.tsv");
         var reportPath = Path.Combine(reportDirectory, "graphics-abi.tsv");
         var rows = new List<string> { "interface\tslot\toffset\tmethod\tstatus" };
-        foreach (var (table, count) in AllTables())
+        foreach (var (kind, table, count) in tables)
         {
-            var kind = TableKind(table);
             var registered = 0;
             var known = 0;
             var knownRegistered = 0;
@@ -191,8 +276,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                         knownRegistered++;
                     }
                 }
-                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" ||
-                    (kind == "device" && index is 14 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
+                var cpuOnly = kind == "descriptor-heap" || kind == "resource" || kind == "heap" || kind == "root-signature" ||
+                    (kind == "device" && index is 14 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71 or 76 or 127 or 133);
                 var status = !bound ? "missing" : cpuOnly ? "registered-cpu-only" : "registered-unverified";
                 rows.Add($"{kind}\t{index}\t0x{index * 8:X}\t{method ?? "(unnamed)"}\t{status}");
             }
@@ -209,7 +294,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     continue;
                 }
-                var current = AllTables().FirstOrDefault(item => TableKind(item.Table) == fields[1]);
+                var current = tables.FirstOrDefault(item => item.Name == fields[1]);
                 var status = current.Table != 0 && slot >= 0 && slot < current.Count && ((nint*)current.Table)[slot] != MissingAddress(slot) ? "now registered (unverified)" : "still missing/unknown";
                 writer.WriteLine($"[abi] Previous blocker: {fields[1]} 0x{slot * 8:X} {fields[3]}: {status}.");
             }

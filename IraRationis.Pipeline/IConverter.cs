@@ -5,9 +5,15 @@ namespace IraRationis.Pipeline;
 
 public interface IConverter
 {
-    string Id { get; }
+    string Id
+    {
+        get;
+    }
 
-    uint Version { get; }
+    uint Version
+    {
+        get;
+    }
 
     byte[] Convert(ReadOnlySpan<byte> input);
 }

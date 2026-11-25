@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 namespace IraRationis.Memory;
 
 public enum MemoryResidency
@@ -15,9 +16,9 @@ public readonly record struct MemoryPage(nuint CpuAddress, ulong GpuAddress, Mem
 public sealed class VirtualPageTable
 {
     public const ulong PageSize = 65536;
+    private readonly Lock _gate = new();
 
     private readonly Dictionary<ulong, MemoryPage> _pages = [];
-    private readonly Lock _gate = new();
 
     public void Map(ulong guestBase, nuint cpuBase, ulong gpuBase, ulong bytes, MemoryResidency residency)
     {
@@ -42,7 +43,8 @@ public sealed class VirtualPageTable
 
             for (var offset = 0UL; offset < bytes; offset += PageSize)
             {
-                _pages.Add((guestBase + offset) / PageSize, new MemoryPage(cpuBase + (nuint)offset, gpuBase + offset, residency));
+                _pages.Add((guestBase + offset) / PageSize,
+                    new MemoryPage(cpuBase + (nuint)offset, gpuBase + offset, residency));
             }
         }
     }

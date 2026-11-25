@@ -14,7 +14,8 @@ public static class AssetPolicy
 
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, RootMarker)) || File.Exists(Path.Combine(current.FullName, ".victory-root")))
+            if (File.Exists(Path.Combine(current.FullName, RootMarker))
+                || File.Exists(Path.Combine(current.FullName, ".victory-root")))
             {
                 throw new InvalidOperationException($"Game-derived data must remain outside the repository: {path}");
             }
@@ -30,7 +31,8 @@ public static class AssetPolicy
         var absolute = Path.GetFullPath(path);
         var root = Path.GetPathRoot(absolute)!;
         var relative = absolute[root.Length..];
-        var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
         var current = root;
 
         foreach (var part in parts)

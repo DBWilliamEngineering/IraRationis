@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from victory-loader/src/threads.rs and windows.rs.
+
 using System.Runtime.ExceptionServices;
 
 namespace IraRationis.Loader;
 
 public sealed class TitleThreads
 {
-    private readonly Lock _gate = new();
     private readonly List<LoadedImage> _attached = [];
+    private readonly Lock _gate = new();
     private readonly HashSet<nuint> _quiet = [];
 
     public uint RunMain(LoadedImage main, IReadOnlyList<LoadedImage> dependencies)
@@ -102,5 +103,4 @@ public sealed class TitleThreads
             return _attached.Select(image => (image, !_quiet.Contains(image.BaseAddress))).ToArray();
         }
     }
-
 }

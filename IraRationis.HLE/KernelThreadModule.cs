@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Explicit thread notifications outside the Windows loader lock.
+
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Loader;
 
@@ -9,21 +11,24 @@ public static unsafe partial class KernelThreadModule
 {
     private static TitleThreads? _threads;
 
-    private sealed record ThreadStart(nint Routine, nint Parameter);
-
     public static HleModule Create(TitleThreads threads)
     {
         _threads = threads;
 
-        return new HleModule("threads", ["kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-*", "api-ms-win-core-libraryloader-*"],
-        [
-            new HleExport("CreateThread", (nuint)(delegate* unmanaged[Stdcall]<nint, nuint, nint, nint, uint, uint*, nint>)&CreateTitleThread),
-            new HleExport("DisableThreadLibraryCalls", (nuint)(delegate* unmanaged[Stdcall]<nint, int>)&DisableThreadCalls)
-        ]);
+        return new HleModule("threads",
+            ["kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-*", "api-ms-win-core-libraryloader-*"],
+            [
+                new HleExport("CreateThread",
+                    (nuint)(delegate* unmanaged[Stdcall]<nint, nuint, nint, nint, uint, uint*, nint>)
+                    &CreateTitleThread),
+                new HleExport("DisableThreadLibraryCalls",
+                    (nuint)(delegate* unmanaged[Stdcall]<nint, int>)&DisableThreadCalls)
+            ]);
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
-    private static nint CreateTitleThread(nint attributes, nuint stack, nint start, nint parameter, uint flags, uint* id)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static nint CreateTitleThread(nint attributes, nuint stack, nint start, nint parameter, uint flags,
+        uint* id)
     {
         try
         {
@@ -54,7 +59,7 @@ public static unsafe partial class KernelThreadModule
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static uint ThreadEntry(nint parameter)
     {
         try
@@ -83,7 +88,7 @@ public static unsafe partial class KernelThreadModule
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int DisableThreadCalls(nint module)
     {
         try
@@ -112,7 +117,8 @@ public static unsafe partial class KernelThreadModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint CreateThread(nint attributes, nuint stack, delegate* unmanaged[Stdcall]<nint, uint> start, nint parameter, uint flags, uint* id);
+    private static partial nint CreateThread(nint attributes, nuint stack,
+        delegate* unmanaged[Stdcall]<nint, uint> start, nint parameter, uint flags, uint* id);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -121,4 +127,6 @@ public static unsafe partial class KernelThreadModule
     [LibraryImport("kernel32.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial void SetLastError(uint error);
+
+    private sealed record ThreadStart(nint Routine, nint Parameter);
 }

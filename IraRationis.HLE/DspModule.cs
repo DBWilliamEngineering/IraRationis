@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Port of Zettrox/ztrx victory-hle/src/modules/dsp.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -15,69 +16,29 @@ public static unsafe class DspModule
     {
         return new HleModule("dsp", ["chad.dll"],
         [
-            new HleExport("XDspConnectWithMaximumStreamLimit", (nuint)(delegate* unmanaged[Stdcall]<void*, uint, uint, uint, uint, Dsp**, int>)&Connect),
+            new HleExport("XDspConnectWithMaximumStreamLimit",
+                (nuint)(delegate* unmanaged[Stdcall]<void*, uint, uint, uint, uint, Dsp**, int>)&Connect),
             new HleExport("XDspDisconnect", (nuint)(delegate* unmanaged[Stdcall]<Dsp*, int>)&Disconnect),
-            new HleExport("XDspActivate", (nuint)(delegate* unmanaged[Stdcall]<Dsp*, StreamDescription*, Status**, Stream**, int>)&Activate),
+            new HleExport("XDspActivate",
+                (nuint)(delegate* unmanaged[Stdcall]<Dsp*, StreamDescription*, Status**, Stream**, int>)&Activate),
             new HleExport("XDspDeactivate", (nuint)(delegate* unmanaged[Stdcall]<Stream*, int>)&Deactivate),
-            new HleExport("XDspSubmitCommand", (nuint)(delegate* unmanaged[Stdcall]<Stream*, Command*, uint*, int>)&Submit)
+            new HleExport("XDspSubmitCommand",
+                (nuint)(delegate* unmanaged[Stdcall]<Stream*, Command*, uint*, int>)&Submit)
         ]);
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Dsp
-    {
-        public uint MaxStreams;
-        public int Active;
-    }
-
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct StreamDescription
-    {
-        public uint Kind;
-        public uint Options;
-        public uint Frames;
-        public uint Channels;
-        public uint ImpulseResponseFloats;
-        public float* ImpulseResponse;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Status
-    {
-        public uint Submitted;
-        public uint Completed;
-        public uint Reserved;
-        public int Result;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Stream
-    {
-        public Dsp* Owner;
-        public uint Frames;
-        public uint Channels;
-        public Status Status;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Command
-    {
-        public float GainLeft;
-        public float GainRight;
-        public float* Input;
-        public float* Output;
-        public ulong Reserved;
-    }
-
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int Connect(void* memory, uint length, uint irSeconds, uint maxStreams, uint maxChannels, Dsp** output)
+    private static int Connect(void* memory, uint length, uint irSeconds, uint maxStreams, uint maxChannels,
+        Dsp** output)
     {
         return ConnectCore(memory, length, irSeconds, maxStreams, maxChannels, output);
     }
 
-    public static int ConnectCore(void* memory, uint length, uint irSeconds, uint maxStreams, uint maxChannels, Dsp** output)
+    public static int ConnectCore(void* memory, uint length, uint irSeconds, uint maxStreams, uint maxChannels,
+        Dsp** output)
     {
-        if (memory == null || length is < 0x10000 or > 0x1F400000 || irSeconds > 128 || maxStreams > 256 || maxChannels > 2)
+        if (memory == null || length is < 0x10000 or > 0x1F400000 || irSeconds > 128 || maxStreams > 256
+            || maxChannels > 2)
         {
             return InvalidArgument;
         }
@@ -144,8 +105,8 @@ public static unsafe class DspModule
 
         var value = *description;
         var shape = value.Kind == 1
-            ? (value.Channels is 1 or 2) && (value.Frames is 0x200 or 0x400) && (value.Options & 4) == 0
-            : value.Channels == 1 && (value.Frames is 0x200 or 0x400 or 0x800);
+            ? value.Channels is 1 or 2 && value.Frames is 0x200 or 0x400 && (value.Options & 4) == 0
+            : value.Channels == 1 && value.Frames is 0x200 or 0x400 or 0x800;
 
         if (!shape || ((value.Options & 10) != 0 && value.Channels != 2))
         {
@@ -221,7 +182,7 @@ public static unsafe class DspModule
         // Preserve upstream's limitation: convolution format is unknown, so reverb returns silence.
         if (command->Output != null)
         {
-            NativeMemory.Clear(command->Output, (nuint)(stream->Frames * stream->Channels * sizeof(float)));
+            NativeMemory.Clear(command->Output, stream->Frames * stream->Channels * sizeof(float));
         }
 
         var next = unchecked(stream->Status.Submitted + 1);
@@ -235,5 +196,51 @@ public static unsafe class DspModule
         }
 
         return 0;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Dsp
+    {
+        public uint MaxStreams;
+        public int Active;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct StreamDescription
+    {
+        public uint Kind;
+        public uint Options;
+        public uint Frames;
+        public uint Channels;
+        public uint ImpulseResponseFloats;
+        public float* ImpulseResponse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Status
+    {
+        public uint Submitted;
+        public uint Completed;
+        public uint Reserved;
+        public int Result;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Stream
+    {
+        public Dsp* Owner;
+        public uint Frames;
+        public uint Channels;
+        public Status Status;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Command
+    {
+        public float GainLeft;
+        public float GainRight;
+        public float* Input;
+        public float* Output;
+        public ulong Reserved;
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx victory-hle/src/modules/xmem.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Graphics;
@@ -27,12 +28,16 @@ public static unsafe partial class XMemModule
         [
             new HleExport("XMemAlloc", (nuint)(delegate* unmanaged[Stdcall]<nuint, ulong, void*>)&Allocate),
             new HleExport("XMemFree", (nuint)(delegate* unmanaged[Stdcall]<void*, ulong, void>)&Free),
-            new HleExport("XMemAllocDefault", (nuint)(delegate* unmanaged[Stdcall]<nuint, ulong, void*>)&AllocateDefault),
+            new HleExport("XMemAllocDefault",
+                (nuint)(delegate* unmanaged[Stdcall]<nuint, ulong, void*>)&AllocateDefault),
             new HleExport("XMemFreeDefault", (nuint)(delegate* unmanaged[Stdcall]<void*, ulong, void>)&FreeDefault),
-            new HleExport("XMemVirtualAlloc", (nuint)(delegate* unmanaged[Stdcall]<nint, nuint, uint, ulong, uint, nint>)&AllocateVirtual),
-            new HleExport("XMemVirtualQuery", (nuint)(delegate* unmanaged[Stdcall]<nint, nint, BasicInformation*, int>)&QueryVirtual),
+            new HleExport("XMemVirtualAlloc",
+                (nuint)(delegate* unmanaged[Stdcall]<nint, nuint, uint, ulong, uint, nint>)&AllocateVirtual),
+            new HleExport("XMemVirtualQuery",
+                (nuint)(delegate* unmanaged[Stdcall]<nint, nint, BasicInformation*, int>)&QueryVirtual),
             new HleExport("XMemIsToolsMemAvailable", (nuint)(delegate* unmanaged[Stdcall]<int>)&ToolsMemoryAvailable),
-            new HleExport("XMemGetWorkingSetStatistics", (nuint)(delegate* unmanaged[Stdcall]<uint, WorkingSet*, int>)&GetWorkingSet),
+            new HleExport("XMemGetWorkingSetStatistics",
+                (nuint)(delegate* unmanaged[Stdcall]<uint, WorkingSet*, int>)&GetWorkingSet),
             new HleExport("XMemTransferMemory", (nuint)(delegate* unmanaged[Stdcall]<uint, nuint, int>)&TransferMemory)
         ]);
     }
@@ -111,7 +116,8 @@ public static unsafe partial class XMemModule
             }
         }
 
-        return VirtualAlloc2(GetCurrentProcess(), address, size, kind, protection, constrained ? &parameter : null, constrained ? 1U : 0U);
+        return VirtualAlloc2(GetCurrentProcess(), address, size, kind, protection, constrained ? &parameter : null,
+            constrained ? 1U : 0U);
     }
 
     private static nint GetHook(int index)
@@ -183,7 +189,7 @@ public static unsafe partial class XMemModule
 
             var alignment = (nuint)1 << Math.Max(4, (int)((attributes >> 24) & 31));
 
-            return NativeMemory.AlignedAlloc(size == 0 ? (nuint)1 : size, alignment);
+            return NativeMemory.AlignedAlloc(size == 0 ? 1 : size, alignment);
         }
         catch (OutOfMemoryException)
         {
@@ -278,12 +284,12 @@ public static unsafe partial class XMemModule
 
         const ulong granularity = 2UL << 20;
 
-        if (kind != 0 || (ulong)size > ulong.MaxValue - granularity + 1)
+        if (kind != 0 || size > ulong.MaxValue - granularity + 1)
         {
             return 0;
         }
 
-        var rounded = ((ulong)size + granularity - 1) & ~(granularity - 1);
+        var rounded = (size + granularity - 1) & ~(granularity - 1);
         var standard = ConsoleConfiguration.GetTitleMemory(ConsoleConfiguration.Current).Standard;
 
         while (true)
@@ -301,6 +307,31 @@ public static unsafe partial class XMemModule
             }
         }
     }
+
+    [LibraryImport("kernelbase.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint VirtualAlloc2(nint process, nint address, nuint size, uint kind, uint protection,
+        ExtendedParameter* parameters, uint count);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int VirtualFree(nint address, nuint size, uint kind);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nuint VirtualQueryEx(nint process, nint address, MemoryInformation* output, nuint length);
+
+    [LibraryImport("kernel32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint GetCurrentProcess();
+
+    [LibraryImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int GetProcessMemoryInfo(nint process, ProcessMemoryCounters* counters, uint size);
+
+    [LibraryImport("kernel32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint GetProcAddress(nint module, byte* name);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct AddressRequirements
@@ -363,28 +394,4 @@ public static unsafe partial class XMemModule
         public nuint PagefileUsage;
         public nuint PeakPagefileUsage;
     }
-
-    [LibraryImport("kernelbase.dll", SetLastError = true)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint VirtualAlloc2(nint process, nint address, nuint size, uint kind, uint protection, ExtendedParameter* parameters, uint count);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int VirtualFree(nint address, nuint size, uint kind);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nuint VirtualQueryEx(nint process, nint address, MemoryInformation* output, nuint length);
-
-    [LibraryImport("kernel32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint GetCurrentProcess();
-
-    [LibraryImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo", SetLastError = true)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int GetProcessMemoryInfo(nint process, ProcessMemoryCounters* counters, uint size);
-
-    [LibraryImport("kernel32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint GetProcAddress(nint module, byte* name);
 }

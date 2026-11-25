@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Console descriptor ABI adapted from Zettrox/ztrx crates/victory-gpu/src/descriptor.rs.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -7,76 +8,20 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private const uint DescriptorTag = 0x44585249; // IRXD: runtime-private token, not AMD hardware encoding.
+    private const uint ConstantTag = 0x43585249; // IRXC
+    private const int DescriptorRecordLimit = 1_000_000;
+    private const ulong DescriptorByteLimit = 1UL << 30;
     private static nint _descriptorHeapTable;
     private static readonly Guid DescriptorHeapId = new("8efb471d-616c-4f49-90f7-127bb763fa51");
     private static readonly Lock DescriptorGate = new();
     private static readonly Dictionary<string, ulong> DescriptorKeys = new(StringComparer.Ordinal);
     private static readonly Dictionary<ulong, DescriptorMetadata> DescriptorRecords = new();
-    private const uint DescriptorTag = 0x44585249; // IRXD: runtime-private token, not AMD hardware encoding.
-    private const uint ConstantTag = 0x43585249; // IRXC
-    private const int DescriptorRecordLimit = 1_000_000;
-    private const ulong DescriptorByteLimit = 1UL << 30;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DescriptorHeapDescription
-    {
-        public uint Kind;
-        public uint Count;
-        public uint Flags;
-        public uint Nodes;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DescriptorPlacement
-    {
-        public ulong Address;
-        public ulong Size;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DescriptorHeapObject
-    {
-        public Header Header;
-        public DescriptorHeapDescription Description;
-        public ulong Start;
-        public nint OwnedMemory;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DescriptorToken
-    {
-        public uint Tag;
-        public uint Kind;
-        public ulong Id;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ConstantDescriptor
-    {
-        public uint Tag;
-        public uint Size;
-        public ulong Address;
-    }
-
-    private sealed record DescriptorMetadata(uint Kind, nint Resource, long ResourceGeneration,
-        nint Counter, long CounterGeneration, byte[]? Description, byte[]? Extra);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DescriptorMemoryInformation
-    {
-        public nuint BaseAddress;
-        public nuint AllocationBase;
-        public uint AllocationProtect;
-        public ushort PartitionId;
-        public nuint RegionSize;
-        public uint State;
-        public uint Protect;
-        public uint Type;
-    }
 
     [LibraryImport("kernel32.dll", EntryPoint = "VirtualQuery")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nuint QueryDescriptorMemory(nint address, DescriptorMemoryInformation* information, nuint length);
+    private static partial nuint QueryDescriptorMemory(nint address, DescriptorMemoryInformation* information,
+        nuint length);
 
     [LibraryImport("kernel32.dll", EntryPoint = "ReadProcessMemory")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -104,26 +49,32 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return false;
         }
+
         var end = address + size;
         while (address < end)
         {
             var info = default(DescriptorMemoryInformation);
-            if (QueryDescriptorMemory((nint)address, &info, (nuint)sizeof(DescriptorMemoryInformation)) == 0 || info.State != 0x1000 || (info.Protect & 0x100) != 0)
+            if (QueryDescriptorMemory((nint)address, &info, (nuint)sizeof(DescriptorMemoryInformation)) == 0
+                || info.State != 0x1000 || (info.Protect & 0x100) != 0)
             {
                 return false;
             }
+
             var protection = info.Protect & 0xff;
             if (writable ? protection is not (4 or 8) : protection is not (2 or 4 or 8 or 0x20 or 0x40 or 0x80))
             {
                 return false;
             }
-            var next = (ulong)info.BaseAddress + (ulong)info.RegionSize;
+
+            var next = info.BaseAddress + (ulong)info.RegionSize;
             if (next <= address)
             {
                 return false;
             }
+
             address = next;
         }
+
         return true;
     }
 
@@ -134,23 +85,29 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             *output = 0;
         }
+
         if (description == null || DescriptorStride(description->Kind) == 0)
         {
             return InvalidArgument;
         }
-        if (iid == null || (*iid != DescriptorHeapId && *iid != UnknownId && *iid != ObjectId && *iid != ChildId && *iid != PageableId))
+
+        if (iid == null || (*iid != DescriptorHeapId && *iid != UnknownId && *iid != ObjectId && *iid != ChildId
+                            && *iid != PageableId))
         {
             return NoInterface;
         }
+
         var size = (ulong)DescriptorStride(description->Kind) * Math.Max(description->Count, 1U);
         if (size > DescriptorByteLimit)
         {
             return OutOfMemory;
         }
+
         if (output == null)
         {
             return 1;
         }
+
         nint owned = 0;
         DescriptorHeapObject* heap = null;
         try
@@ -159,12 +116,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             // unchecked read past a legacy description; the hint is not proof of ABI version.
             var placement = default(DescriptorPlacement);
             nuint read = 0;
-            var placed = _newer && ReadDescriptorMemory(-1, (nint)(description + 1), &placement, (nuint)sizeof(DescriptorPlacement), &read) != 0
-                && read == (nuint)sizeof(DescriptorPlacement) && placement.Address != 0 && placement.Size == size;
-            if (placed && (placement.Address % DescriptorStride(description->Kind) != 0 || !DescriptorRange(placement.Address, size, true)))
+            var placed = _newer && ReadDescriptorMemory(-1, (nint)(description + 1), &placement,
+                                    (nuint)sizeof(DescriptorPlacement), &read) != 0
+                                && read == (nuint)sizeof(DescriptorPlacement) && placement.Address != 0
+                                && placement.Size == size;
+            if (placed && (placement.Address % DescriptorStride(description->Kind) != 0
+                           || !DescriptorRange(placement.Address, size, true)))
             {
                 return InvalidArgument;
             }
+
             if (!placed)
             {
                 owned = AllocateBacking(size, 64);
@@ -173,6 +134,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     return OutOfMemory;
                 }
             }
+
             heap = (DescriptorHeapObject*)NativeMemory.AllocZeroed((nuint)sizeof(DescriptorHeapObject));
             heap->Header.Table = _descriptorHeapTable;
             heap->Header.References = 1;
@@ -181,13 +143,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             heap->OwnedMemory = owned;
             LiveObjects[(nint)heap] = _descriptorHeapTable;
             *output = (nint)heap;
-            Console.WriteLine($"[graphics] Descriptor heap: type={description->Kind}, count={description->Count}, stride={DescriptorStride(description->Kind)}, {(placed ? "borrowed" : "owned")} CPU backing.");
+            Console.WriteLine(
+                $"[graphics] Descriptor heap: type={description->Kind}, count={description->Count}, stride={DescriptorStride(description->Kind)}, {(placed ? "borrowed" : "owned")} CPU backing.");
+
             return 0;
         }
         catch (OutOfMemoryException)
         {
             NativeMemory.Free(heap);
             NativeMemory.AlignedFree((void*)owned);
+
             return OutOfMemory;
         }
     }
@@ -202,6 +167,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 _ = ResourcePrivateData.TryRemove(key, out _);
             }
         }
+
         _ = LiveObjects.TryRemove(value, out _);
         NativeMemory.Free((void*)value);
     }
@@ -235,41 +201,50 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return 0;
         }
+
         if (!IsResource(resource))
         {
             Environment.FailFast("[graphics] Descriptor references an unknown resource object.");
         }
+
         return ((ResourceObject*)resource)->Generation;
     }
 
     // Tokens survive raw byte copies. Non-CBV metadata is interned for the process lifetime.
     // The generation prevents recycled COM addresses from resolving to a different resource.
     // Nothing here emits a native AMD descriptor or a Windows GPU descriptor.
-    private static void RecordDescriptor(uint kind, uint heapKind, ulong handle, nint resource, nint counter, uint* description, int words, uint* extra = null, int extraWords = 0)
+    private static void RecordDescriptor(uint kind, uint heapKind, ulong handle, nint resource, nint counter,
+        uint* description, int words, uint* extra = null, int extraWords = 0)
     {
         if (handle == 0)
         {
             return;
         }
+
         var stride = DescriptorStride(heapKind);
         ValidateDescriptorRange(handle, stride, true);
         var generation = DescriptorResourceGeneration(resource);
         var counterGeneration = DescriptorResourceGeneration(counter);
         var bytes = description == null ? null : new ReadOnlySpan<byte>(description, words * sizeof(uint)).ToArray();
         var more = extra == null ? null : new ReadOnlySpan<byte>(extra, extraWords * sizeof(uint)).ToArray();
-        var key = $"{kind}:{resource:X}:{generation}:{counter:X}:{counterGeneration}:{(bytes == null ? "-" : Convert.ToHexString(bytes))}:{(more == null ? "-" : Convert.ToHexString(more))}";
+        var key =
+            $"{kind}:{resource:X}:{generation}:{counter:X}:{counterGeneration}:{(bytes == null ? "-" : Convert.ToHexString(bytes))}:{(more == null ? "-" : Convert.ToHexString(more))}";
         lock (DescriptorGate)
         {
             if (!DescriptorKeys.TryGetValue(key, out var id))
             {
                 if (DescriptorRecords.Count >= DescriptorRecordLimit)
                 {
-                    Environment.FailFast("[graphics] CPU descriptor metadata limit reached; GPU descriptor lifetime management is not implemented.");
+                    Environment.FailFast(
+                        "[graphics] CPU descriptor metadata limit reached; GPU descriptor lifetime management is not implemented.");
                 }
+
                 id = (ulong)DescriptorRecords.Count + 1;
-                DescriptorRecords.Add(id, new DescriptorMetadata(kind, resource, generation, counter, counterGeneration, bytes, more));
+                DescriptorRecords.Add(id,
+                    new DescriptorMetadata(kind, resource, generation, counter, counterGeneration, bytes, more));
                 DescriptorKeys.Add(key, id);
             }
+
             NativeMemory.Clear((void*)handle, stride);
             Unsafe.WriteUnaligned((void*)handle, new DescriptorToken { Tag = DescriptorTag, Kind = kind, Id = id });
         }
@@ -282,9 +257,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return;
         }
+
         ValidateDescriptorRange(handle, 32, true);
         NativeMemory.Clear((void*)handle, 32);
-        Unsafe.WriteUnaligned((void*)handle, new ConstantDescriptor { Tag = ConstantTag, Address = (ulong)description[0] | ((ulong)description[1] << 32), Size = description[2] });
+        Unsafe.WriteUnaligned((void*)handle,
+            new ConstantDescriptor
+                { Tag = ConstantTag, Address = description[0] | ((ulong)description[1] << 32), Size = description[2] });
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -353,10 +331,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return;
         }
+
         if (length > DescriptorByteLimit)
         {
             Environment.FailFast("[graphics] Descriptor copy exceeds the supported size.");
         }
+
         ValidateDescriptorRange(source, length, false);
         ValidateDescriptorRange(destination, length, true);
         new ReadOnlySpan<byte>((void*)source, (int)length).CopyTo(new Span<byte>((void*)destination, (int)length));
@@ -370,6 +350,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Environment.FailFast("[graphics] Invalid descriptor copy type.");
         }
+
         CopyDescriptorBytes(destination, source, (ulong)stride * count);
     }
 
@@ -380,26 +361,31 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             count += sizes == null ? 1U : sizes[index];
         }
+
         return count;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void CopyDescriptors(nint self, uint destinationRanges, ulong* destinations, uint* destinationSizes, uint sourceRanges, ulong* sources, uint* sourceSizes, uint kind)
+    private static void CopyDescriptors(nint self, uint destinationRanges, ulong* destinations, uint* destinationSizes,
+        uint sourceRanges, ulong* sources, uint* sourceSizes, uint kind)
     {
         var stride = DescriptorStride(kind);
         if (stride == 0 || destinations == null || sources == null || destinationRanges > 65536 || sourceRanges > 65536)
         {
             Environment.FailFast("[graphics] Invalid descriptor range copy.");
         }
+
         var count = DescriptorTotal(sourceRanges, sourceSizes);
         if (count != DescriptorTotal(destinationRanges, destinationSizes) || count > DescriptorByteLimit / stride)
         {
             Environment.FailFast("[graphics] Descriptor range counts differ or exceed the supported size.");
         }
+
         if (count == 0)
         {
             return;
         }
+
         // Snapshot all sources before writing any destinations, including overlapping ranges.
         var length = count * stride;
         var scratch = NativeMemory.Alloc((nuint)length);
@@ -412,6 +398,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 CopyDescriptorBytes((ulong)scratch + offset, sources[index], bytes);
                 offset += bytes;
             }
+
             offset = 0;
             for (var index = 0U; index < destinationRanges; index++)
             {
@@ -428,18 +415,25 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void RegisterDescriptorMethods(nint* device)
     {
-        if (sizeof(DescriptorHeapDescription) != 16 || sizeof(DescriptorPlacement) != 16 || sizeof(DescriptorToken) != 16 || sizeof(DescriptorMemoryInformation) != 48)
+        if (sizeof(DescriptorHeapDescription) != 16 || sizeof(DescriptorPlacement) != 16
+                                                    || sizeof(DescriptorToken) != 16
+                                                    || sizeof(DescriptorMemoryInformation) != 48)
         {
             Environment.FailFast("Descriptor ABI structure size mismatch.");
         }
-        device[14] = (nint)(delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)&CreateDescriptorHeap;
+
+        device[14] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)
+            &CreateDescriptorHeap;
         device[17] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateCbv;
         device[18] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateSrv;
         device[19] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, uint*, ulong, void>)&CreateUav;
         device[20] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateRtv;
         device[21] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateDsv;
         device[22] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateSampler;
-        device[23] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong*, uint*, uint, ulong*, uint*, uint, void>)&CopyDescriptors;
+        device[23] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong*, uint*, uint, ulong*, uint*, uint, void>)
+            &CopyDescriptors;
         device[24] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, ulong, uint, void>)&CopyDescriptorsSimple;
         device[61] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateSamplerX;
         device[70] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, uint*, ulong, void>)&CreatePlacedSrv;
@@ -449,5 +443,68 @@ public static unsafe partial class ConsoleGraphicsDevice
         heap[9] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&DescriptorHeapStart;
         heap[10] = heap[9];
         _descriptorHeapTable = (nint)heap;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DescriptorHeapDescription
+    {
+        public uint Kind;
+        public uint Count;
+        public uint Flags;
+        public uint Nodes;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DescriptorPlacement
+    {
+        public ulong Address;
+        public ulong Size;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DescriptorHeapObject
+    {
+        public Header Header;
+        public DescriptorHeapDescription Description;
+        public ulong Start;
+        public nint OwnedMemory;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DescriptorToken
+    {
+        public uint Tag;
+        public uint Kind;
+        public ulong Id;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ConstantDescriptor
+    {
+        public uint Tag;
+        public uint Size;
+        public ulong Address;
+    }
+
+    private sealed record DescriptorMetadata(
+        uint Kind,
+        nint Resource,
+        long ResourceGeneration,
+        nint Counter,
+        long CounterGeneration,
+        byte[]? Description,
+        byte[]? Extra);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DescriptorMemoryInformation
+    {
+        public nuint BaseAddress;
+        public nuint AllocationBase;
+        public uint AllocationProtect;
+        public ushort PartitionId;
+        public nuint RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
     }
 }

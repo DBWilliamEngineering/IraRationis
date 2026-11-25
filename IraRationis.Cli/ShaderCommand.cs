@@ -23,7 +23,8 @@ internal static class ShaderCommand
 
             var program = DxilProgram.Parse(part.Data);
 
-            writer.WriteLine($"kind={(ushort)program.Kind} SM={program.Major}.{program.Minor} XDAT={program.HasXdat} xbop={program.HasXbop}");
+            writer.WriteLine(
+                $"kind={(ushort)program.Kind} SM={program.Major}.{program.Minor} XDAT={program.HasXdat} xbop={program.HasXbop}");
         }
     }
 }

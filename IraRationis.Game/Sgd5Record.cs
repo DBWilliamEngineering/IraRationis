@@ -9,7 +9,7 @@ public sealed record Sgd5Record(int Offset, string? Name, byte Kind, ReadOnlyMem
 {
     public byte[]? Unpack()
     {
-        if (UnpackedSize is < 0 or > (64 << 20))
+        if (UnpackedSize is < 0 or > 64 << 20)
         {
             return null;
         }

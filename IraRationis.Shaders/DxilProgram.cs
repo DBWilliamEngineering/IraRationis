@@ -5,7 +5,14 @@ using IraRationis.Core;
 
 namespace IraRationis.Shaders;
 
-public sealed record DxilProgram(ShaderKind Kind, byte Major, byte Minor, uint DxilVersion, ReadOnlyMemory<byte> Bitcode, ReadOnlyMemory<byte> Prefix, ReadOnlyMemory<byte> Trailer)
+public sealed record DxilProgram(
+    ShaderKind Kind,
+    byte Major,
+    byte Minor,
+    uint DxilVersion,
+    ReadOnlyMemory<byte> Bitcode,
+    ReadOnlyMemory<byte> Prefix,
+    ReadOnlyMemory<byte> Trailer)
 {
     private static ReadOnlySpan<byte> LlvmBitcodeMagic
     {

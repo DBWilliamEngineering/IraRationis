@@ -10,7 +10,9 @@
 namespace irx
 {
     using Microsoft::WRL::ComPtr;
-    inline HRESULT CreateHostDevice(ComPtr<IDXGIFactory6>& factory, ComPtr<IDXGIAdapter1>& adapter, ComPtr<ID3D12Device>& device)
+
+    inline HRESULT CreateHostDevice(ComPtr<IDXGIFactory6>& factory, ComPtr<IDXGIAdapter1>& adapter,
+                                    ComPtr<ID3D12Device>& device)
     {
         auto hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
         if (FAILED(hr))
@@ -19,7 +21,8 @@ namespace irx
         }
         for (UINT index = 0; ; ++index)
         {
-            hr = factory->EnumAdapterByGpuPreference(index, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter));
+            hr = factory->EnumAdapterByGpuPreference(index, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                                                     IID_PPV_ARGS(&adapter));
             if (FAILED(hr))
             {
                 return hr;

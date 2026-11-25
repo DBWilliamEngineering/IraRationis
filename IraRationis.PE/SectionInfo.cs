@@ -3,7 +3,13 @@
 
 namespace IraRationis.PE;
 
-public sealed record SectionInfo(string Name, uint Rva, uint VirtualSize, uint FileOffset, uint FileSize, uint Characteristics)
+public sealed record SectionInfo(
+    string Name,
+    uint Rva,
+    uint VirtualSize,
+    uint FileOffset,
+    uint FileSize,
+    uint Characteristics)
 {
     public uint BackedSize
     {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Allocation sizing adapted from Zettrox/ztrx, victory-formats/src/texture.rs.
 // Based on AMD addrlib; see AMD-ADDRLIB-NOTICE.txt.
+
 using System.Numerics;
 
 namespace IraRationis.Graphics.Textures;
@@ -10,7 +11,8 @@ internal static class TextureFootprintCalculator
     private const uint MaximumExtent = 16384;
     private const uint MaximumMips = 16;
 
-    internal static bool TryCalculate(ConsoleGraphicsDevice.ResourceDescription description, out ulong size, out ulong alignment)
+    internal static bool TryCalculate(ConsoleGraphicsDevice.ResourceDescription description, out ulong size,
+        out ulong alignment)
     {
         size = 0;
         alignment = 0;
@@ -19,12 +21,14 @@ internal static class TextureFootprintCalculator
         var height = description.Height;
         var depth = (uint)description.DepthOrArraySize;
         var samples = Math.Max(1U, description.SampleCount);
-        if (dimension is < 2 or > 4 || width is 0 or > MaximumExtent || height is 0 or > MaximumExtent || depth is 0 or > MaximumExtent ||
+        if (dimension is < 2 or > 4 || width is 0 or > MaximumExtent || height is 0 or > MaximumExtent
+            || depth is 0 or > MaximumExtent ||
             !BitOperations.IsPow2(samples) || samples > 8 || (dimension == 2 && height != 1) ||
             (description.Alignment != 0 && !BitOperations.IsPow2(description.Alignment)))
         {
             return false;
         }
+
         var mips = description.MipLevels == 0
             ? (uint)(BitOperations.Log2(Math.Max((uint)width, Math.Max(height, dimension == 4 ? depth : 1U))) + 1)
             : description.MipLevels;
@@ -32,6 +36,7 @@ internal static class TextureFootprintCalculator
         {
             return false;
         }
+
         var mode = description.Layout switch
         {
             0 when dimension == 2 => 0U,
@@ -54,6 +59,7 @@ internal static class TextureFootprintCalculator
         {
             return false;
         }
+
         var (bytes, block, stencil) = description.Format switch
         {
             >= 1 and <= 4 => (16U, 1U, false),
@@ -73,28 +79,34 @@ internal static class TextureFootprintCalculator
         {
             return false;
         }
+
         try
         {
             var natural = blockLog == 0 ? 256UL : 1UL << blockLog;
             var total = PlaneSize(dimension, (uint)width, height, depth, mips, bytes, block, samples, mode, blockLog);
             if (stencil)
             {
-                total = checked(RoundUp(total, natural) + PlaneSize(dimension, (uint)width, height, depth, mips, 1, block, samples, mode, blockLog));
+                total = checked(RoundUp(total, natural) + PlaneSize(dimension, (uint)width, height, depth, mips, 1,
+                    block, samples, mode, blockLog));
             }
+
             var required = Math.Max(natural, description.Alignment);
             size = RoundUp(total, required);
             alignment = required;
+
             return size != 0;
         }
         catch (OverflowException)
         {
             size = 0;
             alignment = 0;
+
             return false;
         }
     }
 
-    private static ulong PlaneSize(uint dimension, uint width, uint height, uint depth, uint mips, uint bytes, uint block, uint samples, uint mode, int blockLog)
+    private static ulong PlaneSize(uint dimension, uint width, uint height, uint depth, uint mips, uint bytes,
+        uint block, uint samples, uint mode, int blockLog)
     {
         var chain = 0UL;
         if (blockLog == 0)
@@ -104,12 +116,14 @@ internal static class TextureFootprintCalculator
                 var pitch = RoundUp(PaddedDimension(width, mip, block), 256 / bytes);
                 chain = checked(chain + pitch * PaddedDimension(height, mip, block) * bytes);
             }
+
             return checked(chain * depth);
         }
+
         var elementLog = BitOperations.Log2(bytes);
         var sampleLog = BitOperations.Log2(samples);
         var blockBytes = 1UL << blockLog;
-        var thick = dimension == 4 && mode is (5 or 9 or 17 or 21 or 25 or 26);
+        var thick = dimension == 4 && mode is 5 or 9 or 17 or 21 or 25 or 26;
         uint tileWidth, tileHeight, tileDepth;
         if (thick)
         {
@@ -136,12 +150,14 @@ internal static class TextureFootprintCalculator
             tileHeight = 1U << (elementsLog - w);
             tileDepth = 1;
         }
+
         var slices = RoundUp(depth, tileDepth);
         if (mips == 1)
         {
             return checked(RoundUp(PaddedDimension(width, 0, block), tileWidth) *
-                RoundUp(PaddedDimension(height, 0, block), tileHeight) * bytes * samples * slices);
+                           RoundUp(PaddedDimension(height, 0, block), tileHeight) * bytes * samples * slices);
         }
+
         var tailWidth = tileWidth;
         var tailHeight = tileHeight;
         if (!thick || blockLog % 3 == 1)
@@ -152,6 +168,7 @@ internal static class TextureFootprintCalculator
         {
             tailHeight >>= 1;
         }
+
         // When thick blockLog % 3 == 2, upstream halves the tail depth,
         // which is not part of its width/height tail-entry test.
         var effective = thick ? blockLog - (blockLog - 8) / 3 : blockLog;
@@ -169,6 +186,7 @@ internal static class TextureFootprintCalculator
                 tailHeight /= 2;
             }
         }
+
         for (var mip = 0U; mip < mips; mip++)
         {
             var w = PaddedDimension(width, mip, block);
@@ -176,10 +194,13 @@ internal static class TextureFootprintCalculator
             if (w <= tailWidth && h <= tailHeight && mips - mip <= (uint)maxTail)
             {
                 chain = checked(chain + blockBytes / tileDepth);
+
                 break;
             }
+
             chain = checked(chain + RoundUp(w, tileWidth) * RoundUp(h, tileHeight) * bytes);
         }
+
         return checked(chain * slices);
     }
 
@@ -187,6 +208,7 @@ internal static class TextureFootprintCalculator
     {
         var elements = ((ulong)extent + block - 1) / block;
         var divisor = 1UL << (int)mip;
+
         return (elements + divisor - 1) / divisor;
     }
 

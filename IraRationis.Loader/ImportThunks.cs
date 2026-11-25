@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from victory-loader/src/thunks.rs.
+
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace IraRationis.Loader;
@@ -19,13 +21,6 @@ internal sealed unsafe class ImportThunks
     private readonly nint _address;
     private readonly nuint _size;
     private int _used;
-
-    private sealed class Site(MissingImport import, UnimplementedPolicy policy)
-    {
-        public MissingImport Import { get; } = import;
-        public UnimplementedPolicy Policy { get; } = policy;
-        public int Calls;
-    }
 
     internal ImportThunks(int count)
     {
@@ -46,10 +41,11 @@ internal sealed unsafe class ImportThunks
         code.Fill(0xCC);
         code[0] = 0x48;
         code[1] = 0xB9;
-        BinaryPrimitives.WriteUInt64LittleEndian(code[2..], (ulong)(nuint)GCHandle.ToIntPtr(handle));
+        BinaryPrimitives.WriteUInt64LittleEndian(code[2..], (nuint)GCHandle.ToIntPtr(handle));
         code[10] = 0x48;
         code[11] = 0xB8;
-        BinaryPrimitives.WriteUInt64LittleEndian(code[12..], (ulong)(nuint)(delegate* unmanaged[Stdcall]<nint, ulong>)&OnMissing);
+        BinaryPrimitives.WriteUInt64LittleEndian(code[12..],
+            (nuint)(delegate* unmanaged[Stdcall]<nint, ulong>)&OnMissing);
         code[20] = 0xFF;
         code[21] = 0xE0;
 
@@ -64,7 +60,7 @@ internal sealed unsafe class ImportThunks
         ExecutableMemory.Seal(_address, _size);
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static ulong OnMissing(nint handle)
     {
         try
@@ -90,5 +86,20 @@ internal sealed unsafe class ImportThunks
         }
 
         return 0;
+    }
+
+    private sealed class Site(MissingImport import, UnimplementedPolicy policy)
+    {
+        public int Calls;
+
+        public MissingImport Import
+        {
+            get;
+        } = import;
+
+        public UnimplementedPolicy Policy
+        {
+            get;
+        } = policy;
     }
 }
