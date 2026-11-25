@@ -2,7 +2,7 @@
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/dstorage.rs.
 // Ordered per-queue workers; weighted shared scheduling and BCPack are not yet ported.
 
-using System.IO.Compression;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
@@ -32,6 +32,10 @@ public static unsafe class DirectStorageModule
     private static long _stagingBytes = 32L << 20;
     private static readonly object StagingGate = new();
     private static long _staged;
+    private static long _r32NextQueue;
+    private static readonly bool R32StrictLengths =
+        Environment.GetEnvironmentVariable("IRX_STORAGE_STRICT_LENGTH") != "0";
+    private static readonly bool R32TraceStorage = Environment.GetEnvironmentVariable("IRX_STORAGE_TRACE") == "1";
 
     public static HleModule Create()
     {
@@ -355,11 +359,12 @@ public static unsafe class DirectStorageModule
         State<StorageQueue>(self).Dispose();
     }
 
-    private static int Execute(Request request, nint file)
+    private static int Execute(Request request, nint file, out int bytesWritten)
     {
+        bytesWritten = 0;
         try
         {
-            var result = ExecuteCore(request, file);
+            var result = ExecuteCore(request, file, out bytesWritten);
 
             if (result < 0)
             {
@@ -375,8 +380,9 @@ public static unsafe class DirectStorageModule
         }
     }
 
-    private static int ExecuteCore(Request request, nint file)
+    private static int ExecuteCore(Request request, nint file, out int bytesWritten)
     {
+        bytesWritten = 0;
         if ((request.Options & ~(Zlib | BcPack | PageDestination | MemorySource)) != 0
             || (request.Options & BcPack) != 0)
         {
@@ -394,7 +400,7 @@ public static unsafe class DirectStorageModule
         var sourceSize = (int)request.SourceSize;
         var destinationSize = (int)request.DestinationSize;
 
-        if (!compressed && sourceSize > destinationSize)
+        if (!compressed && !DirectStoragePayload.IsRawLengthValid(sourceSize, destinationSize, R32StrictLengths))
         {
             return InvalidArgument;
         }
@@ -402,7 +408,13 @@ public static unsafe class DirectStorageModule
         // Normal raw reads go straight to the caller's destination.
         if (!compressed && !physical)
         {
-            return Read(request, file, new Span<byte>((void*)request.Destination, sourceSize));
+            var result = Read(request, file, new Span<byte>((void*)request.Destination, sourceSize));
+            if (result >= 0)
+            {
+                bytesWritten = sourceSize;
+            }
+
+            return result;
         }
 
         var staging = file != 0 ? sourceSize : 0;
@@ -420,39 +432,33 @@ public static unsafe class DirectStorageModule
 
             if (!compressed)
             {
-                return PhysicalPageModule.WritePhysical((nuint*)request.Destination, request.PageOffset & 0xFFFF,
-                    source)
-                    ? 0
-                    : InvalidArgument;
-            }
-
-            using var input = new MemoryStream(source, false);
-            using var inflater = new ZLibStream(input, CompressionMode.Decompress);
-            var buffer = physical ? new byte[destinationSize] : null;
-            var output = physical ? buffer.AsSpan() : new Span<byte>((void*)request.Destination, destinationSize);
-            var written = 0;
-
-            while (written < output.Length)
-            {
-                var read = inflater.Read(output[written..]);
-
-                if (read == 0)
+                if (!PhysicalPageModule.WritePhysical((nuint*)request.Destination, request.PageOffset & 0xFFFF,
+                        source))
                 {
-                    break;
+                    return InvalidArgument;
                 }
 
-                written += read;
+                bytesWritten = sourceSize;
+
+                return 0;
             }
 
-            if (inflater.ReadByte() != -1)
+            var buffer = physical ? new byte[destinationSize] : null;
+            var output = physical ? buffer.AsSpan() : new Span<byte>((void*)request.Destination, destinationSize);
+            if (!DirectStoragePayload.TryInflate(source, output, R32StrictLengths, out var written))
             {
                 return InvalidData;
             }
 
-            return !physical || PhysicalPageModule.WritePhysical((nuint*)request.Destination,
-                request.PageOffset & 0xFFFF, output[..written])
-                ? 0
-                : InvalidArgument;
+            if (physical && !PhysicalPageModule.WritePhysical((nuint*)request.Destination,
+                    request.PageOffset & 0xFFFF, output[..written]))
+            {
+                return InvalidArgument;
+            }
+
+            bytesWritten = written;
+
+            return 0;
         }
         finally
         {
@@ -608,10 +614,15 @@ public static unsafe class DirectStorageModule
         private readonly int _capacity;
         private readonly object _gate = new();
         private readonly List<Command> _pending = [];
+        private readonly long _r32QueueId = Interlocked.Increment(ref _r32NextQueue);
         private readonly Queue<Command> _submitted = new();
         private readonly Thread _worker;
         private bool _closed;
         private int _firstFailure;
+        private long _r32Completed;
+        private long _r32Failed;
+        private long _r32OutputBytes;
+        private long _r32StatusCount;
         private bool _running;
 
         public StorageQueue(int capacity)
@@ -646,6 +657,30 @@ public static unsafe class DirectStorageModule
             }
 
             _worker.Join();
+        }
+
+        private static bool Sample(long count)
+        {
+            return count <= 4 || (count & (count - 1)) == 0;
+        }
+
+        private void TraceCompletion(Request request, int result, int bytesWritten, long started)
+        {
+            _r32Completed++;
+            if (result < 0)
+            {
+                _r32Failed++;
+            }
+            else
+            {
+                _r32OutputBytes += bytesWritten;
+            }
+
+            if (Sample(_r32Completed) || (result < 0 && Sample(_r32Failed)))
+            {
+                Console.Error.WriteLine(
+                    $"[dstorage] IRX-R32-REQUEST: queue={_r32QueueId}; completed={_r32Completed}; failed={_r32Failed}; options=0x{request.Options:X}; sourceBytes={request.SourceSize}; expectedBytes={request.DestinationSize}; successfulBytes={(result >= 0 ? bytesWritten : 0)}; cumulativeOutputBytes={_r32OutputBytes}; hr=0x{result:X8}; ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}; strictLengths={R32StrictLengths}.");
+            }
         }
 
         public void Enqueue(Command command)
@@ -723,16 +758,28 @@ public static unsafe class DirectStorageModule
                     if (command.Status != 0)
                     {
                         var array = State<StatusArray>(command.Status);
-                        Volatile.Write(ref array.Entries[command.Index], _firstFailure);
+                        var status = _firstFailure;
+                        Volatile.Write(ref array.Entries[command.Index], status);
                         _firstFailure = 0;
+                        if (R32TraceStorage && (Sample(++_r32StatusCount) || status < 0))
+                        {
+                            Console.Error.WriteLine(
+                                $"[dstorage] IRX-R32-STATUS: queue={_r32QueueId}; markers={_r32StatusCount}; index={command.Index}; hr=0x{status:X8}; completed={_r32Completed}; failed={_r32Failed}.");
+                        }
                     }
                     else
                     {
-                        var result = Execute(command.Request, command.File);
+                        var started = R32TraceStorage ? Stopwatch.GetTimestamp() : 0;
+                        var result = Execute(command.Request, command.File, out var bytesWritten);
 
                         if (result < 0 && _firstFailure == 0)
                         {
                             _firstFailure = result;
+                        }
+
+                        if (R32TraceStorage)
+                        {
+                            TraceCompletion(command.Request, result, bytesWritten, started);
                         }
                     }
                 }

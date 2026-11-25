@@ -14,6 +14,7 @@
         <Project Path="IraRationis.Loader/IraRationis.Loader.csproj" />
         <Project Path="IraRationis.HLE/IraRationis.HLE.csproj" />
         <Project Path="IraRationis.Graphics/IraRationis.Graphics.csproj" />
+        <Project Path="IraRationis.Media/IraRationis.Media.csproj" />
     </Folder>
     <Folder Name="/Solution Items/">
         <File Path="README.md" />
@@ -30,6 +31,7 @@
         <File Path="IraRationis.Native/PresentationProbe.cpp" />
         <File Path="IraRationis.Native/GraphicsBridge.h" />
         <File Path="IraRationis.Native/InstructionDecoder.h" />
+        <File Path="IraRationis.Native/ClzeroBatch.h" />
         <File Path="IraRationis.Native/DecoderTests.cpp" />
         <File Path="IraRationis.Native/build.ps1" />
     </Folder>
@@ -38,6 +40,8 @@
     </Folder>
     <Folder Name="/Tests/">
         <Project Path="IraRationis.Runtime.Tests/IraRationis.Runtime.Tests.csproj" />
+        <Project Path="tests/storage-contract/StorageContract.csproj" />
+        <Project Path="tests/media-baseline/MediaBaseline.csproj" />
         <File Path="tests/smoke.py" />
         <File Path="tests/native/input-memory.c" />
         <File Path="tests/native/input-memory.ps1" />

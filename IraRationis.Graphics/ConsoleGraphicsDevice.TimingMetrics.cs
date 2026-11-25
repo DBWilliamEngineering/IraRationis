@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -15,6 +16,107 @@ public static partial class ConsoleGraphicsDevice
     private static long _r25LastReport;
     private static long _r25PreviousCpuTicks;
     private static long _r25LastPresentExit;
+    private static readonly bool EnableR27ThreadMetrics =
+        Environment.GetEnvironmentVariable("IRX_PROFILE_THREADS") != "0";
+    private static readonly Dictionary<int, (long StartTicks, long CpuTicks)> R27PreviousThreads = new();
+    private static long _r27PreviousSample;
+
+    // Called only by the existing report timer under R25ReportGate. This is a
+    // sampled view of OS-thread CPU time, not a stack profiler or wait trace.
+    private static void ReportR27Threads(Process process, long now)
+    {
+        if (!EnableR27ThreadMetrics)
+        {
+            return;
+        }
+
+        try
+        {
+            var previous = _r27PreviousSample;
+            var elapsed = previous == 0 ? 0 : (now - previous) / (double)Stopwatch.Frequency;
+            var current = new Dictionary<int, (long StartTicks, long CpuTicks)>();
+            var hot = new List<(int Id, double Cores, string State)>();
+            var threads = process.Threads;
+            var missed = 0;
+            foreach (ProcessThread thread in threads)
+            {
+                try
+                {
+                    var id = thread.Id;
+                    var start = thread.StartTime.Ticks;
+                    var cpu = thread.TotalProcessorTime.Ticks;
+                    current[id] = (start, cpu);
+                    if (elapsed > 0 && R27PreviousThreads.TryGetValue(id, out var old) &&
+                        old.StartTicks == start && cpu >= old.CpuTicks)
+                    {
+                        var cores = (cpu - old.CpuTicks) / (double)TimeSpan.TicksPerSecond / elapsed;
+                        if (cores >= 0.005)
+                        {
+                            hot.Add((id, cores, thread.ThreadState.ToString()));
+                        }
+                    }
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or
+                                                      Win32Exception or NotSupportedException)
+                {
+                    // A thread can exit between enumeration and querying its times.
+                    missed++;
+                }
+                finally
+                {
+                    thread.Dispose();
+                }
+            }
+
+            R27PreviousThreads.Clear();
+            foreach (var pair in current)
+            {
+                R27PreviousThreads.Add(pair.Key, pair.Value);
+            }
+
+            _r27PreviousSample = now;
+            hot.Sort(static (left, right) => right.Cores.CompareTo(left.Cores));
+            var report = new StringBuilder(FormattableString.Invariant(
+                $"[performance] IRX-R27-THREADS: interval={elapsed:F2}s; sampled={current.Count}; missed={missed};"));
+            for (var i = 0; i < Math.Min(5, hot.Count); i++)
+            {
+                var item = hot[i];
+                report.Append(FormattableString.Invariant(
+                    $" tid={item.Id}(0x{item.Id:X}),cores={item.Cores:F3},state={item.State};"));
+            }
+
+            LogR25(report.ToString());
+        }
+        catch (Exception exception)
+        {
+            LogR25($"[performance] IRX-R27-THREADS: sample unavailable: {exception.Message}");
+        }
+    }
+
+    private static void ReportR27Resources()
+    {
+        if (!EnableR27ThreadMetrics)
+        {
+            return;
+        }
+
+        // Approximate observation only. Command states are externally synchronized
+        // by their guest owners; never enumerate their mutable lists or dereference
+        // native handles from the diagnostic thread.
+        long states = 0, segments = 0, views = 0;
+        ulong uploadBytes = 0;
+        foreach (var pair in CommandStates)
+        {
+            var state = pair.Value;
+            states++;
+            segments += state.MemoryBoundaries.Count;
+            views += state.HostViews.Count;
+            uploadBytes += Volatile.Read(ref state.UploadBytes);
+        }
+
+        LogR25(FormattableString.Invariant(
+            $"[performance] IRX-R27-RESOURCES: states={states}; segments={segments}; hostRefs={views}; listUploadMiB={uploadBytes / 1048576.0:F2}; materializedMiB={Volatile.Read(ref _hostResourceBytes) / 1048576.0:F2}; managedMiB={GC.GetTotalMemory(false) / 1048576.0:F2}; managedCommittedMiB={GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0:F2}; liveObjects={LiveObjects.Count}; approximate=True;"));
+    }
 
     private static R25Counter[] CreateR25Counters()
     {
@@ -149,6 +251,8 @@ public static partial class ConsoleGraphicsDevice
             _r25PreviousCpuTicks = cpuTicks;
             _r25LastReport = now;
             LogR25(report.ToString());
+            ReportR27Threads(process, now);
+            ReportR27Resources();
         }
         catch (Exception exception)
         {
@@ -181,6 +285,13 @@ public static partial class ConsoleGraphicsDevice
         UploadTexture,
         UtilitySubmit,
         PresentGap,
+        FrameEvent,
+        FrameEventLock,
+        FrameSleep,
+        FrameSchedule,
+        FrameStats,
+        ClockCalibration,
+        MemoryPublication,
         Count
     }
 

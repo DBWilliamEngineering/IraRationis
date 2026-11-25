@@ -19,6 +19,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int _r21RectangleInputs;
     private static int _r22IndexedInputs;
     private static int _r23IndexedInputs;
+    private static readonly bool EnableR26NarrowVertexReads =
+        Environment.GetEnvironmentVariable("IRX_NARROW_VERTEX_READS") != "0";
+    private static int _r26VertexReads;
+    private static readonly bool EnableR29SparseUpload =
+        Environment.GetEnvironmentVariable("IRX_SPARSE_INDEX_UPLOAD") == "1";
+    private static int _r29SparseUploads;
     private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<nint, R14Pipeline>>
         R14Pipelines = new();
 
@@ -556,13 +562,35 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var constants = BinaryPrimitives.ReadUInt64LittleEndian(token[8..]);
             var vertices = snapshot.Slice(R14VertexOffset, vertexBytes);
-            if (!TryReadR12Memory(upload.Vertex, vertices) ||
-                (plan != null
-                 && (!TryReadR12Memory(plan.IndexAddress, snapshot.Slice(plan.IndexOffset, plan.IndexBytes)) ||
-                     !ValidateR20Indices(plan, snapshot.Slice(plan.IndexOffset, plan.IndexBytes)))))
+            var readOffset = 0;
+            var readBytes = vertexBytes;
+            if (plan != null)
             {
-                Environment.FailFast(
-                    "[graphics] R14/R20 submission-time vertex/index source unreadable or index out of range.");
+                var indices = snapshot.Slice(plan.IndexOffset, plan.IndexBytes);
+                if (!TryReadR12Memory(plan.IndexAddress, indices))
+                {
+                    Environment.FailFast("[graphics] R26 submission-time index source unreadable.");
+                }
+
+                if (!TryGetR26VertexRange(plan, indices, out var referencedOffset, out var referencedBytes))
+                {
+                    Environment.FailFast(
+                        "[graphics] R26 submission-time index source unreadable or index out of range.");
+                }
+
+                // Only the recognized indexed-color shaders use this narrower read.
+                // They fetch vertex attributes through IA; the original VB origin,
+                // index contents, and base vertex remain unchanged.
+                if (EnableR26NarrowVertexReads && upload.IndexedColor)
+                {
+                    readOffset = referencedOffset;
+                    readBytes = referencedBytes;
+                }
+            }
+
+            if (!TryReadR12Memory(upload.Vertex + (ulong)readOffset, vertices.Slice(readOffset, readBytes)))
+            {
+                Environment.FailFast("[graphics] R26 submission-time vertex source unreadable.");
             }
 
             var requiredBytes = upload.ConstantBytes;
@@ -638,15 +666,59 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var written = default(HostRange);
+            var copiedBytes = capacity;
+            var sparse = EnableR29SparseUpload && EnableR26NarrowVertexReads &&
+                         upload.IndexedColor && plan != null;
             try
             {
-                snapshot.CopyTo(new Span<byte>(mapped, capacity));
+                var destination = new Span<byte>(mapped, capacity);
+                if (sparse && plan != null)
+                {
+                    // The recognized indexed-color shaders only read IA attributes
+                    // and their CBV. Preserve original GPU addresses and index/base
+                    // vertex semantics; publish all potentially addressable CBV bytes.
+                    var constantExtent = upload.ConstantBytes;
+                    var vertexOffset = checked(R14VertexOffset + readOffset);
+                    snapshot.Slice(vertexOffset, readBytes).CopyTo(destination.Slice(vertexOffset, readBytes));
+                    snapshot.Slice(plan.IndexOffset, plan.IndexBytes)
+                        .CopyTo(destination.Slice(plan.IndexOffset, plan.IndexBytes));
+                    snapshot.Slice(upload.ConstantOffset, constantExtent)
+                        .CopyTo(destination.Slice(upload.ConstantOffset, constantExtent));
+                    copiedBytes = checked(readBytes + plan.IndexBytes + constantExtent);
+                }
+                else
+                {
+                    snapshot.CopyTo(destination);
+                }
+
+                // D3D12 Unmap takes one contiguous written range, so conservatively
+                // report the enclosing range even when copies were sparse.
                 written.End = (nuint)capacity;
             }
             finally
             {
                 ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(upload.Host, 9))
                     (upload.Host, 0, &written);
+            }
+
+            if (sparse)
+            {
+                var observation = Interlocked.Increment(ref _r29SparseUploads);
+                if (observation <= 4 || (observation & (observation - 1)) == 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[performance] IRX-R29-UPLOAD: observation={observation}; copiedBytes={copiedBytes}; allocatedBytes={capacity}.");
+                }
+            }
+
+            if (plan != null && upload.IndexedColor && EnableR26NarrowVertexReads)
+            {
+                var observation = Interlocked.Increment(ref _r26VertexReads);
+                if (observation <= 4 || (observation & (observation - 1)) == 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[performance] IRX-R26-VERTEX: observation={observation}; guestReadBytes={readBytes}; fullViewBytes={vertexBytes}; offset={readOffset}; hostUploadBytes={capacity}.");
+                }
             }
 
             TraceR24(

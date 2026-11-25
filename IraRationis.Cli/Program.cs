@@ -20,6 +20,11 @@ internal static class Program
 
         try
         {
+            if (args.Length > 0 && args[0] == "media-probe")
+            {
+                return MediaProbeCommand.Execute(args[1..], Console.Out);
+            }
+
             if (args is ["graphics-probe"])
             {
                 return DeviceProbe.Execute(Console.Out);
@@ -91,7 +96,7 @@ internal static class Program
                                               or UnauthorizedAccessException or ArgumentException or OverflowException
                                               or InvalidOperationException or PlatformNotSupportedException
                                               or Win32Exception or DllNotFoundException or EntryPointNotFoundException
-                                              or BadImageFormatException)
+                                              or BadImageFormatException or TimeoutException)
         {
             Console.Error.WriteLine(exception.Message);
 
@@ -174,6 +179,7 @@ internal static class Program
         writer.WriteLine("       irx present-probe [--seconds 1..120] [--fps 1..240] [--gpu-upload]");
         writer.WriteLine("       irx memory-probe [--mib 1..256] [--iterations 1..100] [--adapter N]");
         writer.WriteLine("       irx memory-probe --self-test");
+        writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play]");
         writer.WriteLine("       irx inspect [file] | irx shader <file> | irx archive <file>");
         writer.WriteLine(
             "Omit the run path to open the Windows executable picker. Run only trusted title files; this is not a sandbox.");

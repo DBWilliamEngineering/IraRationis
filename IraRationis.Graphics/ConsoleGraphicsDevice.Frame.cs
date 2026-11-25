@@ -17,6 +17,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static long _firstFrameTick;
     private static long _frameToken;
     private static int _reportedEventOffsets;
+    private static int _r26FrameWaits;
 
     private static long IntervalTicks(uint microseconds)
     {
@@ -43,6 +44,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int ScheduleFrameEvent(nint self, uint kind, uint offset, nint list, uint flags)
     {
+        using var timing = BeginR25Timing(R25Stage.FrameSchedule);
         // Like upstream, all event kinds are scheduled at the tick; offsets are not yet modeled.
         if ((offset != 0 || list != 0 || flags != 0) && Interlocked.Exchange(ref _reportedEventOffsets, 1) == 0)
         {
@@ -56,10 +58,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int WaitFrameEvent(nint self, uint kind, uint timeoutMs, nint list, uint flags, ulong* token)
     {
+        using var timing = BeginR25Timing(R25Stage.FrameEvent);
         var index = (int)Math.Min(kind, 2U);
         var timeout = timeoutMs * (Stopwatch.Frequency / 1000.0);
+        var lockStarted = Stopwatch.GetTimestamp();
         lock (FrameEventGates[index])
         {
+            if (EnableR25Timing)
+            {
+                RecordR25Timing(R25Stage.FrameEventLock, Stopwatch.GetTimestamp() - lockStarted);
+            }
+
             long tick;
             long delay;
             lock (FrameGate)
@@ -78,7 +87,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var timedOut = delay > timeout;
             var sleepTicks = timedOut ? (long)timeout : delay;
-            SleepFrameTicks(sleepTicks);
+            var started = Stopwatch.GetTimestamp();
+            using (BeginR25Timing(R25Stage.FrameSleep))
+            {
+                SleepFrameTicks(sleepTicks);
+            }
 
             if (!timedOut)
             {
@@ -94,6 +107,18 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (token != null)
                 {
                     *token = frame;
+                }
+            }
+
+            if (EnableR25Timing)
+            {
+                var observation = Interlocked.Increment(ref _r26FrameWaits);
+                if (observation <= 4 || (observation & (observation - 1)) == 0)
+                {
+                    var actualMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                    var requestedMs = sleepTicks * 1000.0 / Stopwatch.Frequency;
+                    LogR25(FormattableString.Invariant(
+                        $"[performance] IRX-R26-FRAME: observation={observation}; kind={kind}; timeoutMs={timeoutMs}; flags=0x{flags:X}; requestedSleepMs={requestedMs:F3}; elapsedMs={actualMs:F3}; timedOut={timedOut}."));
                 }
             }
 
@@ -133,6 +158,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int FrameStatistics(nint self, ulong token, uint kinds, uint* count, nint output)
     {
+        using var timing = BeginR25Timing(R25Stage.FrameStats);
         // Upstream exposes no statistics yet; do not manufacture present timestamps.
         if (count != null)
         {

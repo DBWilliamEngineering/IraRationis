@@ -6,6 +6,7 @@
 #include <intrin.h>
 #include <cstring>
 #include "InstructionDecoder.h"
+#include "ClzeroBatch.h"
 
 namespace
 {
@@ -21,10 +22,20 @@ namespace
     PVOID registration = nullptr;
     volatile LONG active = 0;
     volatile LONG breakpointReports = 0;
+    bool batchClzero = false;
+    bool profileInstructions = false;
     __declspec(thread) bool handling = false;
+    constexpr auto kindCount = static_cast<unsigned>(irx::Kind::Ud2) + 1;
+    __declspec(thread) ULONG64 instructionCounts[kindCount]{};
+    __declspec(thread) ULONG64 zeroedLines = 0;
+    __declspec(thread) ULONG64 regionQueries = 0;
 
-    ULONG_PTR RegionEnd(ULONG_PTR address, bool writable) noexcept
+    ULONG_PTR RegionEnd(ULONG_PTR address, bool writable, bool* ordinaryPrivate = nullptr) noexcept
     {
+        if (profileInstructions)
+        {
+            ++regionQueries;
+        }
         MEMORY_BASIC_INFORMATION info{};
         if (!VirtualQuery(reinterpret_cast<void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT || (info.
             Protect & (PAGE_GUARD | PAGE_NOACCESS)))
@@ -44,7 +55,104 @@ namespace
         {
             return 0;
         }
+        if (ordinaryPrivate)
+        {
+            *ordinaryPrivate = info.Type == MEM_PRIVATE && info.Protect == PAGE_READWRITE;
+        }
         return start + info.RegionSize;
+    }
+
+    void AppendText(char*& cursor, const char* value) noexcept
+    {
+        while (*value)
+        {
+            *cursor++ = *value++;
+        }
+    }
+
+    void AppendHex(char*& cursor, ULONG64 value) noexcept
+    {
+        constexpr char digits[] = "0123456789ABCDEF";
+        AppendText(cursor, "0x");
+        for (int shift = 60; shift >= 0; shift -= 4)
+        {
+            *cursor++ = digits[(value >> shift) & 0xf];
+        }
+    }
+
+    void WriteDiagnostic(const char* message, DWORD length) noexcept
+    {
+        const auto saved = GetLastError();
+        const auto standardError = GetStdHandle(STD_ERROR_HANDLE);
+        if (standardError && standardError != INVALID_HANDLE_VALUE)
+        {
+            DWORD written = 0;
+            WriteFile(standardError, message, length, &written, nullptr);
+        }
+        SetLastError(saved);
+    }
+
+    const char* KindName(irx::Kind kind) noexcept
+    {
+        switch (kind)
+        {
+        case irx::Kind::Clwb: return "CLWB";
+        case irx::Kind::Clzero: return "CLZERO";
+        case irx::Kind::ClzeroLoop: return "CLZERO_LOOP";
+        case irx::Kind::Rdpru: return "RDPRU";
+        case irx::Kind::Monitorx: return "MONITORX";
+        case irx::Kind::Mwaitx: return "MWAITX";
+        case irx::Kind::Rdpid: return "RDPID";
+        case irx::Kind::Extrq: return "EXTRQ";
+        case irx::Kind::Insertq: return "INSERTQ";
+        default: return "UNKNOWN";
+        }
+    }
+
+    void ReportInstruction(irx::Kind kind, ULONG_PTR rip, ULONG64 lines = 0) noexcept
+    {
+        if (!profileInstructions)
+        {
+            return;
+        }
+        zeroedLines += lines;
+        const auto count = ++instructionCounts[static_cast<unsigned>(kind)];
+        // First occurrence and powers of two from 1024 onward, per thread and opcode.
+        if (count != 1 && (count < 1024 || (count & (count - 1)) != 0))
+        {
+            return;
+        }
+        char message[320]{};
+        char* cursor = message;
+        AppendText(cursor, "[performance] IRX-R28-VEH: kind=");
+        AppendText(cursor, KindName(kind));
+        AppendText(cursor, " tid=");
+        AppendHex(cursor, GetCurrentThreadId());
+        AppendText(cursor, " handled=");
+        AppendHex(cursor, count);
+        AppendText(cursor, " zeroedLines=");
+        AppendHex(cursor, zeroedLines);
+        AppendText(cursor, " regionQueries=");
+        AppendHex(cursor, regionQueries);
+        AppendText(cursor, " rip=");
+        AppendHex(cursor, rip);
+        for (unsigned i = 0; i < rangeCount; ++i)
+        {
+            if (rip >= ranges[i].start && rip < ranges[i].end)
+            {
+                AppendText(cursor, " rva=");
+                AppendHex(cursor, rip - ranges[i].start);
+                break;
+            }
+        }
+        AppendText(cursor, "\r\n");
+        WriteDiagnostic(message, static_cast<DWORD>(cursor - message));
+    }
+
+    bool Enabled(const wchar_t* name) noexcept
+    {
+        wchar_t value[4]{};
+        return GetEnvironmentVariableW(name, value, 4) == 1 && value[0] == L'1';
     }
 
     LONG Emulate(CONTEXT& ctx) noexcept
@@ -69,7 +177,8 @@ namespace
             return EXCEPTION_CONTINUE_SEARCH;
         }
         const auto size = end - rip < 16 ? end - rip : 16;
-        const auto instruction = irx::Decode(reinterpret_cast<const std::uint8_t*>(rip), size);
+        const auto code = reinterpret_cast<const std::uint8_t*>(rip);
+        const auto instruction = irx::Decode(code, size);
         if (instruction.kind == irx::Kind::Unknown || instruction.kind == irx::Kind::Ud2)
         {
             return EXCEPTION_CONTINUE_SEARCH;
@@ -90,15 +199,46 @@ namespace
         case irx::Kind::Clzero:
         case irx::Kind::ClzeroLoop:
             {
-                // Execute one cache line; the original ADD/CMP/JB preserve exact flag and loop semantics.
                 const auto address = instruction.address32 ? ctx.Rax & UINT32_MAX : ctx.Rax;
                 const auto line = static_cast<ULONG_PTR>(address) & ~static_cast<ULONG_PTR>(63);
-                if (line > UINTPTR_MAX - 64 || RegionEnd(line, true) < line + 64)
+                bool ordinaryPrivate = false;
+                if (line > UINTPTR_MAX - 64)
                 {
                     return EXCEPTION_CONTINUE_SEARCH;
                 }
-                std::memset(reinterpret_cast<void*>(line), 0, 64);
+                const auto writableEnd = RegionEnd(line, true, &ordinaryPrivate);
+                if (writableEnd < line + 64)
+                {
+                    return EXCEPTION_CONTINUE_SEARCH;
+                }
+                ULONG64 lines = 1;
+                // Only the exact prefix-free CLZERO; ADD RAX,64; CMP RAX,reg; JB loop.
+                // Private ordinary RW memory only. No batching across mapping boundaries.
+                // Leave ADD/CMP/JB to the CPU for the last iteration, preserving its flags.
+                if (batchClzero && ordinaryPrivate && instruction.kind == irx::Kind::ClzeroLoop &&
+                    instruction.length == 12 && instruction.destination != 0 && instruction.destination < 16 &&
+                    (ctx.EFlags & 0x100) == 0)
+                {
+                    const auto limit = *registers[instruction.destination];
+                    lines = irx::ClzeroBatchCount(address, limit, writableEnd);
+                    if (lines == 0)
+                    {
+                        return EXCEPTION_CONTINUE_SEARCH;
+                    }
+                    // Do not batch a write overlapping the instruction itself.
+                    const auto bytes = lines * 64;
+                    if (line < rip + instruction.length && rip < line + bytes)
+                    {
+                        lines = 1;
+                    }
+                }
+                std::memset(reinterpret_cast<void*>(line), 0, static_cast<size_t>(lines * 64));
+                if (lines > 1)
+                {
+                    ctx.Rax += (lines - 1) * 64;
+                }
                 ctx.Rip += instruction.kind == irx::Kind::ClzeroLoop ? instruction.length - 9 : instruction.length;
+                ReportInstruction(instruction.kind, rip, lines);
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
         case irx::Kind::Rdpru:
@@ -147,29 +287,12 @@ namespace
             return EXCEPTION_CONTINUE_SEARCH;
         }
         ctx.Rip += instruction.length;
+        ReportInstruction(instruction.kind, rip);
         return EXCEPTION_CONTINUE_EXECUTION;
     }
 
     // Diagnostic only: fixed stack buffer, no managed callback or heap allocation.
     // Do not modify the exception context or consume breakpoint exceptions.
-    void AppendText(char*& cursor, const char* value) noexcept
-    {
-        while (*value)
-        {
-            *cursor++ = *value++;
-        }
-    }
-
-    void AppendHex(char*& cursor, ULONG64 value) noexcept
-    {
-        constexpr char digits[] = "0123456789ABCDEF";
-        AppendText(cursor, "0x");
-        for (int shift = 60; shift >= 0; shift -= 4)
-        {
-            *cursor++ = digits[(value >> shift) & 0xf];
-        }
-    }
-
     void ReportBreakpoint(const EXCEPTION_POINTERS& exception) noexcept
     {
         if (InterlockedIncrement(&breakpointReports) > 16)
@@ -197,12 +320,7 @@ namespace
             }
         }
         AppendText(cursor, " (not handled)\r\n");
-        const auto standardError = GetStdHandle(STD_ERROR_HANDLE);
-        if (standardError && standardError != INVALID_HANDLE_VALUE)
-        {
-            DWORD written = 0;
-            WriteFile(standardError, message, static_cast<DWORD>(cursor - message), &written, nullptr);
-        }
+        WriteDiagnostic(message, static_cast<DWORD>(cursor - message));
     }
 
     LONG CALLBACK Handle(EXCEPTION_POINTERS* exception) noexcept
@@ -260,6 +378,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
         ranges[i] = input[i];
     }
     rangeCount = count;
+    batchClzero = Enabled(L"IRX_VEH_BATCH_CLZERO");
+    profileInstructions = Enabled(L"IRX_VEH_PROFILE");
     registration = AddVectoredExceptionHandler(1, Handle);
     if (!registration)
     {
@@ -267,6 +387,10 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
         return error ? error : ERROR_GEN_FAILURE;
     }
     InterlockedExchange(&active, 1);
+    const char* message = batchClzero
+                              ? "[performance] IRX-R28-VEH: CLZERO batching enabled (experimental).\r\n"
+                              : "[performance] IRX-R28-VEH: CLZERO batching disabled.\r\n";
+    WriteDiagnostic(message, static_cast<DWORD>(std::strlen(message)));
     return ERROR_SUCCESS;
 }
 

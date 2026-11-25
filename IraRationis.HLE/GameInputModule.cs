@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using IraRationis.Graphics;
 
 namespace IraRationis.HLE;
 
@@ -234,6 +235,16 @@ public static unsafe partial class GameInputModule
                     }
                 }
 
+                if (TraceInputR30)
+                {
+                    var observation = Interlocked.Increment(ref _r30CurrentReads);
+                    if (SampleInputR30(observation))
+                    {
+                        Console.WriteLine(
+                            $"[input] IRX-R30-CURRENT: count={observation}; kind=0x{kind:X}; device={requested}; selected={newest?.Index ?? -1}");
+                    }
+                }
+
                 return Hand(output, newest);
             }
         }
@@ -299,7 +310,8 @@ public static unsafe partial class GameInputModule
         nint output)
     {
         _ = NextToken(output);
-        Console.Error.WriteLine("[input] Reading callbacks are not delivered (upstream limitation).");
+        Console.Error.WriteLine(
+            $"[input] IRX-R30-CALLBACK: reading registration kind=0x{kind:X}; not delivered (existing limitation).");
 
         return 0;
     }
@@ -572,12 +584,33 @@ public static unsafe partial class GameInputModule
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static byte GetPad(nint self, PadState* output)
     {
-        if (output == null || State(self).Pad is not { } pad)
+        if (output == null)
+        {
+            return 0;
+        }
+
+        var snapshot = State(self);
+        if (snapshot.Pad is not { } pad)
         {
             return 0;
         }
 
         *output = pad;
+        if ((pad.Buttons & 32U) != 0)
+        {
+            ConsoleGraphicsDevice.RequestR31InputColorTrace();
+        }
+
+        if (TraceInputR30)
+        {
+            var observation = Interlocked.Increment(ref _r30PadReads);
+            var previous = Interlocked.Exchange(ref _r30GuestButtons, unchecked((int)pad.Buttons));
+            if (SampleInputR30(observation) || unchecked((uint)previous) != pad.Buttons)
+            {
+                Console.WriteLine(
+                    $"[input] IRX-R30-GUEST: count={observation}; slot={snapshot.Index}; buttons=0x{pad.Buttons:X8}; Y={(pad.Buttons & 32) != 0}");
+            }
+        }
 
         return 1;
     }
@@ -779,6 +812,8 @@ public static unsafe partial class GameInputModule
         {
             throw new InvalidOperationException("GameInput ABI layout mismatch.");
         }
+
+        VerifyDualSenseR30();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -861,7 +896,10 @@ public static unsafe partial class GameInputModule
         public readonly List<Registration> Registrations = [];
         public readonly List<(ulong Token, int Thread)> Running = [];
         public readonly Slot[] Slots = Enumerable.Range(0, DeviceCount).Select(_ => new Slot()).ToArray();
+        private readonly DualSenseProvider? _dualSense;
         private readonly long[] _retryAt = new long[4];
+        private bool _usingDualSense;
+
 
         public Hub()
         {
@@ -884,6 +922,11 @@ public static unsafe partial class GameInputModule
                 device->Info.Id[31] = (byte)(index + 1);
                 new ReadOnlySpan<byte>(device->Info.Id, 32).CopyTo(new Span<byte>(device->Info.RootId, 32));
                 Devices[index] = (nint)device;
+            }
+
+            if (Environment.GetEnvironmentVariable("IRX_INPUT_DUALSENSE") != "0")
+            {
+                _dualSense = new DualSenseProvider();
             }
 
             Poll();
@@ -933,6 +976,8 @@ public static unsafe partial class GameInputModule
             }
 
             var keys = ReadKeys();
+            // Prefer existing XInput devices to avoid duplicate events from a virtual controller.
+            var dualSense = pads.Any(pad => pad.HasValue) ? null : _dualSense?.Current;
             List<Notification> events;
 
             lock (Gate)
@@ -946,8 +991,17 @@ public static unsafe partial class GameInputModule
                     Update(index, pads[index].HasValue, pads[index], [], timestamp, events);
                 }
 
+                // Keep the same virtual controller identity when moving from keyboard to native HID.
                 var useFallback = !pads.Any(pad => pad.HasValue);
-                Update(Fallback, useFallback, useFallback ? FallbackPad(keys) : null, [], timestamp, events);
+                if (_usingDualSense != dualSense.HasValue)
+                {
+                    _usingDualSense = dualSense.HasValue;
+                    Console.WriteLine(
+                        $"[input] IRX-R30-ROUTE: slot={Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
+                }
+
+                Update(Fallback, useFallback, useFallback ? dualSense ?? FallbackPad(keys) : null, [], timestamp,
+                    events);
                 Update(Keyboard, true, null, keys, timestamp, events);
             }
 
@@ -975,6 +1029,11 @@ public static unsafe partial class GameInputModule
             if (previous == connected)
             {
                 return;
+            }
+
+            if (TraceInputR30)
+            {
+                Console.WriteLine($"[input] IRX-R30-DEVICE: slot={index}; connected={connected}");
             }
 
             foreach (var registration in Registrations)

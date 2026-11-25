@@ -370,11 +370,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private sealed class R19Presenter
     {
+        private readonly nint _chain;
         private readonly EventWaitHandle _event = new(false, EventResetMode.AutoReset);
+        private readonly nint _fence;
         private readonly R19FrameSlot[] _slots = [new(), new(), new()];
         private readonly uint _width, _height, _format;
-        private readonly nint _chain;
-        private readonly nint _fence;
         private ulong _nextValue;
         private bool _poisoned;
 

@@ -22,6 +22,7 @@
         <ProjectReference Include="../IraRationis.Shaders/IraRationis.Shaders.csproj" />
         <ProjectReference Include="../IraRationis.Game/IraRationis.Game.csproj" />
         <ProjectReference Include="../IraRationis.Pipeline/IraRationis.Pipeline.csproj" />
+        <ProjectReference Include="../IraRationis.Media/IraRationis.Media.csproj" />
     </ItemGroup>
     <PropertyGroup>
         <NativeBridgeDirectory>$(MSBuildProjectDirectory)/obj/native/$(Configuration)</NativeBridgeDirectory>

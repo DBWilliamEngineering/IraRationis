@@ -322,6 +322,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var value = write.Value;
         if (write.Bytes == 8 && write.Flags == 1)
         {
+            using var calibrationTiming = BeginR25Timing(R25Stage.ClockCalibration);
             ulong gpu = 0, cpu = 0;
             // ID3D12CommandQueue::GetClockCalibration is slot 17.
             var hr = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
@@ -337,7 +338,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             value = (ulong)Stopwatch.GetTimestamp();
         }
 
-        PublishMemory(write.Address, value, write.Bytes);
+        using (BeginR25Timing(R25Stage.MemoryPublication))
+        {
+            PublishMemory(write.Address, value, write.Bytes);
+        }
     }
 
     private static void VerifyCommandMemoryAbi()

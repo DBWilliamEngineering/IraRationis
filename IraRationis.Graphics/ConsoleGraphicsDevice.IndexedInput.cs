@@ -45,13 +45,26 @@ public static partial class ConsoleGraphicsDevice
 
     private static bool ValidateR20Indices(R20IndexedUploadPlan plan, ReadOnlySpan<byte> indices)
     {
+        return TryGetR26VertexRange(plan, indices, out _, out _);
+    }
+
+    // Preserve the original vertex-buffer origin and base-vertex arithmetic.
+    // The range is relative to the original vertex view, not the selected indices.
+    private static bool TryGetR26VertexRange(R20IndexedUploadPlan plan, ReadOnlySpan<byte> indices,
+        out int byteOffset, out int byteCount)
+    {
+        byteOffset = 0;
+        byteCount = 0;
         var size = plan.IndexFormat switch { 57U => 2, 42U => 4, _ => 0 };
-        if (size == 0 || plan.VertexStride == 0 || indices.Length != plan.IndexBytes || indices.Length % size != 0)
+        if (size == 0 || plan.VertexStride == 0 || plan.VertexBytes <= 0 || indices.IsEmpty ||
+            indices.Length != plan.IndexBytes || indices.Length % size != 0)
         {
             return false;
         }
 
         var vertexCount = plan.VertexBytes / plan.VertexStride;
+        var minimum = long.MaxValue;
+        var maximum = -1L;
         for (var offset = 0; offset < indices.Length; offset += size)
         {
             var raw = size == 2
@@ -62,9 +75,15 @@ public static partial class ConsoleGraphicsDevice
             {
                 return false;
             }
+
+            minimum = Math.Min(minimum, effective);
+            maximum = Math.Max(maximum, effective);
         }
 
-        return true;
+        byteOffset = checked((int)(minimum * plan.VertexStride));
+        byteCount = checked((int)((maximum - minimum + 1) * plan.VertexStride));
+
+        return byteCount > 0 && byteOffset <= plan.VertexBytes - byteCount;
     }
 
     private static void VerifyR20IndexedUpload()
@@ -90,7 +109,18 @@ public static partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R20 32-bit indexed staging regression failed.");
         }
 
-        Console.Error.WriteLine("[graphics-probe] R20 indexed staging bounds and base-vertex tests passed (CPU only).");
+        var narrow = new R20IndexedUploadPlan(0x2000, 57, 1024, 16, 1280, 6, 1286, -1);
+        if (!TryGetR26VertexRange(narrow, [3, 0, 5, 0, 4, 0], out var offset, out var count) ||
+            offset != 32 || count != 48 ||
+            TryGetR26VertexRange(narrow, [0, 0, 5, 0, 4, 0], out _, out _) ||
+            !TryGetR26VertexRange(wide, [1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0], out offset, out count) ||
+            offset != 24 || count != 48)
+        {
+            throw new InvalidOperationException("R26 referenced vertex range regression failed.");
+        }
+
+        Console.Error.WriteLine(
+            "[graphics-probe] R20/R26 indexed staging bounds, range and base-vertex tests passed (CPU only).");
     }
 
     // The vertex view is kept at its original origin so signed base-vertex

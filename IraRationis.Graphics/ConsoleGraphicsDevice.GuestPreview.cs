@@ -4,11 +4,14 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private const int R31InputColorObservations = 3;
+
     private const int R172LastColorObservation = 64;
     private static readonly Lock R16PreviewGate = new();
     private static long _r16LastPreview;
@@ -28,6 +31,10 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static string _r18LastProfile = string.Empty;
     private static readonly bool EnableR171ColorFlow =
         Environment.GetEnvironmentVariable("IRX_TRACE_COLOR_FLOW") != "0";
+    private static readonly bool EnableR31InputColorTrace =
+        Environment.GetEnvironmentVariable("IRX_R31_INPUT_COLOR_TRACE") == "1";
+    private static int _r31InputColorRequested;
+    private static readonly Dictionary<string, int> R31InputColorSamples = new(StringComparer.Ordinal);
     // Protected by the existing preview gate. No additional capture files are written.
     private static readonly Dictionary<string, int> R171ColorSamples = new(StringComparer.Ordinal);
 
@@ -78,6 +85,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
+    // Called from the input ABI. Do not touch GPU objects or take graphics locks here.
+    public static void RequestR31InputColorTrace()
+    {
+        if (EnableR31InputColorTrace)
+        {
+            _ = Interlocked.CompareExchange(ref _r31InputColorRequested, 1, 0);
+        }
+    }
+
     private static bool ReserveR171ColorSample(string stage)
     {
         var count = R171ColorSamples.GetValueOrDefault(stage);
@@ -101,14 +117,27 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void TraceR171Color(nint queue, nint target, string stage, bool cpuUploadCompleted = false)
     {
-        if (!EnableR171ColorFlow || queue == 0 || !IsResource(target))
+        if ((!EnableR171ColorFlow && !EnableR31InputColorTrace) || queue == 0 || !IsResource(target))
         {
             return;
         }
 
         lock (R16PreviewGate)
         {
-            if (!ReserveR171ColorSample(stage))
+            if (EnableR31InputColorTrace && Volatile.Read(ref _r31InputColorRequested) != 0)
+            {
+                var count = R31InputColorSamples.GetValueOrDefault(stage);
+                if (count >= R31InputColorObservations)
+                {
+                    return;
+                }
+
+                count++;
+                R31InputColorSamples[stage] = count;
+                stage = "R31-after-Y/" + stage;
+                R171ColorSamples[stage] = count;
+            }
+            else if (!EnableR171ColorFlow || !ReserveR171ColorSample(stage))
             {
                 return;
             }
@@ -184,11 +213,26 @@ public static unsafe partial class ConsoleGraphicsDevice
         var desc = resource->Description;
         var width = checked((int)desc.Width);
         var height = checked((int)desc.Height);
-        var stats = MeasureR171Color(new ReadOnlySpan<byte>(mapped, checked((int)bytes)), width, height,
-            checked((int)pitch));
+        var data = new ReadOnlySpan<byte>(mapped, checked((int)bytes));
+        var rowPitch = checked((int)pitch);
+        var stats = MeasureR171Color(data, width, height, rowPitch);
         var bounds = stats.NonBlack == 0 ? "none" : $"{stats.Left},{stats.Top}..{stats.Right},{stats.Bottom}";
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-COLOR-R17.2: stage={stage}, observation={R171ColorSamples.GetValueOrDefault(stage)}, generation={resource->Generation}, guest=0x{resource->Address:X}, size={width}x{height}, format={desc.Format}, nonBlack={stats.NonBlack}/{width * height}, nonZeroAlpha={stats.NonZeroAlpha}, maxRgb={stats.MaxRgb}, bounds={bounds}, centerRaw=0x{stats.Center:X8}.");
+        if (EnableR31InputColorTrace)
+        {
+            // Exclude row padding: compare only the actual pixel bytes.
+            using var hash = IncrementalHash.CreateHash(
+                HashAlgorithmName.SHA256);
+            for (var y = 0; y < height; y++)
+            {
+                hash.AppendData(data.Slice(y * rowPitch, width * 4));
+            }
+
+            var digest = Convert.ToHexString(hash.GetHashAndReset());
+            Console.Error.WriteLine(
+                $"[graphics] IRX-R31-COLOR: stage={stage}; observation={R171ColorSamples.GetValueOrDefault(stage)}; generation={resource->Generation}; size={width}x{height}; format={desc.Format}; sha256={digest}; qpc={Stopwatch.GetTimestamp()}");
+        }
     }
 
     private static void VerifyR171ColorStats()
