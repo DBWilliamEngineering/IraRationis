@@ -24,12 +24,7 @@ public sealed record DecodedClip(int Width, int Height, byte[] Nv12, short[] Pcm
 
     public ReadOnlySpan<byte> GetFrame(int index)
     {
-        if ((uint)index >= (uint)FrameCount)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index));
-        }
-
-        return Nv12.AsSpan(index * FrameBytes, FrameBytes);
+        return (uint)index >= (uint)FrameCount ? throw new ArgumentOutOfRangeException(nameof(index)) : Nv12.AsSpan(index * FrameBytes, FrameBytes);
     }
 }
 

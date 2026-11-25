@@ -60,7 +60,8 @@ internal static class MediaProbeCommand
     {
         var streaming = StreamingMediaSession.Play(decoder, path);
 
-        writer.WriteLine($"[media] IRX-R36: decoded={streaming.DecodedFrames}; presented={streaming.PresentedFrames}; " +
+        writer.WriteLine($"[media] IRX-R36: decoded={streaming.DecodedFrames}; presented={streaming.PresentedFrames}; "
+                         +
                          $"skipped={streaming.SkippedFrames}; cancelled={streaming.Cancelled}; " +
                          $"audioSeconds={streaming.AudioSeconds:F3}; queueCapacity={StreamingMediaSession.FrameQueueCapacity}");
 
