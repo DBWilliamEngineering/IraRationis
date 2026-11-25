@@ -782,7 +782,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast("[graphics] Invalid command list submission.");
         }
         var length = checked((int)count);
-        Span<nint> hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
+        var hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
         for (var i = 0; i < length; i++)
         {
             var list = lists[i];
