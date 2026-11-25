@@ -14,7 +14,13 @@ public static unsafe partial class MediaFoundationDecoder
     private const uint VideoStream = 0xFFFFFFFC;
     private const uint AudioStream = 0xFFFFFFFD;
     private const uint EndOfStream = 0x2;
-    private const uint UnsupportedFlags = 0x1 | 0x4 | 0x10 | 0x20 | 0x100;
+    private const uint NativeMediaTypeChanged = 0x10;
+    private const uint CurrentMediaTypeChanged = 0x20;
+    private const uint FormatChangeFlags = NativeMediaTypeChanged | CurrentMediaTypeChanged;
+    private const uint SupportedFlags = EndOfStream | FormatChangeFlags;
+    private const int MaxConsecutiveFormatEvents = 32;
+    private const uint FramesPerSecond = 30;
+    private const long TicksPerSecond = 10_000_000;
     private const int MaxVideoBytes = 128 * 1024 * 1024;
     private const int MaxAudioBytes = 48000 * 2 * 2 * 5;
     private static readonly Guid MajorType = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
@@ -24,7 +30,7 @@ public static unsafe partial class MediaFoundationDecoder
     private static readonly Guid Nv12 = new("3231564e-0000-0010-8000-00aa00389b71");
     private static readonly Guid Pcm = new("00000001-0000-0010-8000-00aa00389b71");
     private static readonly Guid FrameSize = new("1652c33d-d6b2-4012-b834-72030849a37d");
-    private static readonly Guid FrameRate = new("c459a2e8-3d2c-4e44-b132-fee5156c7bb0");
+    private static readonly Guid FrameRateAttribute = new("c459a2e8-3d2c-4e44-b132-fee5156c7bb0");
     private static readonly Guid Channels = new("37e48bf5-645e-4c5b-89de-ada9e29b696a");
     private static readonly Guid SampleRate = new("5faeeae7-0290-4c31-9e8a-c534f68d9dba");
     private static readonly Guid BitsPerSample = new("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
@@ -65,10 +71,14 @@ public static unsafe partial class MediaFoundationDecoder
                 var duration = audio.Samples.Length / 96000.0;
 
                 if (Math.Abs((double)video.Start - audio.Start) > 333334 ||
-                    Math.Abs(duration - video.Frames.Length / (double)video.FrameBytes / 30) > 1.0 / 30.0)
+                    Math.Abs(duration - video.Frames.Length / (double)video.FrameBytes / FramesPerSecond) > 1.0 / FramesPerSecond)
                 {
                     throw new InvalidDataException("The bounded player requires aligned audio and video tracks.");
                 }
+
+                Console.Error.WriteLine(
+                    $"[media] IRX-R38.1: Media Foundation decoded {video.Frames.Length / video.FrameBytes} frames; " +
+                    $"size={video.Width}x{video.Height}; PCM samples={audio.Samples.Length}.");
 
                 return new DecodedClip(video.Width, video.Height, video.Frames, audio.Samples, 48000, 2);
             }
@@ -89,32 +99,7 @@ public static unsafe partial class MediaFoundationDecoder
 
         try
         {
-            var type = CurrentType(reader, VideoStream);
-            var width = 0;
-            var height = 0;
-
-            try
-            {
-                RequireGuid(type, MajorType, VideoType);
-                RequireGuid(type, Subtype, Nv12);
-
-                var size = GetUInt64(type, FrameSize);
-                width = checked((int)(size >> 32));
-                height = checked((int)(size & uint.MaxValue));
-                var rate = GetUInt64(type, FrameRate);
-                var denominator = (uint)rate;
-
-                if (width is < 2 or > 1920 || height is < 2 or > 1080 ||
-                    (width & 1) != 0 || (height & 1) != 0 || denominator == 0 ||
-                    (rate >> 32) != 30UL * denominator)
-                {
-                    throw new InvalidDataException("Only even-sized constant 30 FPS video up to 1080p is supported.");
-                }
-            }
-            finally
-            {
-                Release(type);
-            }
+            var (width, height) = ValidateVideoType(reader);
 
             var frameBytes = checked(width * height * 3 / 2);
             var frame = new byte[frameBytes];
@@ -124,7 +109,7 @@ public static unsafe partial class MediaFoundationDecoder
 
             while (true)
             {
-                var sample = ReadSample(reader, VideoStream, out var timestamp, out var end);
+                var sample = ReadSample(reader, VideoStream, width, height, out var timestamp, out var end);
 
                 if (sample == 0)
                 {
@@ -143,7 +128,7 @@ public static unsafe partial class MediaFoundationDecoder
                         start = timestamp;
                     }
 
-                    var expected = (double)start + count * 10000000L / 30;
+                    var expected = (double)start + count * TicksPerSecond / FramesPerSecond;
 
                     if (count >= 150 || output.Length + frameBytes > MaxVideoBytes ||
                         Math.Abs((double)timestamp - expected) > 166667)
@@ -185,23 +170,7 @@ public static unsafe partial class MediaFoundationDecoder
 
         try
         {
-            var type = CurrentType(reader, AudioStream);
-
-            try
-            {
-                RequireGuid(type, MajorType, AudioType);
-                RequireGuid(type, Subtype, Pcm);
-
-                if (GetUInt32(type, Channels) != 2 || GetUInt32(type, SampleRate) != 48000 ||
-                    GetUInt32(type, BitsPerSample) != 16 || GetUInt32(type, BlockAlignment) != 4)
-                {
-                    throw new InvalidDataException("The player requires stereo 48 kHz PCM16 audio.");
-                }
-            }
-            finally
-            {
-                Release(type);
-            }
+            ValidateAudioType(reader);
 
             using var output = new MemoryStream();
             var start = 0L;
@@ -209,7 +178,7 @@ public static unsafe partial class MediaFoundationDecoder
 
             while (true)
             {
-                var sample = ReadSample(reader, AudioStream, out var timestamp, out var end);
+                var sample = ReadSample(reader, AudioStream, 0, 0, out var timestamp, out var end);
 
                 if (sample == 0)
                 {
@@ -228,7 +197,7 @@ public static unsafe partial class MediaFoundationDecoder
                         start = timestamp;
                     }
 
-                    var expected = (double)start + output.Length / 4 * 10000000L / 48000;
+                    var expected = (double)start + output.Length / 4 * TicksPerSecond / 48000;
 
                     if (Math.Abs((double)timestamp - expected) > 333334 || count >= 10000)
                     {
@@ -315,27 +284,124 @@ public static unsafe partial class MediaFoundationDecoder
         return type;
     }
 
-    private static nint ReadSample(nint reader, uint stream, out long timestamp, out bool end)
+    private static (int Width, int Height) ValidateVideoType(nint reader)
     {
-        var sample = nint.Zero;
-        var flags = 0U;
-        var actual = 0U;
-        var time = 0L;
-        var read = (delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint*, long*, nint*, int>)Slot(reader, 9);
-        var hr = read(reader, stream, 0, &actual, &flags, &time, &sample);
+        var type = CurrentType(reader, VideoStream);
 
-        if (hr < 0 || (flags & UnsupportedFlags) != 0)
+        try
         {
-            Release(sample);
-            Check(hr, "ReadSample");
+            RequireGuid(type, MajorType, VideoType);
+            RequireGuid(type, Subtype, Nv12);
 
-            throw new InvalidDataException($"Unsupported source-reader flags: 0x{flags:X}.");
+            var size = GetUInt64(type, FrameSize);
+            var width = checked((int)(size >> 32));
+            var height = checked((int)(size & uint.MaxValue));
+            var frameRateRatio = GetUInt64(type, FrameRateAttribute);
+
+            var numerator = (uint)(frameRateRatio >> 32);
+            var denominator = (uint)(frameRateRatio & uint.MaxValue);
+
+            if (width is < 2 or > 1920 || height is < 2 or > 1080 ||
+                (width & 1) != 0 || (height & 1) != 0 || denominator == 0 ||
+                numerator != (ulong)FramesPerSecond * denominator)
+            {
+                throw new InvalidDataException("Only even-sized constant 30 FPS video up to 1080p is supported.");
+            }
+
+            return (width, height);
+        }
+        finally
+        {
+            Release(type);
+        }
+    }
+
+    private static void ValidateAudioType(nint reader)
+    {
+        var type = CurrentType(reader, AudioStream);
+
+        try
+        {
+            RequireGuid(type, MajorType, AudioType);
+            RequireGuid(type, Subtype, Pcm);
+
+            if (GetUInt32(type, Channels) != 2 || GetUInt32(type, SampleRate) != 48000 ||
+                GetUInt32(type, BitsPerSample) != 16 || GetUInt32(type, BlockAlignment) != 4)
+            {
+                throw new InvalidDataException("The player requires stereo 48 kHz PCM16 audio.");
+            }
+        }
+        finally
+        {
+            Release(type);
+        }
+    }
+
+    private static nint ReadSample(nint reader, uint stream, int width, int height,
+        out long timestamp, out bool end)
+    {
+        var read = (delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint*, long*, nint*, int>)Slot(reader, 9);
+
+        for (var attempt = 0; attempt < MaxConsecutiveFormatEvents; attempt++)
+        {
+            var sample = nint.Zero;
+            var flags = 0U;
+            var actual = 0U;
+            var time = 0L;
+
+            try
+            {
+                var hr = read(reader, stream, 0, &actual, &flags, &time, &sample);
+
+                Check(hr, "ReadSample");
+
+                if ((flags & ~SupportedFlags) != 0)
+                {
+                    throw new InvalidDataException($"Unsupported source-reader flags: 0x{flags:X}.");
+                }
+
+                if ((flags & FormatChangeFlags) != 0)
+                {
+                    if (stream == VideoStream)
+                    {
+                        var (currentWidth, currentHeight) = ValidateVideoType(reader);
+
+                        if (currentWidth != width || currentHeight != height)
+                        {
+                            throw new InvalidDataException("Video dimensions changed during bounded playback.");
+                        }
+                    }
+                    else
+                    {
+                        ValidateAudioType(reader);
+                    }
+
+                    Console.Error.WriteLine($"[media] IRX-R38.1: validated format notification 0x{flags:X}.");
+                }
+
+                timestamp = time;
+                end = (flags & EndOfStream) != 0;
+
+                if (sample != 0 || end)
+                {
+                    var result = sample;
+                    sample = 0;
+
+                    return result;
+                }
+
+                if ((flags & FormatChangeFlags) == 0)
+                {
+                    throw new InvalidDataException("Source reader returned no sample or supported event.");
+                }
+            }
+            finally
+            {
+                Release(sample);
+            }
         }
 
-        timestamp = time;
-        end = (flags & EndOfStream) != 0;
-
-        return sample;
+        throw new InvalidDataException("Too many consecutive source-reader format notifications without a sample.");
     }
 
     private static nint ContiguousBuffer(nint sample)

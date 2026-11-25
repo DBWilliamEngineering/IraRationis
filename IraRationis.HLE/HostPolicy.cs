@@ -7,7 +7,7 @@ using IraRationis.PE;
 
 namespace IraRationis.HLE;
 
-public sealed partial class HostPolicy
+public sealed unsafe partial class HostPolicy
 {
     private const uint LoadLibrarySearchSystem32 = 0x00000800;
 
