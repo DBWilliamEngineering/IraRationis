@@ -8,7 +8,9 @@ Independent engineering research: a C# Native AOT-oriented compatibility runtime
 
 > **Experimental compatibility runtime.** Native title execution has been demonstrated in maintainer-reported local logs. Original game frames, intro playback, menus and gameplay have not been demonstrated. First Light has reached host GPU initialization, command-list creation, frame pacing, CPU-backed resource creation and descriptor heap initialization. The latest texture allocation fix and memory benchmark still require Windows validation. No game data is included. Run only trusted, lawfully obtained executables; IRX is not a sandbox.
 >
-> Core Testing is done with GTA VI
+> This is an emulation project utilizing experimental approaches to handling unique issues
+
+**Core Testing is done with GTA VI**
 
 ## Engineering identity and differentiators
 
