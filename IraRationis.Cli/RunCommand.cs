@@ -19,6 +19,7 @@ internal static class RunCommand
         }
 
         using var logSampling = RuntimeLogSampling.Begin();
+        using var startup = RuntimeStartupObservation.Begin();
 
         var path = Path.GetFullPath(executable);
         var titleDirectory =
@@ -30,6 +31,8 @@ internal static class RunCommand
         ConsoleConfiguration.Current = console;
 
         var main = LoadMain(path, cache, config);
+
+        startup?.Mark(RuntimeStartupObservation.Phase.ImageLoaded);
 
         RuntimeState.SetMainImage(main.BaseAddress);
         RuntimeState.SetImagePath(main.BaseAddress, path);
@@ -68,6 +71,8 @@ internal static class RunCommand
 
         dependencies.MapDependencies(main.Info);
 
+        startup?.Mark(RuntimeStartupObservation.Phase.DependenciesMapped);
+
         foreach (var image in dependencies.Ordered)
         {
             var original = dependencies.GetOriginalPath(image);
@@ -100,12 +105,18 @@ internal static class RunCommand
         {
             var report = image.BindImports(dependencies, policy);
 
+            startup?.RecordBinding(report.Missing.Count);
+
             PrintReport(image, report);
         }
+
+        startup?.Mark(RuntimeStartupObservation.Phase.ImportsBound);
 
         if (bindOnly)
         {
             Console.WriteLine("Binding completed. No title code executed.");
+
+            startup?.Mark(RuntimeStartupObservation.Phase.BindOnlyComplete);
 
             return 0;
         }
@@ -122,7 +133,11 @@ internal static class RunCommand
 
         using var audioObservation = RuntimePcmObservation.Start();
 
+        startup?.Mark(RuntimeStartupObservation.Phase.EnteringNative);
+
         var result = threads.RunMain(main, dependencies.Ordered);
+
+        startup?.Mark(RuntimeStartupObservation.Phase.NativeReturned);
 
         Console.WriteLine($"Title entry returned {result} (0x{result:X8}).");
 

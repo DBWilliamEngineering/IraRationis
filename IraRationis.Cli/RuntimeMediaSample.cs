@@ -70,12 +70,20 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
             return 1;
         }
 
+        RuntimeStartupObservation.RecordSampleRequested();
+
         try
         {
-            return sample.Run();
+            var result = sample.Run();
+
+            RuntimeStartupObservation.RecordSampleResult(result == 0);
+
+            return result;
         }
         catch (Exception exception)
         {
+            RuntimeStartupObservation.RecordSampleResult(false);
+
             // No managed exception may unwind through the native sample ABI.
             try
             {
