@@ -8,6 +8,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     /// <summary>Thread-affine host-media device and bounded pipeline cache.
     /// Each presenter owns its own references and completion fence. Dispose after all presenters.
+    /// A runtime-backed context retains the runtime host device but owns a separate direct queue.
     /// This context does not own or publish guest resources.</summary>
     public sealed unsafe class MediaGpuContext : IDisposable
     {
@@ -18,14 +19,16 @@ public static unsafe partial class ConsoleGraphicsDevice
         private nint _device;
         private nint _queue;
         private bool _disposed;
+        private readonly bool _runtimeBacked;
         private int _acquisitions;
         private int _hits;
         private int _misses;
 
-        public MediaGpuContext(TextWriter report)
+        public MediaGpuContext(TextWriter report, bool useRuntimeDevice = false)
         {
             ArgumentNullException.ThrowIfNull(report);
             _report = report;
+            _runtimeBacked = useRuntimeDevice;
 
             if (!OperatingSystem.IsWindows())
             {
@@ -34,18 +37,25 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             try
             {
-                var device = nint.Zero;
-                var deviceId = DeviceId;
-                var result = D3D12CreateDevice(0, 0xC000, &deviceId, &device);
-                _device = device;
-                CheckHostResult(result, "R44 device");
-                RequireR42Object(_device, "device");
+                if (useRuntimeDevice)
+                {
+                    _device = AcquireRuntimeHostDevice();
+                }
+                else
+                {
+                    var device = nint.Zero;
+                    var deviceId = DeviceId;
+                    var deviceResult = D3D12CreateDevice(0, 0xC000, &deviceId, &device);
+                    _device = device;
+                    CheckHostResult(deviceResult, "R44 device");
+                    RequireR42Object(_device, "device");
+                }
 
                 var queue = nint.Zero;
                 var queueId = QueueId;
                 var description = default(D3D12_COMMAND_QUEUE_DESC);
                 var create = (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
-                result = create(_device, &description, &queueId, &queue);
+                var result = create(_device, &description, &queueId, &queue);
                 _queue = queue;
                 CheckHostResult(result, "R44 queue");
                 RequireR42Object(_queue, "queue");
@@ -56,6 +66,28 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ReleaseR42Object(_device);
 
                 throw;
+            }
+        }
+
+        // Use the existing runtime initialization path. A null output is its
+        // capability-query form: Create initializes the process-owned device
+        // but does not return or retain a guest interface. No guest resource is
+        // materialized or made visible by acquiring this host COM reference.
+        private static nint AcquireRuntimeHostDevice()
+        {
+            var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)ExportAddress;
+            var version = 0x00020004U;
+            var id = DeviceId;
+            var result = create(0, &version, &id, null);
+            CheckHostResult(result, "R45 runtime device initialization");
+
+            lock (Gate)
+            {
+                var device = (nint)_host;
+                RequireR42Object(device, "runtime host device");
+                AddReference(device);
+
+                return device;
             }
         }
 
@@ -147,7 +179,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             ReleaseR42Object(_device);
             _queue = 0;
             _device = 0;
-            _report.WriteLine($"[media] IRX-R44: deviceCreations=1; queueCreations=1; presenterAcquisitions={_acquisitions}; " +
+            var deviceCreations = _runtimeBacked ? 0 : 1;
+            _report.WriteLine($"[media] IRX-R45: runtimeBacked={_runtimeBacked}; contextDeviceCreations={deviceCreations}; " +
+                              $"queueCreations=1; presenterAcquisitions={_acquisitions}; " +
                               $"pipelineMisses={_misses}; pipelineHits={_hits}.");
         }
     }

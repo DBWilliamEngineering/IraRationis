@@ -85,7 +85,7 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     private int Run()
     {
         var clip = MediaFoundationDecoder.Decode(_clipPath);
-        using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out);
+        using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, useRuntimeDevice: true);
 
         // Two independent playback lifetimes prove that device and PSO reuse are real.
         // Each window, swapchain, frame ring and fence is disposed before the next begins.
