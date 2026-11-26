@@ -6,6 +6,7 @@ using IraRationis.Cli.Diagnostics;
 using IraRationis.Cli.Diagnostics.Models;
 using IraRationis.Cli.Media;
 using IraRationis.Core.Configuration;
+using IraRationis.Core.Hardware;
 using IraRationis.Graphics.Device;
 using IraRationis.HLE.Audio.Acp;
 using IraRationis.HLE.Audio.Apu;
@@ -37,6 +38,8 @@ internal static class RunCommand
 
         using var logSampling = RuntimeLogSampling.Begin();
         using var startup = RuntimeStartupObservation.Begin();
+
+        HardwareCapabilityReport.WriteTo(Console.Error, HardwareCapabilityProbe.Capture());
 
         var path = Path.GetFullPath(executable);
         var titleDirectory =

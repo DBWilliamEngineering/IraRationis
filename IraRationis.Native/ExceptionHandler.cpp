@@ -9,6 +9,9 @@
 #include "InstructionDecoder.h"
 #include "ClzeroBatch.h"
 #include "ImageRangeIndex.h"
+#include "InstructionHandlerOptions.h"
+#include "Memory/CacheLineMemoryQuery.h"
+#include "Memory/WritableCacheLineProbeResult.h"
 
 namespace
 {
@@ -28,42 +31,20 @@ namespace
     volatile LONG breakpointReports = 0;
     bool batchClzero = false;
     bool profileInstructions = false;
+    bool useResidentPageQueries = false;
+    ULONG_PTR systemPageSize = 0;
     __declspec(thread) bool handling = false;
     constexpr auto kindCount = static_cast<unsigned>(irx::Kind::Ud2) + 1;
     __declspec(thread) ULONG64 instructionCounts[kindCount]{};
     __declspec(thread) ULONG64 zeroedLines = 0;
-    __declspec(thread) ULONG64 regionQueries = 0;
+    __declspec(thread) irx::MemoryAccessStatistics memoryAccessStatistics{};
+    __declspec(thread) ULONG64 batchRuns = 0;
+    __declspec(thread) ULONG64 batchedLines = 0;
 
-    ULONG_PTR RegionEnd(ULONG_PTR address, bool writable, bool* ordinaryPrivate = nullptr) noexcept
+    ULONG_PTR QueryInstructionRegionEnd(ULONG_PTR address) noexcept
     {
-        if (profileInstructions)
-        {
-            ++regionQueries;
-        }
-        MEMORY_BASIC_INFORMATION info{};
-        if (!VirtualQuery(reinterpret_cast<void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT || (info.
-            Protect & (PAGE_GUARD | PAGE_NOACCESS)))
-        {
-            return 0;
-        }
-        const auto protection = info.Protect & 0xff;
-        const bool write = protection == PAGE_READWRITE || protection == PAGE_WRITECOPY || protection ==
-            PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
-        const bool read = write || protection == PAGE_READONLY || protection == PAGE_EXECUTE_READ;
-        if ((writable && !write) || (!writable && !read))
-        {
-            return 0;
-        }
-        const auto start = reinterpret_cast<ULONG_PTR>(info.BaseAddress);
-        if (info.RegionSize > UINTPTR_MAX - start)
-        {
-            return 0;
-        }
-        if (ordinaryPrivate)
-        {
-            *ordinaryPrivate = info.Type == MEM_PRIVATE && info.Protect == PAGE_READWRITE;
-        }
-        return start + info.RegionSize;
+        return irx::QueryAccessibleRegionEnd(address, false, nullptr,
+            profileInstructions ? &memoryAccessStatistics.instructionRegionQueries : nullptr);
     }
 
     void AppendText(char*& cursor, const char* value) noexcept
@@ -126,7 +107,7 @@ namespace
         {
             return;
         }
-        char message[320]{};
+        char message[640]{};
         char* cursor = message;
         AppendText(cursor, "[performance] IRX-R28-VEH: kind=");
         AppendText(cursor, KindName(kind));
@@ -137,7 +118,20 @@ namespace
         AppendText(cursor, " zeroedLines=");
         AppendHex(cursor, zeroedLines);
         AppendText(cursor, " regionQueries=");
-        AppendHex(cursor, regionQueries);
+        AppendHex(cursor, memoryAccessStatistics.instructionRegionQueries +
+            memoryAccessStatistics.destinationRegionQueries);
+        AppendText(cursor, " instructionQueries=");
+        AppendHex(cursor, memoryAccessStatistics.instructionRegionQueries);
+        AppendText(cursor, " destinationQueries=");
+        AppendHex(cursor, memoryAccessStatistics.destinationRegionQueries);
+        AppendText(cursor, " residentQueries=");
+        AppendHex(cursor, memoryAccessStatistics.residentPageQueries);
+        AppendText(cursor, " residentHits=");
+        AppendHex(cursor, memoryAccessStatistics.residentPageHits);
+        AppendText(cursor, " batchRuns=");
+        AppendHex(cursor, batchRuns);
+        AppendText(cursor, " batchedLines=");
+        AppendHex(cursor, batchedLines);
         AppendText(cursor, " rip=");
         AppendHex(cursor, rip);
         for (unsigned i = 0; i < rangeCount; ++i)
@@ -166,7 +160,7 @@ namespace
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
-        const auto end = RegionEnd(rip, false);
+        const auto end = QueryInstructionRegionEnd(rip);
         if (end <= rip)
         {
             return EXCEPTION_CONTINUE_SEARCH;
@@ -201,7 +195,12 @@ namespace
                 {
                     return EXCEPTION_CONTINUE_SEARCH;
                 }
-                const auto writableEnd = RegionEnd(line, true, &ordinaryPrivate);
+                const bool batchCandidate = batchClzero && instruction.kind == irx::Kind::ClzeroLoop &&
+                    instruction.length == 12 && instruction.destination != 0 && instruction.destination < 16 &&
+                    (ctx.EFlags & 0x100) == 0;
+                const auto writableEnd = irx::QueryWritableCacheLine(line, systemPageSize,
+                    useResidentPageQueries && !batchCandidate, &ordinaryPrivate,
+                    profileInstructions ? &memoryAccessStatistics : nullptr);
                 if (writableEnd < line + 64)
                 {
                     return EXCEPTION_CONTINUE_SEARCH;
@@ -210,9 +209,7 @@ namespace
                 // Only the exact prefix-free CLZERO; ADD RAX,64; CMP RAX,reg; JB loop.
                 // Private ordinary RW memory only. No batching across mapping boundaries.
                 // Leave ADD/CMP/JB to the CPU for the last iteration, preserving its flags.
-                if (batchClzero && ordinaryPrivate && instruction.kind == irx::Kind::ClzeroLoop &&
-                    instruction.length == 12 && instruction.destination != 0 && instruction.destination < 16 &&
-                    (ctx.EFlags & 0x100) == 0)
+                if (batchCandidate && ordinaryPrivate)
                 {
                     const auto limit = *registers[instruction.destination];
                     lines = irx::ClzeroBatchCount(address, limit, writableEnd);
@@ -231,6 +228,12 @@ namespace
                 if (lines > 1)
                 {
                     ctx.Rax += (lines - 1) * 64;
+
+                    if (profileInstructions)
+                    {
+                        ++batchRuns;
+                        batchedLines += lines;
+                    }
                 }
                 ctx.Rip += instruction.kind == irx::Kind::ClzeroLoop ? instruction.length - 9 : instruction.length;
                 ReportInstruction(instruction.kind, rip, lines);
@@ -333,6 +336,7 @@ namespace
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
+        const auto previousError = GetLastError();
         handling = true;
         LONG result = EXCEPTION_CONTINUE_SEARCH;
         __try
@@ -352,14 +356,17 @@ namespace
             result = EXCEPTION_CONTINUE_SEARCH;
         }
         handling = false;
+        SetLastError(previousError);
         return result;
     }
 }
 
-extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange* input, unsigned count) noexcept
+extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandlerWithOptions(const ImageRange* input, unsigned count,
+    const irx::InstructionHandlerOptions* options) noexcept
 {
     // Called once, before title threads start. Ranges immutable until process exit.
-    if (!input || count == 0 || count > MaxRanges || registration)
+    if (!input || count == 0 || count > MaxRanges || registration || !options ||
+        options->size != sizeof(irx::InstructionHandlerOptions) || (options->flags & ~irx::InstructionHandlerFlags))
     {
         return ERROR_INVALID_PARAMETER;
     }
@@ -376,9 +383,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
         return ERROR_INVALID_PARAMETER;
     }
 
+    SYSTEM_INFO systemInformation{};
+    GetSystemInfo(&systemInformation);
+    systemPageSize = systemInformation.dwPageSize;
     rangeCount = count;
-    batchClzero = Enabled(L"IRX_VEH_BATCH_CLZERO");
-    profileInstructions = Enabled(L"IRX_VEH_PROFILE");
+    batchClzero = (options->flags & irx::BatchClzero) != 0;
+    profileInstructions = (options->flags & irx::ProfileInstructions) != 0;
+    useResidentPageQueries = (options->flags & irx::ResidentPageQueries) != 0;
     registration = AddVectoredExceptionHandler(1, Handle);
     if (!registration)
     {
@@ -390,6 +401,59 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
                               ? "[performance] IRX-R28-VEH: CLZERO batching enabled (experimental).\r\n"
                               : "[performance] IRX-R28-VEH: CLZERO batching disabled.\r\n";
     WriteDiagnostic(message, static_cast<DWORD>(std::strlen(message)));
+    const char* queryMessage = useResidentPageQueries
+        ? "[performance] Resident-page CLZERO validation enabled; fresh exact-RW page query with region fallback.\r\n"
+        : "[performance] Resident-page CLZERO validation disabled; region validation active.\r\n";
+    WriteDiagnostic(queryMessage, static_cast<DWORD>(std::strlen(queryMessage)));
+    return ERROR_SUCCESS;
+}
+
+extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange* input, unsigned count) noexcept
+{
+    const irx::InstructionHandlerOptions options{
+        static_cast<std::uint32_t>(sizeof(irx::InstructionHandlerOptions)),
+        (Enabled(L"IRX_VEH_BATCH_CLZERO") ? irx::BatchClzero : 0U) |
+        (Enabled(L"IRX_VEH_PROFILE") ? irx::ProfileInstructions : 0U)
+    };
+
+    return IrxInstallHandlerWithOptions(input, count, &options);
+}
+
+extern "C" __declspec(dllexport) DWORD WINAPI IrxProbeClearCacheLine(ULONG_PTR address, DWORD residentPageQuery,
+    irx::WritableCacheLineProbeResult* result) noexcept
+{
+    if (!result || result->size != sizeof(irx::WritableCacheLineProbeResult) || residentPageQuery > 1)
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    *result = {};
+    result->size = static_cast<std::uint32_t>(sizeof(irx::WritableCacheLineProbeResult));
+    SYSTEM_INFO systemInformation{};
+    GetSystemInfo(&systemInformation);
+    irx::MemoryAccessStatistics statistics{};
+
+    __try
+    {
+        const auto validatedEnd = irx::QueryWritableCacheLine(address, systemInformation.dwPageSize,
+            residentPageQuery != 0, nullptr, &statistics);
+        result->validatedEnd = validatedEnd;
+
+        if (address <= UINTPTR_MAX - irx::CacheLineBytes && validatedEnd >= address + irx::CacheLineBytes)
+        {
+            std::memset(reinterpret_cast<void*>(address), 0, irx::CacheLineBytes);
+            result->cleared = 1;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        result->accessFaulted = 1;
+    }
+
+    result->residentPageQueries = static_cast<DWORD>(statistics.residentPageQueries);
+    result->residentPageHits = static_cast<DWORD>(statistics.residentPageHits);
+    result->regionQueries = static_cast<DWORD>(statistics.destinationRegionQueries);
+
     return ERROR_SUCCESS;
 }
 

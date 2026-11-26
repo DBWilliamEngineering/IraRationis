@@ -37,6 +37,7 @@ Check each exit status and stop on failure. Use a separate publish directory whe
 $irx = (Resolve-Path artifacts/native/irx.exe).Path
 & $irx memory-probe --self-test
 & $irx veh-probe
+& $irx instruction-probe
 python tests/smoke.py $irx
 & ./tests/native/smoke.ps1 $irx
 & ./tests/native/input-memory.ps1 $irx
@@ -45,6 +46,8 @@ dotnet msbuild tests/native/runtime-audio/RuntimeAudio.proj -t:Build
 ```
 
 The native probe scripts convert their expected synthetic success sentinel into exit code zero. For native audio launch and optional speaker acceptance, follow its [acceptance instructions](../tests/native/runtime-audio/README.md).
+
+`instruction-probe` compares baseline and resident-page destination validation on owned synthetic allocations. It checks exact cache-line writes, changing protections, guard preservation, commitment changes, page boundaries, mapped aliases, and copy-on-write isolation. It returns nonzero on a contract failure. The new instruction-memory and capability-report contracts have not yet been reported as executed; earlier passing results above do not cover these additions. Build and publish the managed executable and native DLL together because the handler now passes an explicit options ABI.
 
 ## Media and GPU acceptance
 

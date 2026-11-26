@@ -117,6 +117,61 @@ The previous unmapping/LINQ chain is no longer a material named hotspot in this 
 
 The next performance work should target repeated destination validation while preserving guard-page, protection, alias, and mapping-lifetime semantics. C# should own mapping policy and any explicitly maintained validity metadata; the native VEH boundary can consume that metadata with a validated fallback. The current image-membership index does not describe destination permissions, and direct host memory APIs can bypass managed bookkeeping. An unchecked permanent region cache would therefore be premature. Additional rendering workers or a larger VRAM budget do not remove this serial query cost.
 
+### Instruction counters and sustained input follow-up
+
+The subsequent `instruction-input-20261126-135213.log` confirms the recognized `CLZERO_LOOP` variant. Its nine instruction-counter records all belong to thread 48320 (`0xBCC0`); sampled instruction locations are image-relative addresses `0x4E8AA70`, `0x4E8AA90`, and `0x4E8AAB0`. At the last counter report, `handled=0x20000`, `zeroedLines=0x20000`, and `regionQueries=0x40000`: at least 131,072 single-line emulations, 8 MiB of cumulative clearing, and 262,144 validation queries. These are cumulative sampled checkpoints, not final totals or unique memory volume. Batching was disabled.
+
+The sustained Y press reached the guest at reading 80 (`Y=True`, physical log line 8278), followed by release at reading 100 (`Y=False`, line 8864). Startup snapshots bracket these guest transitions at approximately 232-234 and 278-280 seconds. Damon reports that the Y icon animates when pressed, while the screen stays on Account Picker. Together, the log and visible response establish input delivery and UI recognition for this flow. The next account investigation should follow the action after the press; missed short presses cannot fully explain the stall. This evidence does not identify a failing account API or prove that faster presentation would resolve it. No reading callback was registered. During the hold, reported presentation gaps average approximately 2.21 seconds; the final startup snapshot reports 109 successful presents after 298.015 seconds. The busy thread still consumes approximately one CPU core.
+
+The next controlled comparison can use the same archived executable with the existing opt-in batch path:
+
+```powershell
+$env:IRX_VEH_PROFILE = '1'
+$env:IRX_VEH_BATCH_CLZERO = '1'
+```
+
+Launch a fresh process using the startup/input procedure above and reproduce the same scene and sustained press. The switch is read when the handler is installed. Keep the binary, other settings, and observation interval consistent, and retain a separate log. Restore `IRX_VEH_BATCH_CLZERO=0` afterward unless intentionally running another batch comparison.
+
+The enabled banner establishes configuration, not eligibility or a speedup. Batching additionally requires ordinary private read/write memory and the exact supported loop; mapped or specially protected destinations remain single-line operations. Each batch is bounded by the queried region and a 1,024-line limit, then resumes the original loop tail. Mapping validation does not synchronize concurrent remapping, so this remains an experimental path.
+
+`handled` is per thread and instruction kind, while `zeroedLines` and `regionQueries` span instruction kinds on that thread. For that older binary, a single snapshot with `zeroedLines > floor(regionQueries / 2)` demonstrates multi-line batching, because each single-line clear requires two region queries. Do not apply that formula to the new resident-page path: it replaces some region queries with page queries. New builds report `batchRuns` and `batchedLines` directly. Compare presentation intervals and title behavior separately from batching counters; a later equivalent-scene ETL can quantify the remaining validation cost.
+
+### Fresh resident-page validation
+
+The new destination-only path is opt-in through C# [instruction-emulation options](../IraRationis.Loader/Instructions/InstructionEmulationOptions.cs). It queries the specific page containing the aligned 64-byte destination. Only valid, non-bad working-set metadata with exactly `PAGE_READWRITE` authorizes that one cache-line store. Every other result uses the original region validator. No permission is cached between instructions, and instruction-byte decoding keeps its original region-boundary behavior.
+
+Microsoft documents [page-specific working-set queries](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-queryworkingsetex) separately from [VirtualQuery's region scan](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery). Avoiding repeated region discovery is the performance hypothesis; a fresh query still does not synchronize concurrent protection or mapping changes. The native exception boundary retains SEH and preserves the thread's last-error value.
+
+The query API is callable from C#. Its placement here follows the existing native exception boundary: [VEH callbacks have allocation and synchronization restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winnt/nc-winnt-pvectored_exception_handler), and managed exception handling is not a substitute for the existing native SEH containment around a faulting memory access. Configuration, hardware discovery, probe orchestration, and authored allocation tests remain C#. The native probe export exercises the production validator without introducing a managed callback inside VEH.
+
+After building and publishing the new executable/DLL together, run `irx instruction-probe` before a title comparison. For the first title run:
+
+```powershell
+$env:IRX_VEH_PROFILE = '1'
+$env:IRX_VEH_BATCH_CLZERO = '0'
+$env:IRX_VEH_RESIDENT_PAGE_QUERY = '1'
+```
+
+Use `IRX_VEH_RESIDENT_PAGE_QUERY=0` with the same executable for the baseline. Keep batching off to isolate the validator change. An eligible batch request still uses the full region/type query; working-set attributes never establish private-memory batching eligibility. All switches are read before handler publication. The new path defaults off pending contract and title results.
+
+| Counter | Meaning |
+| --- | --- |
+| `instructionQueries` | Region queries validating instruction bytes |
+| `destinationQueries` | Region queries validating clear destinations, including fallbacks |
+| `regionQueries` | Sum of the two region-query counters; retained for log compatibility |
+| `residentQueries` / `residentHits` | Fresh page-query attempts and accepted single-line results |
+| `batchRuns` / `batchedLines` | Successful multi-line operations and lines cleared by those operations |
+
+Total memory-query calls are `regionQueries + residentQueries`. A smaller region-query count alone is not a lower total query count or a measured speedup. Nonresident pages can require both a page attempt and a region fallback. Compare timings and presentation at equivalent scenes, then capture a matching-symbol ETL if behavior is correct.
+
+### Host capability snapshots
+
+Startup reports the executable's runtime-usable SIMD instruction sets, effective processor count, physical RAM total/availability, and the separate GC memory budget. C# runtime support checks reflect usable features; CPUID bits alone would not establish operating-system or published-code support. Unknown physical-memory results stay unavailable rather than being replaced with a GC limit.
+
+The graphics initialization captures the actual selected host adapter's memory and capability information. Host VRAM and the DXGI local-memory budget are separate from the synthetic memory description exposed to the guest. A startup budget is a snapshot, not a reservation or a lifetime guarantee.
+
+These observations provide inputs for later bounded scheduling and residency policies. They do not enable a MIP streaming subsystem, automatically add shader workers, or raise the existing resource caps. SIMD specialization should follow measured CPU workloads, retain a scalar/reference path, and verify the emitted Native AOT code. Wider vectors reduce constant work per element; they do not generally change an algorithm's asymptotic complexity.
+
 ## Reporting a result
 
 Provide the build commit, command line, environment switches, scene/action, log, and capture metadata. For network investigation, include the JSONL export and keep the raw ETL available. For CPU analysis, retain exact matching binaries and symbols. Report a successful build, component test, authored fixture, integrated title behavior, and performance measurement as separate observations.

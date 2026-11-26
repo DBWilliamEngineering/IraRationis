@@ -89,4 +89,8 @@ This describes the diagnostic workflow reported in the existing README, not a co
 
 ## Validation boundary
 
+Host adaptation begins with C# [capability snapshots](../IraRationis.Core/Hardware/HardwareCapabilityProbe.cs): runtime-usable SIMD, effective processors, physical-memory availability, and GC memory budget are distinct facts. GPU capability/budget capture uses the adapter already selected by host graphics initialization. These snapshots do not themselves create parallel preparation work or change residency limits.
+
+Instruction-emulation policy also lives in C#. The native VEH boundary accepts an explicit options structure and can opt into a fresh page query for each single-line CLZERO destination, falling back to the existing region validator. It does not retain permission caches or broaden private-only loop batching. The [diagnostic contract](DIAGNOSTICS.md#fresh-resident-page-validation) separates query counters, execution checks, and performance evidence.
+
 On November 26, 2026, the maintainer supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and strict/legacy raw/Zlib storage-contract results. The [validation record](RELEASING.md#local-build-and-component-checks) identifies the reported success markers. These local results were not independently rerun during this documentation update and do not establish GPU, game, performance, or CI acceptance. Original startup video/audio, account completion, main menu, and gameplay need their own evidence.

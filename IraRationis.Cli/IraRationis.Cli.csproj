@@ -30,7 +30,7 @@
     <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
         <Content Include="$(NativeBridgeDirectory)/irx-native.dll" Link="irx-native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
         <Content Include="$(NativeBridgeDirectory)/irx-native.pdb" Link="irx-native.pdb" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <NativeBridgeSource Include="../IraRationis.Native/*.cpp;../IraRationis.Native/*.h;../IraRationis.Native/build.ps1" />
+        <NativeBridgeSource Include="../IraRationis.Native/**/*.cpp;../IraRationis.Native/**/*.h;../IraRationis.Native/build.ps1" />
     </ItemGroup>
 
 	<Target Name="BuildNativeBridge" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT' And '$(DesignTimeBuild)' != 'true'" Inputs="@(NativeBridgeSource)" Outputs="$(NativeBridgeDirectory)/irx-native.dll;$(NativeBridgeDirectory)/irx-native.pdb">

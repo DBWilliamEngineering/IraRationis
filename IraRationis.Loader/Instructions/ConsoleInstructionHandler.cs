@@ -14,13 +14,19 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
     private bool _installed;
 
     public ConsoleInstructionHandler(IEnumerable<LoadedImage> images)
-        : this(images.Select(image =>
-            new ConsoleInstructionHandlerImageRange(image.BaseAddress, checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray())
+        : this(images, InstructionEmulationOptions.FromEnvironment())
     {
     }
 
-    private ConsoleInstructionHandler(ConsoleInstructionHandlerImageRange[] ranges)
+    public ConsoleInstructionHandler(IEnumerable<LoadedImage> images, InstructionEmulationOptions options)
+        : this(images.Select(image =>
+            new ConsoleInstructionHandlerImageRange(image.BaseAddress, checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray(), options)
     {
+    }
+
+    private ConsoleInstructionHandler(ConsoleInstructionHandlerImageRange[] ranges, InstructionEmulationOptions options)
+    {
+        var nativeOptions = new NativeInstructionHandlerOptions(options);
         var path = Path.Combine(AppContext.BaseDirectory, "irx-native.dll");
 
         if (!File.Exists(path))
@@ -31,14 +37,21 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
 
         // Intentionally keep the native DLL loaded for the process lifetime.
         var module = NativeLibrary.Load(path);
+
+        if (!NativeLibrary.TryGetExport(module, "IrxInstallHandlerWithOptions", out var installAddress))
+        {
+            throw new EntryPointNotFoundException(
+                $"Native VEH component is outdated: {path} does not export IrxInstallHandlerWithOptions. Rebuild and publish the managed and native components together.");
+        }
+
         var install =
-            (delegate* unmanaged[Stdcall]<ConsoleInstructionHandlerImageRange*, uint, uint>)NativeLibrary.GetExport(module, "IrxInstallHandler");
+            (delegate* unmanaged[Stdcall]<ConsoleInstructionHandlerImageRange*, uint, NativeInstructionHandlerOptions*, uint>)installAddress;
 
         _disable = (delegate* unmanaged[Stdcall]<void>)NativeLibrary.GetExport(module, "IrxDisableHandler");
 
         fixed (ConsoleInstructionHandlerImageRange* pointer = ranges)
         {
-            var error = install(pointer, (uint)ranges.Length);
+            var error = install(pointer, (uint)ranges.Length, &nativeOptions);
 
             if (error != 0)
             {
@@ -62,7 +75,8 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
     public static void VerifyManagedExceptionDispatch()
     {
         // A non-executable dummy range: no instruction can be emulated by this probe.
-        using var handler = new ConsoleInstructionHandler([new ConsoleInstructionHandlerImageRange(1, 2)]);
+        using var handler = new ConsoleInstructionHandler([new ConsoleInstructionHandlerImageRange(1, 2)],
+            new InstructionEmulationOptions());
 
         try
         {

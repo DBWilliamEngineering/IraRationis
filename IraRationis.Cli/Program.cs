@@ -2,6 +2,7 @@
 
 using System.ComponentModel;
 using IraRationis.Cli.Commands;
+using IraRationis.Cli.Diagnostics.Instructions;
 using IraRationis.Cli.Diagnostics.Network;
 using IraRationis.Cli.Interop;
 using IraRationis.Graphics.Device;
@@ -54,6 +55,13 @@ internal static class Program
                 ConsoleInstructionHandler.VerifyManagedExceptionDispatch();
 
                 Console.WriteLine("Native VEH managed exception probe passed.");
+
+                return 0;
+            }
+
+            if (args is ["instruction-probe"])
+            {
+                InstructionMemoryProbe.Run(Console.Out);
 
                 return 0;
             }
@@ -187,6 +195,8 @@ internal static class Program
             "Usage: irx [file] | irx run [file] [--bind-only] [--strict] [--console series-x|series-s] [--unimplemented trap|zero]");
 
         writer.WriteLine("       irx veh-probe");
+
+        writer.WriteLine("       irx instruction-probe");
 
         writer.WriteLine("       irx network-trace <pid> <output.etl> [seconds:1..300] (elevated diagnostic terminal)");
 

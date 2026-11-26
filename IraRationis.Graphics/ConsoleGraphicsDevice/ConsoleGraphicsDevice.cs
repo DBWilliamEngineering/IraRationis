@@ -451,6 +451,12 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     DetectHostRaytracing();
 
+                    var graphicsCapabilities = IraRationis.Graphics.Device.Hardware.HostGraphicsCapabilities.Capture(
+                        adapter, name, in description, _hostRaytracingTier, _hostRaytracingShaderModel);
+
+                    IraRationis.Graphics.Device.Hardware.HostGraphicsCapabilityReport.WriteTo(Console.Error,
+                        graphicsCapabilities);
+
                     return 0;
                 }
                 finally

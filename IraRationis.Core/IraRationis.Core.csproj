@@ -2,6 +2,7 @@
     <PropertyGroup>
         <RootNamespace>IraRationis.Core</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Tomlyn" />

@@ -13,6 +13,8 @@ using IraRationis.Loader.Instructions.Models;
 using IraRationis.Loader.Threads;
 using IraRationis.PE.Models;
 using IraRationis.Runtime.Tests.Contracts;
+using IraRationis.Runtime.Tests.Hardware;
+using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Memory;
 
 namespace IraRationis.Runtime.Tests;
@@ -32,6 +34,12 @@ internal static class Program
         TestHostPolicy();
 
         FoundationTests.Run();
+
+        HardwareCapabilityTests.Run();
+
+        GraphicsCapabilityTests.Run();
+
+        InstructionEmulationOptionsTests.Run();
 
         MappedViewIndexTests.Run();
 

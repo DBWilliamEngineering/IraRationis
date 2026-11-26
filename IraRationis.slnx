@@ -41,7 +41,13 @@
         <File Path="IraRationis.Native/InstructionDecoder.h" />
         <File Path="IraRationis.Native/ClzeroBatch.h" />
         <File Path="IraRationis.Native/ImageRangeIndex.h" />
+        <File Path="IraRationis.Native/InstructionHandlerOptions.h" />
+        <File Path="IraRationis.Native/Memory/CacheLineAccess.h" />
+        <File Path="IraRationis.Native/Memory/CacheLineMemoryQuery.h" />
+        <File Path="IraRationis.Native/Memory/MemoryAccessStatistics.h" />
+        <File Path="IraRationis.Native/Memory/WritableCacheLineProbeResult.h" />
         <File Path="IraRationis.Native/DecoderTests.cpp" />
+        <File Path="IraRationis.Native/MemoryAccessQueryTests.cpp" />
         <File Path="IraRationis.Native/build.ps1" />
     </Folder>
     <Folder Name="/Build Tools/">

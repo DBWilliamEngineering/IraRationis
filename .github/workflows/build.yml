@@ -81,6 +81,8 @@ jobs:
               run: ./artifacts/native/irx.exe memory-probe --self-test
             - name: Test native VEH during managed exception dispatch
               run: ./artifacts/native/irx.exe veh-probe
+            - name: Test instruction memory validation and page permissions
+              run: ./artifacts/native/irx.exe instruction-probe
             - name: Smoke-test native executable
               run: python tests/smoke.py artifacts/native/irx.exe
             - name: Test native entry and thread execution

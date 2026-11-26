@@ -40,8 +40,8 @@ On November 26, 2026, the maintainer supplied a successful local build and passi
 | Input | Guest-consumed wired DualSense readings have been observed. Reading-callback delivery is incomplete and is a candidate to investigate at the Account Picker. |
 | Storage | Raw/Zlib payload contracts passed in the maintainer's November 26 local run, including strict length checks, legacy short-output behavior, overflow, and invalid-data rejection. Ordered reads and completion reporting exist; BCPack and shared weighted scheduling remain outstanding. |
 | Independent media | Local decoding, CPU/GPU presentation, bounded streaming, and PCM output paths exist. Earlier authored-fixture playback was observed; this does not establish the game's movie/audio integration. |
-| Memory performance | Mapped views use indexed range lookup and contiguous alias resolution. CPU profiling motivated the change; its game-performance effect needs a new trace. |
-| Diagnostics | Startup/input observations, CPU attribution, native PDB output, and process-scoped DNS/socket tracing are available. |
+| Memory performance | Mapped views use indexed range lookup and contiguous alias resolution. CLZERO destination validation has an opt-in fresh resident-page query with a region-query fallback; its new contracts and game-performance effect await validation. |
+| Diagnostics | Startup/input observations, CPU attribution, native PDB output, process-scoped DNS/socket tracing, and host capability snapshots are available. |
 | Logo, guest audio, account workflow, main menu | Unresolved end-to-end. A successful build or authored fixture does not establish these title paths. |
 | Gameplay and sustained FPS | Not demonstrated. No overall completion percentage or competitive performance claim is made. |
 
@@ -150,6 +150,8 @@ $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 
 .\artifacts\native\irx.exe graphics-probe
 .\artifacts\native\irx.exe veh-probe
+
+.\artifacts\native\irx.exe instruction-probe
 .\artifacts\native\irx.exe present-probe --seconds 5 --fps 60
 .\artifacts\native\irx.exe memory-probe --self-test
 ```
