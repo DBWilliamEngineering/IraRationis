@@ -28,6 +28,31 @@
 
 Independent systems engineering research into native x86-64 console compatibility on Windows. Ira Rationis (IRX) develops a managed-first runtime spanning native ABI translation, GPU command execution, virtual memory, input, storage and media processing. It is an experimental compatibility runtime, not a complete console emulator, security sandbox or official SDK.
 
+## Project Identity and Architectural Direction
+
+Ira Rationis (IRX) is an independently evolving, managed-first compatibility runtime designed to research and implement native Xbox Series X|S executable compatibility on Windows x64.
+
+IRX is not intended to be a direct language port, a title-specific launcher, or a simple wrapper around an existing compatibility implementation.
+
+The project pursues its own architectural direction, leveraging modern C#, .NET Native AOT, compile-time source generation, unmanaged interoperability, and selective C++ implementation where platform requirements justify its use.
+
+While the project incorporates attributed upstream work, its architectural direction, subsystem design, development methodology, and ongoing implementation extend beyond that foundation.
+
+### Engineering Philosophy
+
+- Correctness before compatibility claims.
+- Native execution wherever architectural and platform compatibility permits.
+- Managed-first systems engineering without unnecessary native boundaries.
+- Explicit memory ownership and resource lifecycle management.
+- Compile-time generation over runtime reflection where appropriate.
+- Contract-driven subsystem validation.
+- Performance improvements supported by instrumentation and measurable evidence.
+- Long-term architectural maintainability over title-specific workarounds.
+
+The objective is not merely to execute a particular title. It is to develop a robust, extensible compatibility architecture capable of supporting increasingly complex native workloads.
+
+For further information, see [Architectural Divergence](docs/ARCHITECTURAL-DIVERGENCE.md) | [Architecture and Research](docs/architecture.md) | [Architecture Atlas](docs/architecture-atlas.md).
+
 ## Release designations
 
 | Version | Codename | State |
@@ -77,6 +102,28 @@ Progress is reported by evidence rather than a speculative percentage. There is 
 | R31 | Bounded full-surface readbacks reduced throughput during capture; disable them for normal performance measurements. |
 
 These are development-run presentation rates, not measured gameplay FPS, and not controlled cross-revision benchmarks. The target remains sustained correct 30 FPS and eventually 60+ FPS on suitable hardware. Correctness takes precedence over presentation rate.
+
+## Architecture, Research & Engineering Evidence
+
+Ira Rationis maintains detailed technical documentation
+covering its independently evolving architecture,
+implementation strategy, performance research,
+and upstream relationships.
+
+| Documentation | Description |
+|---|---|
+| [Architecture Atlas](docs/IRX-ARCHITECTURE-ATLAS.md) | Detailed architecture, 41 technical diagrams, performance evidence and subsystem relationships |
+| [Architectural Divergence](docs/ARCHITECTURAL-DIVERGENCE.md) | Architectural identity and upstream relationships |
+| [Architecture and Research](docs/architecture.md) | Technical research and implementation notes |
+| [Implementation Provenance](docs/PROVENANCE.md) | Component-level attribution and source lineage |
+| [Development History](https://github.com/DBWilliamEngineering/IraRationis/commits/main/) | Engineering evolution and implementation history |
+
+IRX distinguishes source implementation, contract
+validation, subsystem execution, integrated compatibility,
+and measured performance.
+
+Architectural progress is documented through reproducible
+evidence rather than speculative completion percentages.
 
 ## Architecture
 
