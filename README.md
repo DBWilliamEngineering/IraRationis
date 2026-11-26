@@ -51,7 +51,7 @@ While the project incorporates attributed upstream work, its architectural direc
 
 The objective is not merely to execute a particular title. It is to develop a robust, extensible compatibility architecture capable of supporting increasingly complex native workloads.
 
-For further information, see [Architectural Divergence](docs/ARCHITECTURAL-DIVERGENCE.md) | [Architecture and Research](docs/architecture.md) | [Architecture Atlas](docs/architecture-atlas.md).
+For further information, see [Architectural Divergence](docs/ARCHITECTURAL-DIVERGENCE.md) | [Architecture and Research](docs/ARCHITECTURE.md) | [Architecture Atlas](docs/ARCHITECTURE-ATLAS.md).
 
 ## Release designations
 
@@ -114,7 +114,7 @@ and upstream relationships.
 |---|---|
 | [Architecture Atlas](docs/IRX-ARCHITECTURE-ATLAS.md) | Detailed architecture, 41 technical diagrams, performance evidence and subsystem relationships |
 | [Architectural Divergence](docs/ARCHITECTURAL-DIVERGENCE.md) | Architectural identity and upstream relationships |
-| [Architecture and Research](docs/architecture.md) | Technical research and implementation notes |
+| [Architecture and Research](docs/ARCHITECTURE.md) | Technical research and implementation notes |
 | [Implementation Provenance](docs/PROVENANCE.md) | Component-level attribution and source lineage |
 | [Development History](https://github.com/DBWilliamEngineering/IraRationis/commits/main/) | Engineering evolution and implementation history |
 
