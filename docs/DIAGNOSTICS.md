@@ -27,6 +27,21 @@ The startup observer's `accountLifecycle=notObserved` field is a fixed observati
 
 The authored media export and diagnostic PCM observation are separate from the title's own media ABI. See [Runtime Integration](RUNTIME-INTEGRATION.md).
 
+### Instruction-emulation counters
+
+For a targeted diagnostic run, also set these switches before launching the same executable:
+
+```powershell
+$env:IRX_VEH_PROFILE = '1'
+$env:IRX_VEH_BATCH_CLZERO = '0'
+```
+
+The native handler reports the first successful emulation of each instruction kind per thread, then powers of two from 1,024 onward. Its records include `kind`, `handled`, `zeroedLines`, `regionQueries`, and image-relative `rva`. Counters are cumulative and sampled; do not sum every record as independent work. `regionQueries` counts both instruction-read and destination-write validation.
+
+At the Account Picker, hold Y for ten seconds, release it, and leave the game running for another ten seconds. Record whether the screen responds and retain the guest input records around the hold. This distinguishes a short press missed between slow current-state reads from a press delivered to the guest without completing the account workflow.
+
+Keep the experimental `IRX_VEH_BATCH_CLZERO` switch off for this diagnostic baseline. Its existing opt-in path batches only a narrowly recognized loop on ordinary private read/write memory; it does not cover every CLZERO instruction or mapping. Opcode counters should establish which path the title uses before a separate controlled comparison.
+
 ## DNS and socket operations
 
 In a separate elevated PowerShell terminal, from the repository root, list the running processes and replace the example PID with the game-hosting `irx` process:
@@ -68,6 +83,7 @@ For a performance run, disable the extra startup/input and network capture used 
 Remove-Item Env:IRX_INPUT_TRACE -ErrorAction SilentlyContinue
 Remove-Item Env:IRX_STARTUP_OBSERVATION -ErrorAction SilentlyContinue
 Remove-Item Env:IRX_PROFILE_DETAIL_INTERVAL_MS -ErrorAction SilentlyContinue
+Remove-Item Env:IRX_VEH_PROFILE -ErrorAction SilentlyContinue
 ```
 
 The successful historical CPU capture used a 5 ms sampling interval. A bounded 30-60 second capture of the same scene is a useful next comparison. Record profiler settings and check lost-event counters before interpreting results. Avoid overlapping CPU captures or changing sampling settings while another profiler owns a session.
@@ -82,7 +98,24 @@ The supplied R71 trace recorded approximately 128.9 seconds at a 5 ms interval w
 
 The supplied R25/R66 recordings lost approximately 5.57/5.56 million events. The relevant R66 process was present for only about 441 ms, and its traced image did not match the available local R66 PDB. Those recordings are not reliable numeric before/after baselines.
 
-The [mapped-view index](../IraRationis.HLE/Memory/MappedViewIndex.cs) targets the observed bookkeeping cost: overlap lookup is O(log n + k) for n views and k overlaps; alias resolution works by contiguous view portions. Windows mapping calls remain serialized under the owner lock. A fresh trace is needed to quantify the change and the native exception-index work.
+The [mapped-view index](../IraRationis.HLE/Memory/MappedViewIndex.cs) targets the observed bookkeeping cost: overlap lookup is O(log n + k) for n views and k overlaps; alias resolution works by contiguous view portions. Windows mapping calls remain serialized under the owner lock. Comparisons need equivalent scenes and capture intervals before attributing a speedup to this change.
+
+### Account Picker capture: November 26, 2026
+
+The supplied `R73-CPU.etl` spans 70.666 seconds at a 5 ms sampling interval, with zero reported lost events or buffers. The observed `irx` process, PID 40220, was already running when recording began and exited approximately 61.995 seconds into the trace. Both `irx.exe` and `irx-native.dll` matched their local PDBs; the matching Windows kernel symbols were also resolved. Derived reports are local artifacts under `artifacts/profiling/r73-analysis`.
+
+| Observation | Evidence and interpretation |
+| --- | --- |
+| Serial exception-path cost | In the resolved stack report, 12,006 of 12,211 sampled stacks on thread 5744 include `VirtualQuery`: approximately 98.3%. Across process stacks, this is 12,006 of 14,489, approximately 82.9%. The neighboring `Handle`, `Emulate`, and `RegionEnd` frames identify the native validation path as dominant. Inclusive shares overlap. |
+| CLZERO destination validation | Raw stacks contain 11,454 returns to `Emulate` RVA `0x1FAC`, the call checking the CLZERO destination, and 555 to `0x1E4E`, the instruction-read check. The exact native binary's disassembly confirms both call sites. Destination checks account for approximately 95.4% of these identified caller samples; these are sampled frames, not invocation counts. |
+| Kernel leaf cost | `MiGetPageProtection` and `MiQueryAddressState` account for approximately 66.9% and 13.7% of the process's weighted CPU samples. The sample weight totals 73.276 CPU seconds across threads; it is not elapsed time or FPS. |
+| Slow presentation | The paired `R73-20261126-133235.log` reports 29 successful presents after 112.009 seconds. Late presentation gaps are roughly 3-4 seconds. Its final interval reports 4.6 ms total fence wait and 0.325 ms average present time, directing investigation to work between presents. |
+| Y delivery unproven | The log contains 39 HID `Y=True` observations, but no guest `Y=True` record. These are observations, not 39 distinct presses. Guest current-state reading is active; missing a short press between slow reads is a hypothesis to test with a sustained hold. |
+| Callback and network limits | No reading-callback registration appears in this run. The existing callback-delivery gap therefore is not established as its cause. No network capture or endpoint result was supplied, so the log does not establish connectivity or an authentication failure. |
+
+The previous unmapping/LINQ chain is no longer a material named hotspot in this capture. This is encouraging but does not quantify an optimization: the recordings cover different intervals, and the new trace begins after startup. The exception-query path remains dominant. Exact instruction counters were absent, and the log reports CLZERO batching disabled; the capture cannot split ordinary CLZERO from the recognized-loop variant.
+
+The next performance work should target repeated destination validation while preserving guard-page, protection, alias, and mapping-lifetime semantics. C# should own mapping policy and any explicitly maintained validity metadata; the native VEH boundary can consume that metadata with a validated fallback. The current image-membership index does not describe destination permissions, and direct host memory APIs can bypass managed bookkeeping. An unchecked permanent region cache would therefore be premature. Additional rendering workers or a larger VRAM budget do not remove this serial query cost.
 
 ## Reporting a result
 

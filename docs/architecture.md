@@ -89,4 +89,4 @@ This describes the diagnostic workflow reported in the existing README, not a co
 
 ## Validation boundary
 
-The maintainer reports a successful local test build after the component restructure. No build, GPU probe, game execution, or CI result was independently reproduced during this documentation update. Synthetic probes remain distinct from title rendering; original startup video/audio, account completion, main menu, and gameplay need their own evidence.
+On November 26, 2026, the maintainer supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and strict/legacy raw/Zlib storage-contract results. The [validation record](RELEASING.md#local-build-and-component-checks) identifies the reported success markers. These local results were not independently rerun during this documentation update and do not establish GPU, game, performance, or CI acceptance. Original startup video/audio, account completion, main menu, and gameplay need their own evidence.

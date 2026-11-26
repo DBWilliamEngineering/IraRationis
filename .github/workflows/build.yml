@@ -50,6 +50,25 @@ jobs:
               run: dotnet build IraRationis.slnx -c Release --no-restore -p:Platform="Any CPU"
             - name: Run component tests
               run: dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+            - name: Run component contract executables
+              run: |
+                  $projects = @(
+                      'tests/startup-evidence/StartupEvidence.Contracts.csproj',
+                      'tests/versioned-upload/VersionedUpload.Contracts.csproj',
+                      'tests/descriptor-bindings/DescriptorBindings.Contracts.csproj'
+                  )
+
+                  foreach ($project in $projects)
+                  {
+                      Write-Host "Testing $project"
+
+                      dotnet run --project $project -c Release --no-build
+
+                      if ($LASTEXITCODE -ne 0)
+                      {
+                          throw "Contract failure: $project"
+                      }
+                  }
             - name: Test strict storage contracts
               run: dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build
             - name: Test runtime media contracts (headless)
@@ -126,8 +145,11 @@ jobs:
                   if (Test-Path docs/assets/crest.png) {
                       New-Item -ItemType Directory -Path "$stage/docs/assets" -Force | Out-Null
                       Copy-Item docs/assets/crest.png "$stage/docs/assets/crest.png"
-                      Copy-Item docs/architecture.md, docs/RELEASING.md -Destination "$stage/docs"
                   }
+                  New-Item -ItemType Directory -Path "$stage/docs" -Force | Out-Null
+                  Copy-Item docs/architecture.md, docs/ARCHITECTURE-ATLAS.md, docs/ARCHITECTURAL-DIVERGENCE.md, docs/RUNTIME-INTEGRATION.md, docs/DIAGNOSTICS.md, docs/PROVENANCE.md, docs/QUICKSTART.txt, docs/RELEASING.md -Destination "$stage/docs"
+                  New-Item -ItemType Directory -Path "$stage/scripts" -Force | Out-Null
+                  Copy-Item scripts/Export-NetworkTrace.ps1 -Destination "$stage/scripts"
                   @("Commit: $env:GITHUB_SHA", "Ref: $env:GITHUB_REF", "Run: $env:GITHUB_RUN_ID", "SDK: $(dotnet --version)") | Set-Content "$stage/BUILD-INFO.txt" -Encoding utf8
                   New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
                   Compress-Archive -Path "$stage/*" -DestinationPath artifacts/release/irx-win-x64.zip -Force
@@ -146,26 +168,6 @@ jobs:
                   path: artifacts/distribution/
                   if-no-files-found: error
                   retention-days: 14
-                              - name: Run revision regression contracts
-              run: |
-                  $projects = Get-ChildItem `
-                      -Path 'tests/r*-contracts/*.csproj' `
-                      -File |
-                      Sort-Object FullName
-
-                  foreach ($project in $projects)
-                  {
-                      Write-Host "Testing $($project.Name)"
-
-                      dotnet run `
-                          --project $project.FullName `
-                          -c Release
-
-                      if ($LASTEXITCODE -ne 0)
-                      {
-                          throw "Contract failure: $($project.Name)"
-                      }
-                  }
 
     draft-release:
         needs: native-aot

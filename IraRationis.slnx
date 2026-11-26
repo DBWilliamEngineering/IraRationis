@@ -18,7 +18,14 @@
     </Folder>
     <Folder Name="/Solution Items/">
         <File Path="README.md" />
-        <File Path="docs/R73-REVIEW.md" />
+        <File Path="docs/architecture.md" />
+        <File Path="docs/ARCHITECTURE-ATLAS.md" />
+        <File Path="docs/ARCHITECTURAL-DIVERGENCE.md" />
+        <File Path="docs/RUNTIME-INTEGRATION.md" />
+        <File Path="docs/DIAGNOSTICS.md" />
+        <File Path="docs/PROVENANCE.md" />
+        <File Path="docs/QUICKSTART.txt" />
+        <File Path="docs/RELEASING.md" />
         <File Path="Directory.Build.props" />
         <File Path="Directory.Packages.props" />
         <File Path="global.json" />

@@ -125,7 +125,7 @@ IRX distinguishes the following levels of evidence:
 
 Success at one level does not automatically establish success at subsequent levels.
 
-On November 26, 2026, the maintainer reported a successful local test build after the component restructure. This updates compilation evidence only; no new game, GPU, or CI outcome is implied.
+On November 26, 2026, the maintainer supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and strict/legacy raw/Zlib storage-contract results. This establishes reported local compilation and component-test evidence. The [validation record](RELEASING.md#local-build-and-component-checks) preserves the success markers; no game, GPU, performance, or CI outcome is implied by these checks.
 
 The project does not represent synthetic media playback, diagnostic presentation, successful API invocation, or partial initialization as completed gameplay compatibility.
 

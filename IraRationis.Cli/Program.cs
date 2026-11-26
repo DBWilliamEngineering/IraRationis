@@ -198,9 +198,9 @@ internal static class Program
 
         writer.WriteLine("       irx memory-probe --self-test");
 
-        writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play|--stream]");
+        writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play|--stream|--gpu|--stream-gpu]");
 
-        writer.WriteLine("       irx media-probe --mf <local MP4> [--play]");
+        writer.WriteLine("       irx media-probe --mf <local MP4> [--play|--gpu]");
 
         writer.WriteLine("       irx inspect [file] | irx shader <file> | irx archive <file>");
 

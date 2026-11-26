@@ -1,8 +1,21 @@
 # Build, validation, and release engineering
 
-The Windows Native AOT workflow uses the SDK in `global.json` and the x64 MSVC tools for the existing native bridge and synthetic fixtures. The maintainer reported a successful local test build on November 26, 2026. That report does not establish a new CI result, GPU acceptance, or integrated game compatibility.
+The Windows Native AOT workflow uses the SDK in `global.json` and the x64 MSVC tools for the existing native bridge and synthetic fixtures. The maintainer supplied a successful local build and passing component-contract results on November 26, 2026, as recorded below. These local results do not establish a new CI result, GPU acceptance, integrated game compatibility, or performance improvement.
 
 ## Local build and component checks
+
+The November 26, 2026 maintainer-supplied output reports:
+
+| Check | Reported result |
+| --- | --- |
+| Local build | Successful |
+| Runtime components | `Runtime component tests passed.` |
+| Startup evidence | `IRX-R50 CPU contracts passed.` |
+| Versioned uploads | `IRX-R51 CPU contracts passed.` |
+| Descriptor bindings | `IRX-R52 CPU contracts passed.` |
+| Storage payloads | All strict/legacy raw and Zlib checks passed: exact output, short-output policy, overflow rejection, and invalid Zlib rejection |
+
+This is maintainer-supplied local evidence, not an independent rerun or a CI result. It does not report a pass for every command below; Native AOT publication, native/media/GPU probes, game startup, and physical output require their own results. Historical `IRX-Rxx` success markers identify existing contract suites and do not restore release-based implementation naming.
 
 Run from the repository root. Explicitly selecting `Any CPU` prevents an inherited MSVC `Platform=x64` environment from selecting a nonexistent solution configuration; publication still targets `win-x64`.
 

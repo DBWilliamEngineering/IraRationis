@@ -4,7 +4,7 @@
 > *Nullius in verba · Non impone opinionem*  
 > Managed-first native compatibility research for Windows x64.
 
-**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon reports a successful local test build of the restructured solution. No new runtime, GPU, or CI acceptance result is inferred from that build. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
+**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and storage-contract results on November 26. These results do not establish new game, GPU, performance, or CI acceptance. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
 
 ## Contents
 
@@ -659,22 +659,22 @@ flowchart TD
 
 This is a reporting model, not a mandatory chronological dependency between every subsystem. Evidence at one level never automatically establishes the next level.
 
-### Diagram 31 | Historical component contract evidence
+### Diagram 31 | Component contract coverage
 
 ```mermaid
 flowchart LR
-    R50["R50 CPU contracts: reported pass"] --> A["Frame timeline and skip accounting"]
+    R50["Startup CPU contracts: reported pass November 26"] --> A["Frame timeline and skip accounting"]
     R50 --> B["Log sampling / error preservation"]
-    R51["R51 CPU contracts: reported pass"] --> C["Full and partial uploads"]
+    R51["Upload CPU contracts: reported pass November 26"] --> C["Full and partial uploads"]
     R51 --> D["Immutable snapshots and cancellation"]
     R51 --> E["Pitched-plane copy / padding"]
-    R52["R52 CPU contracts: source present"] --> F["Generation-checked resource catalog"]
+    R52["Descriptor CPU contracts: reported pass November 26"] --> F["Generation-checked resource catalog"]
     R52 --> G["Cache capacity / immutable reuse"]
     R52 --> H["Cancellation and invalid transitions"]
     R52 -.-> I["Independent GPU fixture: validation target"]
 ```
 
-Current sources: [startup-evidence contracts](../tests/startup-evidence/Program.cs), [versioned-upload contracts](../tests/versioned-upload/Program.cs), [descriptor-binding contracts](../tests/descriptor-bindings/Program.cs). The revision labels identify the historical evidence baseline: R50/R51 success markers were supplied by the maintainer, while no R52 execution result was supplied for the original atlas. Current project names describe behavior; see [validation](VALIDATION.md) for the present command inventory.
+Current sources: [startup-evidence contracts](../tests/startup-evidence/Program.cs), [versioned-upload contracts](../tests/versioned-upload/Program.cs), [descriptor-binding contracts](../tests/descriptor-bindings/Program.cs). The original atlas had reported R50/R51 success markers and source-only R52 evidence. On November 26, 2026, the maintainer supplied passing results for all three CPU suites, including `IRX-R52 CPU contracts passed.` Current project names describe behavior, while the historical success markers remain stable. See [local build and component checks](RELEASING.md#local-build-and-component-checks) for the command inventory and current validation record.
 
 ### Diagram 32 | Startup evidence decision tree
 
@@ -696,7 +696,7 @@ flowchart TD
 
 ### Evidence register
 
-| Capability | Status at atlas preparation | Evidence / limit |
+| Capability | Evidence status | Evidence / limit |
 |---|---|---|
 | Native executable entry | Reported | Historical README; authorized native execution |
 | Static imports | Reported | R31: 924 resolved slots, zero missing in five-image audit; not semantic coverage |
@@ -705,15 +705,17 @@ flowchart TD
 | Storage reads | Reported | R32 sampled successful reads and status accounting |
 | Independent media decode | Reported | R34 and R39.1: 60 frames, 192,000 interleaved PCM samples |
 | Independent live A/V | Reported | R35/R36 60 presented, 0 skipped; physical sound not independently verified |
-| R50/R51 CPU contracts | Reported | Maintainer supplied `IRX-R50 CPU contracts passed.` and `IRX-R51 CPU contracts passed.` |
-| R52 CPU contracts | Source | Test project and assertions inspected; execution not supplied |
+| Local build and runtime component suite | Reported pass, November 26, 2026 | Maintainer supplied a successful build and `Runtime component tests passed.`; includes mapped-view and physical-page contracts |
+| Startup/upload CPU contracts | Reported pass, November 26, 2026 | Maintainer supplied `IRX-R50 CPU contracts passed.` and `IRX-R51 CPU contracts passed.` |
+| Descriptor CPU contracts | Reported pass, November 26, 2026 | Maintainer supplied `IRX-R52 CPU contracts passed.`; supersedes the original atlas's source-only status |
+| Raw/Zlib storage contracts | Reported pass, November 26, 2026 | All supplied strict/legacy checks passed, including exact output, short-output policy, overflow rejection, and invalid Zlib rejection |
 | R51 versioned GPU upload | Target | 4096-byte initial and 64-byte partial upload, readback verification |
 | R52 descriptor GPU fixture | Target | Four dispatches, two hits, two misses, verified readback |
 | Guest startup logo/video | Outstanding | Independent host playback is not guest playback |
 | Guest audio and frontend/menu | Outstanding | Full guest audio and legitimate platform lifecycle not established |
 | Gameplay | Not demonstrated | No gameplay claim |
 
-Historical source: [README at the R52 snapshot](https://github.com/DBWilliamEngineering/IraRationis/blob/d18868543526c75005b12bad3fd1666037814340/README.md), plus maintainer-supplied local logs. Where documentation and runtime reports differ in revision or scope, retain both labels and attach exact evidence before changing status.
+Historical source: [README at the R52 snapshot](https://github.com/DBWilliamEngineering/IraRationis/blob/d18868543526c75005b12bad3fd1666037814340/README.md), plus maintainer-supplied local logs. The November 26 component results are a later maintainer-supplied update, not a rerun of the historical GPU or title scenarios. Where documentation and runtime reports differ in revision or scope, retain both labels and attach exact evidence before changing status.
 
 ### Diagram 33 | Evidence publication and CI gates
 
@@ -917,7 +919,7 @@ The timeline describes development sequence, not the independent validation date
 
 ```mermaid
 flowchart TD
-    A["R52 CPU and GPU acceptance"] --> B["Explicit resource producer and ownership contract"]
+    A["GPU upload and descriptor acceptance"] --> B["Explicit resource producer and ownership contract"]
     B --> C["Versioned resource publication"]
     B --> D["Descriptor binding and lifetime integration"]
     C --> E["Ordered submission / actual fence retirement"]
@@ -957,4 +959,4 @@ try {
 
 Archive the exact commit, command, environment, stdout/stderr, exit status and test fixture hash. Only publish authorized original fixtures, sanitized diagnostics, or other material you have permission to distribute. No proprietary game data or credentials should enter source control.
 
-**Review boundary:** This atlas combines current source inspection with historical revision documentation and maintainer-reported observations. The maintainer reports a successful local test build of the reorganized solution; that does not establish new GPU, game, or CI results. No build or runtime test was performed as part of this documentation update, the Mermaid blocks have not been rendered in GitHub, and no full upstream diff or authorship audit was performed. The performance charts deliberately separate historical observations, predictions, and test targets.
+**Review boundary:** This atlas combines current source inspection with historical revision documentation and maintainer-supplied observations. The November 26 local build and component-contract passes are recorded above; they do not establish new GPU, game, performance, or CI results. No build or runtime test was rerun as part of this documentation update, the Mermaid blocks have not been rendered in GitHub, and no full upstream diff or authorship audit was performed. The performance charts deliberately separate historical observations, predictions, and test targets.
