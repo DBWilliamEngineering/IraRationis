@@ -57,6 +57,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ValidateR42Plane(luma.Length, lumaStride, width, height);
+
         ValidateR42Plane(chroma.Length, chromaStride, width, height / 2);
 
         var outputBytes = checked(width * height * 4);
@@ -94,6 +95,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var deviceId = DeviceId;
 
             CheckHostResult(D3D12CreateDevice(0, 0xC000, &deviceId, &device), "R42 D3D12CreateDevice");
+
             RequireR42Object(device, "device");
 
             var nativeDevice = (ID3D12Device*)device;
@@ -103,12 +105,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                 (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(device, 8);
 
             CheckHostResult(createQueue(device, &queueDescription, &queueId, &queue), "R42 direct queue");
+
             RequireR42Object(queue, "queue");
 
             var fenceId = FenceId;
             var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36);
 
             CheckHostResult(createFence(device, 0, 0, &fenceId, &fence), "R42 fence");
+
             RequireR42Object(fence, "fence");
 
             var description = new ResourceDescription
@@ -142,10 +146,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             upload = CreateR42Resource(device, HostBufferDescription(uploadBytes), 2, GenericRead);
+
             FillR42Upload(upload, checked((int)uploadBytes), layouts, luma, lumaStride, chroma, chromaStride,
                 width, height);
 
             var outputDescription = HostBufferDescription((ulong)outputBytes);
+
             outputDescription.Flags = 4; // ALLOW_UNORDERED_ACCESS
 
             output = CreateR42Resource(device, outputDescription, 1, 8); // UNORDERED_ACCESS
@@ -159,6 +165,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14);
 
             CheckHostResult(createHeap(device, &heapDescription, &heapId, &heap), "R42 shader-visible SRV heap");
+
             RequireR42Object(heap, "descriptor heap");
 
             var nativeHeap = (ID3D12DescriptorHeap*)heap;
@@ -177,7 +184,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             // R8_UNORM for plane zero and R8G8_UNORM for plane one of the same resource.
             nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView,
                 cpu);
+
             cpu.ptr += increment;
+
             nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView,
                 cpu);
 
@@ -185,6 +194,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot(device, 9);
 
             CheckHostResult(createAllocator(device, 0, &allocatorId, &allocator), "R42 allocator");
+
             RequireR42Object(allocator, "allocator");
 
             var listId = HostListId;
@@ -192,6 +202,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12);
 
             CheckHostResult(createList(device, 0, 0, allocator, 0, &listId, &list), "R42 command list");
+
             RequireR42Object(list, "command list");
 
             var commands = (ID3D12GraphicsCommandList*)list;
@@ -208,8 +219,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             TransitionHostResource(list, texture, CopyDestination, 0x40); // NON_PIXEL_SHADER_RESOURCE
 
             commands->SetDescriptorHeaps(1, &nativeHeap);
+
             commands->SetPipelineState((ID3D12PipelineState*)pipeline);
+
             commands->SetComputeRootSignature((ID3D12RootSignature*)root);
+
             commands->SetComputeRootDescriptorTable(0, gpu);
 
             var outputAddress = ((ID3D12Resource*)output)->GetGPUVirtualAddress();
@@ -220,13 +234,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             commands->SetComputeRootUnorderedAccessView(1, outputAddress);
+
             commands->Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
 
             // The transition orders prior UAV writes before the copy.
             TransitionHostResource(list, output, 8, CopySource);
+
             commands->CopyBufferRegion((ID3D12Resource*)readback, 0, (ID3D12Resource*)output, 0, (ulong)outputBytes);
 
             SubmitR42AndWait(queue, fence, list, completion);
+
             CopyR42Readback(readback, bgra[..outputBytes]);
 
             report.WriteLine($"[media] IRX-R42: NV12={width}x{height}; planes=2; " +
@@ -238,16 +255,27 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             // SubmitR42AndWait never returns while commands could still reference these objects.
             ReleaseR42Object(list);
+
             ReleaseR42Object(allocator);
+
             ReleaseR42Object(heap);
+
             ReleaseR42Object(pipeline);
+
             ReleaseR42Object(root);
+
             ReleaseR42Object(readback);
+
             ReleaseR42Object(output);
+
             ReleaseR42Object(upload);
+
             ReleaseR42Object(texture);
+
             ReleaseR42Object(fence);
+
             ReleaseR42Object(queue);
+
             ReleaseR42Object(device);
         }
     }
@@ -287,6 +315,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (hr < 0)
         {
             ReleaseR42Object(resource);
+
             CheckHostResult(hr, "R42 committed resource");
         }
 
@@ -313,14 +342,17 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var bytes = new Span<byte>(mapped, length);
+
             bytes.Clear();
 
             CopyR42Rows(luma, lumaStride, bytes, layouts[0], width, height);
+
             CopyR42Rows(chroma, chromaStride, bytes, layouts[1], width, height / 2);
         }
         finally
         {
             var written = new HostRange { End = (nuint)length };
+
             unmap(upload, 0, &written);
         }
     }
@@ -331,16 +363,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         var offset = checked((int)layout.Offset);
         var pitch = checked((int)layout.Footprint.RowPitch);
 
-        for (var row = 0; row < rows; row++)
-        {
-            source.Slice(row * stride, width).CopyTo(destination.Slice(offset + row * pitch, width));
-        }
+        PitchedPlaneCopy.Copy(source, stride, destination, offset, pitch, width, rows);
     }
 
     private static void CreateR42Pipeline(nint device, TextWriter report, out nint root, out nint pipeline,
         string? shaderSource = null)
     {
         root = 0;
+
         pipeline = 0;
 
         var shader = CompileR47HostMediaShader(shaderSource ?? Nv12ConversionShader, report);
@@ -348,6 +378,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var range = new D3D12_DESCRIPTOR_RANGE1 { NumDescriptors = 2 };
 
         parameters[0] = new D3D12_ROOT_PARAMETER1 { ParameterType = 0 };
+
         parameters[0].Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE1
         {
             NumDescriptorRanges = 1,
@@ -355,9 +386,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
 
         parameters[1] = new D3D12_ROOT_PARAMETER1 { ParameterType = (D3D12_ROOT_PARAMETER_TYPE)4 };
+
         parameters[1].Anonymous.Descriptor = new D3D12_ROOT_DESCRIPTOR1 { ShaderRegister = 0 };
 
         var description = new D3D12_VERSIONED_ROOT_SIGNATURE_DESC { Version = (D3D_ROOT_SIGNATURE_VERSION)2 };
+
         description.Anonymous.Desc_1_1 = new D3D12_ROOT_SIGNATURE_DESC1 { NumParameters = 2, pParameters = parameters };
 
         var blob = nint.Zero;
@@ -375,6 +408,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             CheckHostResult(hr, "R42 root serialization");
+
             RequireR42Object(blob, "root blob");
 
             var rootBytes = ReadR10Blob(blob, 1024 * 1024);
@@ -407,15 +441,21 @@ public static unsafe partial class ConsoleGraphicsDevice
             RequireR42Object((nint)nativePipeline, "pipeline");
 
             root = (nint)nativeRoot;
+
             pipeline = (nint)nativePipeline;
+
             nativeRoot = null;
+
             nativePipeline = null;
         }
         finally
         {
             ReleaseR42Object((nint)nativePipeline);
+
             ReleaseR42Object((nint)nativeRoot);
+
             ReleaseR42Object(errors);
+
             ReleaseR42Object(blob);
         }
     }
@@ -490,6 +530,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         finally
         {
             var noWrites = default(HostRange);
+
             unmap(readback, 0, &noWrites);
         }
     }

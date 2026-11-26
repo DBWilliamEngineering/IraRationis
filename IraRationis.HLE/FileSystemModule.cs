@@ -153,6 +153,7 @@ public static unsafe partial class FileSystemModule
             {
                 var result = CreateFileW(translated is null ? path : mapped, access, share, security, disposition,
                     flags, template);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -176,6 +177,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = CreateFile2(translated is null ? path : mapped, access, share, disposition, parameters);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -199,6 +201,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = GetFileAttributesW(translated is null ? path : mapped);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -222,6 +225,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = GetFileAttributesExW(translated is null ? path : mapped, level, information);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -245,6 +249,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = SetFileAttributesW(translated is null ? path : mapped, attributes);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -268,6 +273,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = DeleteFileW(translated is null ? path : mapped);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -291,6 +297,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = RemoveDirectoryW(translated is null ? path : mapped);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -314,6 +321,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = CreateDirectoryW(translated is null ? path : mapped, security);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -337,6 +345,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = GetDiskFreeSpaceExW(translated is null ? path : mapped, available, total, free);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -360,6 +369,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = GetDiskFreeSpaceW(translated is null ? path : mapped, sectors, bytes, free, total);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -383,6 +393,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = FindFirstFileW(translated is null ? path : mapped, data);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -406,6 +417,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = FindFirstFileExW(translated is null ? path : mapped, level, data, search, filter, flags);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -430,6 +442,7 @@ public static unsafe partial class FileSystemModule
             if (translated is null)
             {
                 var result = CreateFileA(path, access, share, security, disposition, flags, template);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -438,6 +451,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = CreateFileW(mapped, access, share, security, disposition, flags, template);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -461,6 +475,7 @@ public static unsafe partial class FileSystemModule
             if (translated is null)
             {
                 var result = GetFileAttributesA(path);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -469,6 +484,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = GetFileAttributesW(mapped);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -492,6 +508,7 @@ public static unsafe partial class FileSystemModule
             if (translated is null)
             {
                 var result = DeleteFileA(path);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -500,6 +517,7 @@ public static unsafe partial class FileSystemModule
             fixed (char* mapped = translated)
             {
                 var result = DeleteFileW(mapped);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;
@@ -525,6 +543,7 @@ public static unsafe partial class FileSystemModule
             {
                 var result = MoveFileExW(translatedFrom is null ? from : mappedFrom,
                     translatedTo is null ? to : mappedTo, flags);
+
                 SetLastError((uint)Marshal.GetLastPInvokeError());
 
                 return result;

@@ -3,12 +3,12 @@
 
 namespace IraRationis.Game;
 
-public sealed record KnownBuild(string Label, string Blake3);
+public abstract record KnownBuild(string Label, string Blake3);
 
 public static class KnownBuilds
 {
     // The upstream registry is intentionally empty at the reference revision.
-    public static IReadOnlyList<KnownBuild> Builds
+    private static IReadOnlyList<KnownBuild> Builds
     {
         get;
     } = [];

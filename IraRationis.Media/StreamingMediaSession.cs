@@ -39,8 +39,11 @@ public static class StreamingMediaSession
         const int width = 640;
         const int height = 360;
         const int frameBytes = width * height * 3 / 2;
+
         using var audioDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
         short[] pcm;
+
         try
         {
             pcm = DecodeAudioAsync(ffmpeg, input, seconds, audioDeadline.Token).GetAwaiter().GetResult();
@@ -57,17 +60,24 @@ public static class StreamingMediaSession
             SingleWriter = true,
             FullMode = BoundedChannelFullMode.Wait
         });
+
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
         var producer = ProduceAsync(ffmpeg, input, seconds, width, height, frameBytes, queue.Writer, stop.Token);
+
         VideoFrame? pending = null;
+
         var decoded = 0;
         var presented = 0;
         var position = 0.0;
+
         try
         {
             // Prebuffer the first complete frame before starting the device clock.
             using var prebuffer = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+
             prebuffer.CancelAfter(TimeSpan.FromSeconds(10));
+
             if (!queue.Reader.WaitToReadAsync(prebuffer.Token).AsTask().GetAwaiter().GetResult() ||
                 !queue.Reader.TryRead(out var first))
             {
@@ -77,12 +87,16 @@ public static class StreamingMediaSession
             }
 
             pending = first;
+
             using var window = new WindowsVideoWindow(width, height);
             using var audio = new WindowsPcmClock(pcm, SampleRate, Channels);
+
             var pixels = new byte[width * height * 4];
             var hasPixels = false;
             var timer = Stopwatch.StartNew();
+
             audio.Start();
+
             while (window.Pump())
             {
                 if (timer.Elapsed.TotalSeconds > duration + 10)
@@ -96,9 +110,13 @@ public static class StreamingMediaSession
                 }
 
                 var done = audio.Done;
+
                 position = Math.Max(position, audio.Seconds);
+
                 var target = done ? int.MaxValue : (int)(position * FramesPerSecond);
+
                 VideoFrame? selected = null;
+
                 try
                 {
                     while (true)
@@ -124,16 +142,21 @@ public static class StreamingMediaSession
                         }
 
                         selected = pending;
+
                         pending = null;
+
                         decoded++;
                     }
 
                     if (selected is { } current)
                     {
                         var data = current.Buffer.AsSpan(0, frameBytes);
+
                         Nv12Converter.Convert(data[..(width * height)], width, data[(width * height)..], width,
                             width, height, pixels, width * 4);
+
                         hasPixels = true;
+
                         if (window.Draw(pixels))
                         {
                             presented++;
@@ -155,6 +178,7 @@ public static class StreamingMediaSession
                 if (done && pending == null && queue.Reader.Completion.IsCompleted)
                 {
                     producer.GetAwaiter().GetResult();
+
                     if (decoded == 0 || Math.Abs(decoded / (double)FramesPerSecond - duration) >
                         1.0 / FramesPerSecond + 0.000001)
                     {
@@ -177,6 +201,7 @@ public static class StreamingMediaSession
         finally
         {
             stop.Cancel();
+
             try
             {
                 producer.GetAwaiter().GetResult();
@@ -204,6 +229,7 @@ public static class StreamingMediaSession
         var limit = checked(SampleRate * Channels * sizeof(short) * seconds);
         var bytes = new byte[limit];
         var count = 0;
+
         await LocalMediaPipe.ReadAsync(ffmpeg, input,
         [
             "-map", "0:a:0", "-vn", "-t", seconds.ToString(CultureInfo.InvariantCulture), "-ac", "2", "-ar",
@@ -211,17 +237,20 @@ public static class StreamingMediaSession
         ], async (stream, token) =>
         {
             count = await LocalMediaPipe.FillAsync(stream, bytes, token).ConfigureAwait(false);
+
             if (count == limit && await stream.ReadAsync(new byte[1], token).ConfigureAwait(false) != 0)
             {
                 throw new InvalidDataException("Audio output exceeds the configured duration.");
             }
         }, cancellationToken).ConfigureAwait(false);
+
         if (count == 0 || count % (Channels * sizeof(short)) != 0)
         {
             throw new InvalidDataException("Missing or misaligned PCM output.");
         }
 
         var pcm = new short[count / sizeof(short)];
+
         for (var index = 0; index < pcm.Length; index++)
         {
             pcm[index] = BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(index * sizeof(short), sizeof(short)));
@@ -243,14 +272,17 @@ public static class StreamingMediaSession
                 async (stream, token) =>
                 {
                     var index = 0;
+
                     while (true)
                     {
                         var buffer = ArrayPool<byte>.Shared.Rent(frameBytes);
                         var transferred = false;
+
                         try
                         {
                             var count = await LocalMediaPipe.FillAsync(stream, buffer.AsMemory(0, frameBytes), token)
                                 .ConfigureAwait(false);
+
                             if (count == 0)
                             {
                                 break;
@@ -263,6 +295,7 @@ public static class StreamingMediaSession
                             }
 
                             await writer.WriteAsync(new VideoFrame(index++, buffer), token).ConfigureAwait(false);
+
                             transferred = true;
                         }
                         finally
@@ -274,6 +307,7 @@ public static class StreamingMediaSession
                         }
                     }
                 }, cancellationToken).ConfigureAwait(false);
+
             writer.TryComplete();
         }
         catch (Exception exception)

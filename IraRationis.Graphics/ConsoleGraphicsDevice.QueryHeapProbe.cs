@@ -13,6 +13,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var heap = (nint)0;
         var queried = (nint)0;
         var parent = (nint)0;
+
         try
         {
             if (create(device, &description, &iid, &heap) != 0 || !IsQueryHeap(heap))
@@ -21,7 +22,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             description.Count = 0;
+
             var saved = ((QueryHeapObject*)heap)->Description;
+
             if (saved.Kind != 1 || saved.Count != 64 || saved.Nodes != 1)
             {
                 throw new InvalidOperationException("Query heap description ownership failed.");
@@ -29,13 +32,16 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(heap, 0);
             var pageable = PageableId;
+
             if (query(heap, &pageable, &queried) != 0 || queried != heap)
             {
                 throw new InvalidOperationException("Query heap QueryInterface failed.");
             }
 
             var refs = Drop(queried);
+
             queried = 0;
+
             if (refs != 1)
             {
                 throw new InvalidOperationException("Query heap reference count failed.");
@@ -43,28 +49,36 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var getDevice = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(heap, 7);
             var deviceId = DeviceId;
+
             if (getDevice(heap, &deviceId, &parent) != 0 || parent != device)
             {
                 throw new InvalidOperationException("Query heap parent device failed.");
             }
 
             _ = Drop(parent);
+
             parent = 0;
+
             var rejected = (nint)123;
+
             if (create(device, null, &iid, &rejected) != InvalidArgument || rejected != 0)
             {
                 throw new InvalidOperationException("Query heap null description validation failed.");
             }
 
             rejected = 123;
+
             if (create(device, &description, &rejectedId, &rejected) != NoInterface || rejected != 0)
             {
                 throw new InvalidOperationException("Query heap IID validation failed.");
             }
 
             var address = heap;
+
             refs = Drop(heap);
+
             heap = 0;
+
             if (refs != 0 || IsQueryHeap(address))
             {
                 throw new InvalidOperationException("Query heap lifetime failed.");

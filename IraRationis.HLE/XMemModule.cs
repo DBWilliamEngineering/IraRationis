@@ -69,6 +69,7 @@ public static unsafe partial class XMemModule
         }
 
         var (lowest, highest) = AddressRange(flags);
+
         var requirements = new AddressRequirements
         {
             Lowest = (nuint)lowest,
@@ -240,7 +241,9 @@ public static unsafe partial class XMemModule
         }
 
         output->Flags = output->Host.State == Commit ? 3UL : 0UL;
+
         output->TagCode = 0;
+
         output->Tag = 0;
 
         return 1;
@@ -264,6 +267,7 @@ public static unsafe partial class XMemModule
         }
 
         var (gpu, standard) = ConsoleConfiguration.GetTitleMemory(ConsoleConfiguration.Current);
+
         *output = new WorkingSet
         {
             TitleLimit = (nuint)(gpu + standard - (ulong)Volatile.Read(ref _transferred)),

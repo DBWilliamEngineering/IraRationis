@@ -31,6 +31,7 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         var module = NativeLibrary.Load(path);
         var install =
             (delegate* unmanaged[Stdcall]<ImageRange*, uint, uint>)NativeLibrary.GetExport(module, "IrxInstallHandler");
+
         _disable = (delegate* unmanaged[Stdcall]<void>)NativeLibrary.GetExport(module, "IrxDisableHandler");
 
         fixed (ImageRange* pointer = ranges)
@@ -51,6 +52,7 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         if (_installed)
         {
             _disable();
+
             _installed = false;
         }
     }
@@ -87,6 +89,7 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         public ImageRange(nuint start, nuint end)
         {
             Start = start;
+
             End = end;
         }
     }

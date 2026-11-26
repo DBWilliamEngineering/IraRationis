@@ -54,7 +54,9 @@ public static unsafe class PresentationProbe
         try
         {
             writer.WriteLine("Synthetic presentation probe. No game executable or video is loaded.");
+
             var result = run(seconds, fps, gpuUpload ? 1U : 0U);
+
             writer.WriteLine($"Presentation HRESULT: 0x{unchecked((uint)result):X8}");
 
             return result < 0 ? 1 : 0;

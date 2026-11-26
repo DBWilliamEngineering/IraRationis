@@ -30,6 +30,7 @@ public sealed record ShaderContainer(byte[] Digest, ushort Major, ushort Minor, 
         }
 
         memory = memory[..(int)total];
+
         data = memory.Span;
 
         var count = BinaryData.ReadUInt32(data, 28);

@@ -31,27 +31,27 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     internal static RuntimeMediaSample? Begin()
     {
         var path = Environment.GetEnvironmentVariable("IRX_SAMPLE_MEDIA_CLIP");
+
         if (string.IsNullOrWhiteSpace(path))
         {
             return null;
         }
 
         path = Path.GetFullPath(path);
+
         if (!File.Exists(path) || !Path.GetExtension(path).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("IRX_SAMPLE_MEDIA_CLIP must select an existing local MP4.");
         }
 
         var sample = new RuntimeMediaSample(path);
-        if (Interlocked.CompareExchange(ref _active, sample, null) is not null)
-        {
-            throw new InvalidOperationException("An IRX media sample session is already active.");
-        }
 
-        return sample;
+        return Interlocked.CompareExchange(ref _active, sample, null) is not null
+            ? throw new InvalidOperationException("An IRX media sample session is already active.")
+            : sample;
     }
 
-    internal HleModule CreateModule()
+    internal static HleModule CreateModule()
     {
         var address = (nuint)(delegate* unmanaged[Stdcall]<int>)&Play;
 
@@ -63,6 +63,7 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     private static int Play()
     {
         var sample = Volatile.Read(ref _active);
+
         if (sample is null || Thread.CurrentThread.Name != "title-main" ||
             Interlocked.CompareExchange(ref sample._invoked, 1, 0) != 0)
         {
@@ -93,16 +94,16 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     private int Run()
     {
         var clip = MediaFoundationDecoder.Decode(_clipPath);
+
         using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, true);
 
         // Two independent playback lifetimes prove that device and PSO reuse are real.
         // Each window, swapchain, frame ring and fence is disposed before the next begins.
         for (var pass = 1; pass <= 2; pass++)
         {
-            var result = GpuMediaPlaybackSession.Play(clip, (window, width, height) =>
-            {
-                return new Presenter(window, width, height, context);
-            });
+            var result = GpuMediaPlaybackSession.Play(clip, 
+                (window, width, height) => new Presenter(window, width, height, context));
+
             Console.WriteLine($"[media] IRX-R44: pass={pass}; presented={result.PresentedFrames}; " +
                               $"skipped={result.SkippedFrames}; cancelled={result.Cancelled}; " +
                               $"audioSeconds={result.AudioSeconds:F3}; sourceFrames={clip.FrameCount}.");

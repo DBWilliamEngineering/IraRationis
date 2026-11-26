@@ -53,7 +53,9 @@ public static unsafe class DspModule
         try
         {
             var dsp = (Dsp*)NativeMemory.AllocZeroed((nuint)sizeof(Dsp));
+
             dsp->MaxStreams = maxStreams;
+
             *output = dsp;
 
             return 0;
@@ -96,6 +98,7 @@ public static unsafe class DspModule
         }
 
         *status = null;
+
         *stream = null;
 
         if (dsp == null || description == null)
@@ -131,10 +134,15 @@ public static unsafe class DspModule
         try
         {
             var created = (Stream*)NativeMemory.AllocZeroed((nuint)sizeof(Stream));
+
             created->Owner = dsp;
+
             created->Frames = value.Frames;
+
             created->Channels = value.Channels;
+
             *status = &created->Status;
+
             *stream = created;
 
             return 0;
@@ -161,6 +169,7 @@ public static unsafe class DspModule
         }
 
         _ = Interlocked.Decrement(ref stream->Owner->Active);
+
         NativeMemory.Free(stream);
 
         return 0;
@@ -186,8 +195,11 @@ public static unsafe class DspModule
         }
 
         var next = unchecked(stream->Status.Submitted + 1);
+
         Volatile.Write(ref stream->Status.Submitted, next);
+
         Volatile.Write(ref stream->Status.Result, 0);
+
         Volatile.Write(ref stream->Status.Completed, next);
 
         if (ticket != null)

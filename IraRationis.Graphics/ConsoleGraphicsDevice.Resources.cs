@@ -39,7 +39,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (IsResource(value))
         {
             var resource = (ResourceObject*)value;
+
             ReleaseHostResource(resource);
+
             if (resource->OwnedMemory != 0)
             {
                 FreeCommittedBacking(resource->OwnedMemory, resource->FreeHook, resource->AllocationAttributes);
@@ -64,12 +66,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _ = LiveObjects.TryRemove(value, out _);
+
         NativeMemory.Free((void*)value);
     }
 
     private static bool ResourceFootprint(ResourceDescription description, out AllocationInfo info)
     {
         info = new AllocationInfo { Size = ulong.MaxValue };
+
         if (description.Dimension != 1)
         {
             if (!TextureFootprintCalculator.TryCalculate(description, out var size, out var textureAlignment))
@@ -89,13 +93,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var alignment = Math.Max(ResourcePage, description.Alignment);
+
         if (!BitOperations.IsPow2(alignment) || description.Width > ulong.MaxValue - (alignment - 1))
         {
             return false;
         }
 
         info = new AllocationInfo
-            { Size = (description.Width + alignment - 1) & ~(alignment - 1), Alignment = alignment };
+        {
+            Size = (description.Width + alignment - 1) & ~(alignment - 1),
+            Alignment = alignment
+        };
 
         return true;
     }
@@ -109,12 +117,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var rounded = (size + alignment - 1) & ~(alignment - 1);
+
         if (rounded > (ulong)nint.MaxValue)
         {
             return 0;
         }
 
         var memory = NativeMemory.AlignedAlloc((nuint)rounded, (nuint)alignment);
+
         if (memory != null)
         {
             NativeMemory.Clear(memory, (nuint)rounded);
@@ -148,21 +158,35 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ResourceObject* value = null;
+
         try
         {
             value = (ResourceObject*)NativeMemory.AllocZeroed((nuint)sizeof(ResourceObject));
+
             value->Header.Table = _resourceTable;
+
             value->Header.References = 1;
+
             value->Description = description;
+
             value->Properties = properties;
+
             value->HeapFlags = flags;
+
             value->Address = address;
+
             value->Generation = Interlocked.Increment(ref _nextResourceGeneration);
+
             value->OwningHeap = heap;
+
             value->OwnedMemory = owned;
+
             value->FreeHook = freeHook;
+
             value->AllocationAttributes = attributes;
+
             LiveObjects[(nint)value] = _resourceTable;
+
             if (heap != 0)
             {
                 _ = Retain(heap);
@@ -175,6 +199,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         catch (OutOfMemoryException)
         {
             NativeMemory.Free(value);
+
             if (owned != 0)
             {
                 FreeCommittedBacking(owned, freeHook, attributes);
@@ -208,6 +233,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // This establishes the console resource identity only; no host shader or GPU address translation yet.
         var properties = new HeapProperties { Kind = 1, CreationNodes = 1, VisibleNodes = 1 };
         var hr = NewResource(*description, properties, 0, address, 0, 0, iid, output);
+
         if (hr == 0)
         {
             Console.Error.WriteLine(
@@ -259,6 +285,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             var hooks = _resourceAllocator?.Invoke() ?? default;
+
             if (hooks.Allocate == 0 != (hooks.Free == 0))
             {
                 Console.Error.WriteLine(
@@ -274,6 +301,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var attributes = ResourceAllocationAttributes(info.Size, info.Alignment, properties->Kind);
+
             if (TraceResourceAllocation)
             {
                 Console.Error.WriteLine(
@@ -284,6 +312,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ? AllocateBacking(info.Size, info.Alignment)
                 : (nint)((delegate* unmanaged[Stdcall]<nuint, ulong, void*>)hooks.Allocate)((nuint)info.Size,
                     attributes);
+
             if (memory == 0)
             {
                 return ReportCommittedResult(operation, OutOfMemory, 0);
@@ -292,6 +321,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if ((ulong)memory % info.Alignment != 0)
             {
                 Console.Error.WriteLine($"[graphics] {operation}: misaligned allocation 0x{(nuint)memory:X}.");
+
                 FreeCommittedBacking(memory, hooks.Free, attributes);
 
                 return ReportCommittedResult(operation, InvalidArgument, 0);
@@ -377,21 +407,30 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nint memory = 0;
+
         HeapObject* value = null;
+
         try
         {
             memory = AllocateBacking(description->Size, Math.Max(ResourcePage, description->Alignment));
+
             if (memory == 0)
             {
                 return OutOfMemory;
             }
 
             value = (HeapObject*)NativeMemory.AllocZeroed((nuint)sizeof(HeapObject));
+
             value->Header.Table = _heapTable;
+
             value->Header.References = 1;
+
             value->Description = *description;
+
             value->Memory = memory;
+
             LiveObjects[(nint)value] = _heapTable;
+
             *output = (nint)value;
 
             return 0;
@@ -399,6 +438,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         catch (OutOfMemoryException)
         {
             NativeMemory.Free(value);
+
             NativeMemory.AlignedFree((void*)memory);
 
             return OutOfMemory;
@@ -425,6 +465,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var backing = (HeapObject*)heap;
+
         if (offset % info.Alignment != 0 || (ulong)backing->Memory % info.Alignment != 0
                                          || offset > backing->Description.Size
                                          || info.Size > backing->Description.Size - offset)
@@ -458,6 +499,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = new AllocationInfo { Size = ulong.MaxValue };
+
         if (descriptions == null || count > 65536)
         {
             Console.Error.WriteLine(
@@ -468,9 +510,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var size = 0UL;
         var alignment = ResourcePage;
+
         for (var index = 0U; index < count; index++)
         {
             var description = descriptions[index];
+
             if (TraceResourceAllocation)
             {
                 ReportResourceAllocation(index, count, description, "request");
@@ -481,7 +525,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var reason = description.Dimension != 1
                     ? "unsupported texture footprint"
                     : "invalid or unsupported buffer footprint";
+
                 ReportResourceAllocation(index, count, description, reason);
+
                 Console.Error.WriteLine(
                     $"[graphics] GetResourceAllocationInfo returning size=0x{output->Size:X16}, alignment={output->Alignment}.");
 
@@ -496,6 +542,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             size = (size + info.Alignment - 1) & ~(info.Alignment - 1);
+
             if (size > ulong.MaxValue - info.Size)
             {
                 ReportResourceAllocation(index, count, description, "size overflow");
@@ -504,10 +551,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             size += info.Size;
+
             alignment = Math.Max(alignment, info.Alignment);
         }
 
         *output = new AllocationInfo { Size = size, Alignment = alignment };
+
         if (TraceResourceAllocation || output->Size > uint.MaxValue)
         {
             Console.Error.WriteLine(
@@ -526,6 +575,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = 0;
+
         if (address == 0 || address % ResourcePage != 0 || pages == 0 || address > (ulong)nint.MaxValue
             || pages * ResourcePage > (ulong)nint.MaxValue - address)
         {
@@ -535,7 +585,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             var handle = (nuint)Interlocked.Increment(ref _nextPool);
+
             PagePools[handle] = (address, pages);
+
             *output = handle;
 
             return 0;
@@ -600,6 +652,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int ResourceHeapProperties(nint self, HeapProperties* properties, uint* flags)
     {
         var resource = (ResourceObject*)self;
+
         if (properties != null)
         {
             *properties = resource->Properties;
@@ -637,7 +690,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var available = *size;
+
         *size = (uint)value.Length;
+
         if (data == null)
         {
             return 0;
@@ -689,31 +744,49 @@ public static unsafe partial class ConsoleGraphicsDevice
         device[25] =
             (nint)(delegate* unmanaged[Stdcall]<AllocationInfo*, nint, uint, uint, ResourceDescription*, AllocationInfo*
                 >)&ResourceAllocationInfo;
+
         device[27] =
             (nint)(delegate* unmanaged[Stdcall]<nint, HeapProperties*, uint, ResourceDescription*, uint, nint, Guid*,
                 nint*, int>)&CreateCommittedResource;
+
         device[28] = (nint)(delegate* unmanaged[Stdcall]<nint, HeapDescription*, Guid*, nint*, int>)&CreateResourceHeap;
+
         device[29] =
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, ulong, ResourceDescription*, uint, nint, Guid*, nint*, int>)
             &CreatePlacedResource;
+
         device[74] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, nuint*, int>)&RegisterPagePool;
+
         device[75] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint, int>)&UnregisterPagePool;
+
         device[76] = device[27];
+
         device[127] =
             (nint)(delegate* unmanaged[Stdcall]<nint, HeapProperties*, uint, ResourceDescription*, uint, nint, nint,
                 uint, uint*, Guid*, nint*, int>)&CreateCommittedResource3;
+
         device[133] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ulong, ResourceDescription*, uint, nint, Guid*, nint*, int>)
             &CreateResourceAtAddress;
+
         var resource = ChildTable(32);
+
         resource[8] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint*, int>)&MapResource;
+
         resource[9] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, void>)&UnmapResource;
+
         resource[10] = (nint)(delegate* unmanaged[Stdcall]<nint, ResourceDescription*, void>)&DescribeResource;
+
         resource[11] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&ResourceAddress;
+
         resource[14] = (nint)(delegate* unmanaged[Stdcall]<nint, HeapProperties*, uint*, int>)&ResourceHeapProperties;
+
         _resourceTable = (nint)resource;
+
         var heap = ChildTable(24);
+
         heap[8] = (nint)(delegate* unmanaged[Stdcall]<nint, HeapDescription*, void>)&DescribeHeap;
+
         _heapTable = (nint)heap;
     }
 

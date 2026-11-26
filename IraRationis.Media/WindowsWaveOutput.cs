@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Media;
 
 /// <summary>Blocking native playback for short PCM samples. Not a streaming mixer or WASAPI engine.</summary>
-public static partial class WindowsWaveOutput
+public static unsafe partial class WindowsWaveOutput
 {
     public static void Play(ReadOnlySpan<short> samples, int sampleRate, int channels)
     {
@@ -13,6 +13,7 @@ public static partial class WindowsWaveOutput
         }
 
         var wave = PcmMixer.ToWave(samples, sampleRate, channels);
+
         fixed (byte* pointer = wave)
         {
             // SND_MEMORY | SND_NODEFAULT; synchronous by default, so memory stays pinned.

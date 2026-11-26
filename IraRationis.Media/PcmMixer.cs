@@ -25,6 +25,7 @@ public static class PcmMixer
             var a = float.IsFinite(first[i]) ? first[i] : 0;
             var b = float.IsFinite(second[i]) ? second[i] : 0;
             var mixed = (double)a * firstGain + (double)b * secondGain;
+
             output[i] = (float)Math.Clamp(mixed, -1, 1);
         }
     }
@@ -39,18 +40,31 @@ public static class PcmMixer
 
         var dataBytes = checked(samples.Length * 2);
         var wave = new byte[checked(44 + dataBytes)];
+
         "RIFF"u8.CopyTo(wave);
+
         BinaryPrimitives.WriteInt32LittleEndian(wave.AsSpan(4), wave.Length - 8);
+
         "WAVEfmt "u8.CopyTo(wave.AsSpan(8));
+
         BinaryPrimitives.WriteInt32LittleEndian(wave.AsSpan(16), 16);
+
         BinaryPrimitives.WriteUInt16LittleEndian(wave.AsSpan(20), 1);
+
         BinaryPrimitives.WriteUInt16LittleEndian(wave.AsSpan(22), (ushort)channels);
+
         BinaryPrimitives.WriteInt32LittleEndian(wave.AsSpan(24), sampleRate);
+
         BinaryPrimitives.WriteInt32LittleEndian(wave.AsSpan(28), sampleRate * channels * 2);
+
         BinaryPrimitives.WriteUInt16LittleEndian(wave.AsSpan(32), (ushort)(channels * 2));
+
         BinaryPrimitives.WriteUInt16LittleEndian(wave.AsSpan(34), 16);
+
         "data"u8.CopyTo(wave.AsSpan(36));
+
         BinaryPrimitives.WriteInt32LittleEndian(wave.AsSpan(40), dataBytes);
+
         for (var i = 0; i < samples.Length; i++)
         {
             BinaryPrimitives.WriteInt16LittleEndian(wave.AsSpan(44 + i * 2), samples[i]);

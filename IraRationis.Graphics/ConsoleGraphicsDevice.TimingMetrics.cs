@@ -38,6 +38,7 @@ public static partial class ConsoleGraphicsDevice
             var hot = new List<(int Id, double Cores, string State)>();
             var threads = process.Threads;
             var missed = 0;
+
             foreach (ProcessThread thread in threads)
             {
                 try
@@ -45,11 +46,14 @@ public static partial class ConsoleGraphicsDevice
                     var id = thread.Id;
                     var start = thread.StartTime.Ticks;
                     var cpu = thread.TotalProcessorTime.Ticks;
+
                     current[id] = (start, cpu);
+
                     if (elapsed > 0 && R27PreviousThreads.TryGetValue(id, out var old) &&
                         old.StartTicks == start && cpu >= old.CpuTicks)
                     {
                         var cores = (cpu - old.CpuTicks) / (double)TimeSpan.TicksPerSecond / elapsed;
+
                         if (cores >= 0.005)
                         {
                             hot.Add((id, cores, thread.ThreadState.ToString()));
@@ -69,18 +73,23 @@ public static partial class ConsoleGraphicsDevice
             }
 
             R27PreviousThreads.Clear();
+
             foreach (var pair in current)
             {
                 R27PreviousThreads.Add(pair.Key, pair.Value);
             }
 
             _r27PreviousSample = now;
+
             hot.Sort(static (left, right) => right.Cores.CompareTo(left.Cores));
+
             var report = new StringBuilder(FormattableString.Invariant(
                 $"[performance] IRX-R27-THREADS: interval={elapsed:F2}s; sampled={current.Count}; missed={missed};"));
+
             for (var i = 0; i < Math.Min(5, hot.Count); i++)
             {
                 var item = hot[i];
+
                 report.Append(FormattableString.Invariant(
                     $" tid={item.Id}(0x{item.Id:X}),cores={item.Cores:F3},state={item.State};"));
             }
@@ -104,13 +113,19 @@ public static partial class ConsoleGraphicsDevice
         // by their guest owners; never enumerate their mutable lists or dereference
         // native handles from the diagnostic thread.
         long states = 0, segments = 0, views = 0;
+
         ulong uploadBytes = 0;
+
         foreach (var pair in CommandStates)
         {
             var state = pair.Value;
+
             states++;
+
             segments += state.MemoryBoundaries.Count;
+
             views += state.HostViews.Count;
+
             uploadBytes += Volatile.Read(ref state.UploadBytes);
         }
 
@@ -121,6 +136,7 @@ public static partial class ConsoleGraphicsDevice
     private static R25Counter[] CreateR25Counters()
     {
         var counters = new R25Counter[(int)R25Stage.Count];
+
         for (var i = 0; i < counters.Length; i++)
         {
             counters[i] = new R25Counter();
@@ -141,9 +157,13 @@ public static partial class ConsoleGraphicsDevice
             try
             {
                 using var process = Process.GetCurrentProcess();
+
                 _r25PreviousCpuTicks = process.TotalProcessorTime.Ticks;
+
                 _r25LastReport = Stopwatch.GetTimestamp();
+
                 _r25Timer = new Timer(static _ => ReportR25Timing(), null, 2000, 2000);
+
                 LogR25("[performance] IRX-R25: timing active; inclusive thread-wall timings, not additive; period=2s.");
             }
             catch (Exception exception)
@@ -153,9 +173,11 @@ public static partial class ConsoleGraphicsDevice
         }
 
         var now = Stopwatch.GetTimestamp();
+
         if (stage == R25Stage.PresentX)
         {
             var previous = Interlocked.Exchange(ref _r25LastPresentExit, 0);
+
             if (previous != 0 && now >= previous)
             {
                 RecordR25Timing(R25Stage.PresentGap, now - previous);
@@ -170,12 +192,17 @@ public static partial class ConsoleGraphicsDevice
     private static void RecordR25Timing(R25Stage stage, long ticks)
     {
         var counter = R25Counters[(int)stage];
+
         Interlocked.Add(ref counter.Ticks, ticks);
+
         Interlocked.Increment(ref counter.Calls);
+
         var maximum = Volatile.Read(ref counter.Maximum);
+
         while (ticks > maximum)
         {
             var previous = Interlocked.CompareExchange(ref counter.Maximum, ticks, maximum);
+
             if (previous == maximum)
             {
                 break;
@@ -189,6 +216,7 @@ public static partial class ConsoleGraphicsDevice
         if (stage != R25Stage.PresentGap && ticks >= Stopwatch.Frequency / 10)
         {
             var slow = Interlocked.Increment(ref counter.Slow);
+
             if (slow <= 4 || (slow & (slow - 1)) == 0)
             {
                 LogR25(FormattableString.Invariant(
@@ -220,16 +248,19 @@ public static partial class ConsoleGraphicsDevice
         {
             var now = Stopwatch.GetTimestamp();
             var elapsed = (now - _r25LastReport) / (double)Stopwatch.Frequency;
+
             if (elapsed < 1)
             {
                 return;
             }
 
             using var process = Process.GetCurrentProcess();
+
             var cpuTicks = process.TotalProcessorTime.Ticks;
             var cpuCores = (cpuTicks - _r25PreviousCpuTicks) / (double)TimeSpan.TicksPerSecond / elapsed;
             var report = new StringBuilder(FormattableString.Invariant(
                 $"[performance] IRX-R25: interval={elapsed:F2}s; cpuCoreEquiv={cpuCores:F2}; privateMiB={process.PrivateMemorySize64 / 1048576.0:F0}; workingSetMiB={process.WorkingSet64 / 1048576.0:F0}; gc={GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)};"));
+
             for (var i = 0; i < R25Counters.Length; i++)
             {
                 var counter = R25Counters[i];
@@ -238,6 +269,7 @@ public static partial class ConsoleGraphicsDevice
                 var maximum = Interlocked.Exchange(ref counter.Maximum, 0);
                 var active = Interlocked.Read(ref counter.Active);
                 var count = calls - counter.PreviousCalls;
+
                 if (count != 0 || active != 0)
                 {
                     report.Append(FormattableString.Invariant(
@@ -245,13 +277,18 @@ public static partial class ConsoleGraphicsDevice
                 }
 
                 counter.PreviousCalls = calls;
+
                 counter.PreviousTicks = ticks;
             }
 
             _r25PreviousCpuTicks = cpuTicks;
+
             _r25LastReport = now;
+
             LogR25(report.ToString());
+
             ReportR27Threads(process, now);
+
             ReportR27Resources();
         }
         catch (Exception exception)
@@ -316,8 +353,11 @@ public static partial class ConsoleGraphicsDevice
             }
 
             var now = Stopwatch.GetTimestamp();
+
             RecordR25Timing(stage, now - started);
+
             Interlocked.Decrement(ref R25Counters[(int)stage].Active);
+
             if (stage == R25Stage.PresentX)
             {
                 Interlocked.Exchange(ref _r25LastPresentExit, now);

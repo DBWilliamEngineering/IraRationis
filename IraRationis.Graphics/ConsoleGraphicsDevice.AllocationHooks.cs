@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.Graphics;
 
-public static partial class ConsoleGraphicsDevice
+public static unsafe partial class ConsoleGraphicsDevice
 {
     private static Func<(nint Allocate, nint Free)>? _resourceAllocator;
 
@@ -14,12 +14,14 @@ public static partial class ConsoleGraphicsDevice
     public static void ConfigureResourceAllocator(Func<(nint Allocate, nint Free)> resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
+
         _resourceAllocator = resolver;
     }
 
     private static ulong ResourceAllocationAttributes(ulong size, ulong alignment, uint heapKind)
     {
         const ulong graphicsAllocator = 128UL << 16;
+
         var pages = size >= 2UL << 20 ? 2UL : 1UL;
         var memory = heapKind == 1 ? 1UL : 3UL;
         var exponent = (ulong)BitOperations.TrailingZeroCount(alignment);

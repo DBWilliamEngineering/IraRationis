@@ -11,7 +11,7 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        if (args.Length == 1 && args[0] is "--help" or "-h")
+        if (args is ["--help" or "-h"])
         {
             PrintUsage(Console.Out);
 
@@ -30,19 +30,18 @@ internal static class Program
                 return DeviceProbe.Execute(Console.Out);
             }
 
-            if (args.Length > 0 && args[0] == "present-probe")
+            switch (args.Length)
             {
-                return PresentationProbe.Execute(args[1..], Console.Out);
-            }
-
-            if (args.Length > 0 && args[0] == "memory-probe")
-            {
-                return MemoryProbe.Execute(args[1..], Console.Out);
+                case > 0 when args[0] == "present-probe":
+                    return PresentationProbe.Execute(args[1..], Console.Out);
+                case > 0 when args[0] == "memory-probe":
+                    return MemoryProbe.Execute(args[1..], Console.Out);
             }
 
             if (args is ["veh-probe"])
             {
                 ConsoleInstructionHandler.VerifyManagedExceptionDispatch();
+
                 Console.WriteLine("Native VEH managed exception probe passed.");
 
                 return 0;
@@ -106,7 +105,7 @@ internal static class Program
 
     private static int Run(string[] args)
     {
-        var path = (string?)null;
+        string? path = null;
         var bindOnly = false;
         var strict = false;
         var console = ConsoleModel.SeriesX;
@@ -172,16 +171,26 @@ internal static class Program
     private static void PrintUsage(TextWriter writer)
     {
         writer.WriteLine("Ira Rationis | Vindex | 0.1.0");
+
         writer.WriteLine(
             "Usage: irx [file] | irx run [file] [--bind-only] [--strict] [--console series-x|series-s] [--unimplemented trap|zero]");
+
         writer.WriteLine("       irx veh-probe");
+
         writer.WriteLine("       irx graphics-probe");
+
         writer.WriteLine("       irx present-probe [--seconds 1..120] [--fps 1..240] [--gpu-upload]");
+
         writer.WriteLine("       irx memory-probe [--mib 1..256] [--iterations 1..100] [--adapter N]");
+
         writer.WriteLine("       irx memory-probe --self-test");
+
         writer.WriteLine("       irx media-probe <ffmpeg.exe> <local clip> [--play|--stream]");
+
         writer.WriteLine("       irx media-probe --mf <local MP4> [--play]");
+
         writer.WriteLine("       irx inspect [file] | irx shader <file> | irx archive <file>");
+
         writer.WriteLine(
             "Omit the run path to open the Windows executable picker. Run only trusted title files; this is not a sandbox.");
     }

@@ -27,7 +27,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         out nint resource)
     {
         plane = default;
+
         resource = 0;
+
         if (planes == 0)
         {
             return 0;
@@ -58,6 +60,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int PresentX(nint self, uint planes, nint planeParameters, nint parameters)
     {
         using var r25Timing = BeginR25Timing(R25Stage.PresentX);
+
         if (!LiveObjects.TryGetValue(self, out var table) || (table != _queueOld && table != _queueNew))
         {
             return InvalidArgument;
@@ -65,6 +68,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var request = Interlocked.Increment(ref _presentRequests);
         var hr = DecodePresentSource(planes, planeParameters, out var plane, out var resource);
+
         if (hr < 0 || (resource != 0 && !IsResource(resource)))
         {
             Console.Error.WriteLine(
@@ -75,6 +79,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var sample = request <= 4 || (request & (request - 1)) == 0;
         var queue = Host(self);
+
         if (queue != 0 && *(uint*)(self + 0x10) == 0)
         {
             ConfigureR191Window();
@@ -84,10 +89,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             Console.Error.WriteLine(
                 $"[graphics] IRX-GFX-PRESENT-R16: request={request}, queueType={*(uint*)(self + 0x10)}, planes={planes}, token={plane.Token}, resources={plane.ResourceCount}.");
+
             if (resource != 0)
             {
                 var source = (ResourceObject*)resource;
                 var desc = source->Description;
+
                 Console.Error.WriteLine(
                     $"[graphics] PresentX source: size={desc.Width}x{desc.Height}, format={desc.Format}, layout=0x{desc.Layout:X}, hostAllocated={source->HostResource != 0}, knownSameQueueWriter={queue != 0 && R16Writer(resource) == queue}.");
             }
@@ -113,6 +120,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var acknowledged = Interlocked.Increment(ref _headlessPresentRequests);
+
         if (sample)
         {
             Console.Error.WriteLine(
@@ -125,13 +133,16 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RegisterPresentationMethods()
     {
         var method = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, int>)&PresentX;
+
         ((nint*)_queueOld)[PresentOldSlot] = method;
+
         ((nint*)_queueNew)[PresentNewSlot] = method;
     }
 
     private static void ValidatePresentationRegistration()
     {
         var method = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint, int>)&PresentX;
+
         if (sizeof(nint) != 8 || sizeof(PresentPlanePrefix) != 24 ||
             ((nint*)_queueOld)[PresentOldSlot] != method || ((nint*)_queueNew)[PresentNewSlot] != method)
         {
@@ -139,7 +150,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nint expected = 0x12345000;
+
         var prefix = new PresentPlanePrefix { Token = 42, ResourceCount = 1, Resources = (nint)(&expected) };
+
         if (DecodePresentSource(1, (nint)(&prefix), out var decoded, out var resource) != 0 ||
             decoded.Token != 42 || decoded.ResourceCount != 1 || resource != expected ||
             DecodePresentSource(1, 0, out _, out _) != InvalidArgument ||
@@ -149,12 +162,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         prefix.Resources = 0;
+
         if (DecodePresentSource(1, (nint)(&prefix), out _, out _) != InvalidArgument)
         {
             throw new InvalidOperationException("PresentX null resource array probe failed.");
         }
 
         var invoke = (delegate* unmanaged[Stdcall]<nint, uint, nint, nint, int>)method;
+
         if (invoke(0, 0, 0, 0) != InvalidArgument)
         {
             throw new InvalidOperationException("PresentX invalid queue probe failed.");
@@ -167,10 +182,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-PRESENT-R19: swapchain={EnableR19SwapChain}, diagnosticPreview={EnableR16Window}, colorFlow={EnableR171ColorFlow}.");
+
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-WINDOW-R19.1: enabled={EnableR191Windowed1080}; requestedClient={R191ClientWidth}x{R191ClientHeight}; set IRX_PRESENT_WINDOWED_1080=0 to preserve title window size.");
+
         Console.Error.WriteLine(
             $"[performance] IRX-R24: bounded completion-fence pooling and metrics active; verboseGraphics={R24Verbose}.");
+
         Console.Error.WriteLine(
             "[graphics-probe] R16 PresentX old/new registration and plane prefix passed (CPU only).");
     }

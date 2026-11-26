@@ -23,6 +23,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         device[10] =
             (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsDescription*, Guid*, nint*, int>)&CreateGraphicsPipeline;
+
         device[86] =
             (nint)(delegate* unmanaged[Stdcall]<nint, PipelineStreamDescription*, Guid*, nint*, int>)
             &CreatePipelineStateStream;
@@ -87,6 +88,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Span<ShaderBytecode> stages = stackalloc ShaderBytecode[5]
             { description->Vertex, description->Pixel, description->Domain, description->Hull, description->Geometry };
+
         ReadOnlySpan<uint> kinds = [1, 2, 3, 4, 5];
 
         return StoreGraphicsPipeline(description->Root, stages, kinds, [], false, false, iid, output);
@@ -108,18 +110,25 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         Span<ShaderBytecode> stages = stackalloc ShaderBytecode[8];
+
         Span<uint> kinds = stackalloc uint[8];
+
         var count = 0;
         var root = (nint)0;
         var complete = true;
+
         string? incompleteReason = null;
+
         R14InputElement[]? inputLayout = null;
+
         var seen = 0U;
+
         try
         {
             var records = new List<PipelineStateRecord>();
             var length = (int)description->Size;
             var offset = 0;
+
             while (offset < length)
             {
                 if (length - offset < 8)
@@ -130,12 +139,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var address = description->Stream + offset;
                 var kind = Unsafe.ReadUnaligned<uint>(address);
                 var size = StreamRecordSize(kind);
+
                 if (size == 0)
                 {
                     // Upstream stops at unknown subobjects; never guess their lengths.
                     Console.Error.WriteLine(
                         $"[graphics] Pipeline stream: unknown subobject {kind} at {offset}; remainder not captured.");
+
                     complete = false;
+
                     incompleteReason ??= $"unknown subobject {kind} at byte {offset}";
 
                     break;
@@ -147,13 +159,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var bit = 1U << (int)kind;
+
                 if ((seen & bit) != 0)
                 {
                     complete = false;
+
                     incompleteReason ??= $"duplicate subobject {kind} at byte {offset}";
                 }
 
                 seen |= bit;
+
                 if (kind == 0)
                 {
                     root = Unsafe.ReadUnaligned<nint>(address + 8);
@@ -166,6 +181,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
 
                     stages[count] = Unsafe.ReadUnaligned<ShaderBytecode>(address + 8);
+
                     kinds[count++] = kind;
                 }
                 else if (IsPointerFreeState(kind))
@@ -180,12 +196,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                             Unsafe.ReadUnaligned<uint>(address + 16), out inputLayout))
                     {
                         complete = false;
+
                         incompleteReason ??= $"invalid input layout at byte {offset}";
                     }
                 }
                 else if (!IsOmittablePipelineState(kind, new ReadOnlySpan<byte>(address, size)))
                 {
                     complete = false;
+
                     incompleteReason ??= $"untranslated pointer-bearing subobject {kind} at byte {offset}";
                 }
 
@@ -230,29 +248,41 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         PipelineObject* pipeline = null;
+
         List<PipelineShader>? retained = null;
+
         var rootRetained = false;
         var published = false;
+
         try
         {
             retained = new List<PipelineShader>(stages.Length);
+
             pipeline = (PipelineObject*)NativeMemory.AllocZeroed((nuint)sizeof(PipelineObject));
+
             pipeline->Header.Table = _pipelineTable;
+
             pipeline->Header.References = 1;
+
             Span<byte> digest = stackalloc byte[32];
+
             lock (PipelineGate)
             {
                 for (var index = 0; index < stages.Length; index++)
                 {
                     var stage = stages[index];
+
                     if (stage.Size == 0)
                     {
                         continue;
                     }
 
                     var bytes = new ReadOnlySpan<byte>(stage.Code, (int)stage.Size);
+
                     _ = SHA256.HashData(bytes, digest);
+
                     var hash = Convert.ToHexString(digest);
+
                     if (!ComputeShaders.TryGetValue(hash, out var shader))
                     {
                         if (_retainedComputeBytes + bytes.Length > MaximumRetainedComputeBytes)
@@ -261,10 +291,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                         }
 
                         shader = new ShaderContainer(bytes.ToArray());
+
                         var reference = new PipelineShader(kinds[index], hash, shader);
+
                         ComputeShaders.Add(hash, shader);
+
                         _retainedComputeBytes += shader.Bytes.Length;
+
                         shader.References++;
+
                         retained.Add(reference);
                     }
                     else
@@ -275,7 +310,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                         }
 
                         var reference = new PipelineShader(kinds[index], hash, shader);
+
                         shader.References++;
+
                         retained.Add(reference);
                     }
                 }
@@ -283,18 +320,23 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (root != 0)
                 {
                     _ = Retain(root);
+
                     rootRetained = true;
                 }
 
                 GraphicsPipelines.Add((nint)pipeline,
                     new GraphicsPipelineMetadata(root, retained, records, stream, complete, incompleteReason,
                         inputLayout));
+
                 LiveObjects[(nint)pipeline] = _pipelineTable;
+
                 published = true;
             }
 
             *output = (nint)pipeline;
+
             var created = Interlocked.Increment(ref _graphicsCreated);
+
             if (created <= 8 || (created & (created - 1)) == 0)
             {
                 Console.WriteLine(
@@ -316,6 +358,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     if (pipeline != null)
                     {
                         _ = GraphicsPipelines.Remove((nint)pipeline);
+
                         _ = LiveObjects.TryRemove((nint)pipeline, out _);
                     }
 

@@ -16,7 +16,9 @@ public static class GpuMediaPlaybackSession
     public static PlaybackResult Play(DecodedClip clip, Func<nint, int, int, IGpuVideoPresenter> createPresenter)
     {
         ArgumentNullException.ThrowIfNull(clip);
+
         ArgumentNullException.ThrowIfNull(createPresenter);
+
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException();
@@ -33,15 +35,18 @@ public static class GpuMediaPlaybackSession
         }
 
         var duration = clip.Pcm.Length / (double)(clip.SampleRate * clip.Channels);
+
         if (Math.Abs(duration - clip.FrameCount / 30.0) > 1.0 / 30.0)
         {
             throw new InvalidDataException("Video and PCM durations disagree by more than one frame.");
         }
 
         var diagnostics = Environment.GetEnvironmentVariable("IRX_HOST_MEDIA_DIAGNOSTICS") == "1";
+
         if (diagnostics)
         {
             var peak = 0;
+
             foreach (var sample in clip.Pcm)
             {
                 peak = Math.Max(peak, Math.Abs((int)sample));
@@ -52,6 +57,7 @@ public static class GpuMediaPlaybackSession
         }
 
         var stage = "window";
+
         try
         {
             return PlayCore(clip, createPresenter, duration, diagnostics, ref stage);
@@ -62,6 +68,7 @@ public static class GpuMediaPlaybackSession
             {
                 Report($"failed; stage={stage}; error={exception.GetType().Name}; " +
                        $"HRESULT=0x{exception.HResult:X8}.");
+
                 Report(exception.ToString());
             }
 
@@ -74,17 +81,24 @@ public static class GpuMediaPlaybackSession
         bool diagnostics, ref string stage)
     {
         using var window = new WindowsVideoWindow(clip.Width, clip.Height);
+
         stage = "presenter initialization";
+
         using var presenter = createPresenter(window.Handle, clip.Width, clip.Height);
+
         stage = "audio initialization";
+
         using var audio = new WindowsPcmClock(clip);
+
         if (diagnostics)
         {
             Report("window, GPU presenter and audio clock initialized.");
         }
 
         var timeline = new HostFrameTimeline(clip.FrameCount);
+
         stage = "first frame window pump";
+
         if (!window.Pump())
         {
             stage = "cancellation and disposal";
@@ -95,14 +109,18 @@ public static class GpuMediaPlaybackSession
         // Keep audio stopped during the initial submission. A slow first Present
         // must not cause the opening image to be skipped by the audio clock.
         var firstStarted = Stopwatch.GetTimestamp();
+
         stage = "first frame timeline selection";
+
         if (!timeline.TrySelect(0, out var first))
         {
             throw new InvalidOperationException("Unable to select the opening frame.");
         }
 
         stage = "first frame retrieval";
+
         var pixels = clip.GetFrame(first);
+
         if (diagnostics)
         {
             Report($"preroll input; index={first}; frameCount={clip.FrameCount}; " +
@@ -111,9 +129,13 @@ public static class GpuMediaPlaybackSession
         }
 
         stage = "first frame GPU presenter";
+
         var accepted = presenter.Present(pixels);
+
         stage = "first frame timeline accounting";
+
         timeline.Record(accepted);
+
         if (diagnostics)
         {
             Report(FormattableString.Invariant(
@@ -126,6 +148,7 @@ public static class GpuMediaPlaybackSession
         }
 
         stage = "post-preroll window pump";
+
         if (!window.Pump())
         {
             stage = "cancellation and disposal";
@@ -134,10 +157,15 @@ public static class GpuMediaPlaybackSession
         }
 
         stage = "audio start";
+
         var timer = Stopwatch.StartNew();
+
         audio.Start();
+
         stage = "playback";
+
         var clockAdvanced = false;
+
         if (diagnostics)
         {
             Report("audio start returned successfully after first frame acceptance.");
@@ -151,30 +179,42 @@ public static class GpuMediaPlaybackSession
             }
 
             stage = "audio clock read";
+
             var done = audio.Done;
             var seconds = audio.Seconds;
+
             stage = "playback timeline selection";
+
             var selected = timeline.TrySelect(seconds, out var index);
+
             if (diagnostics && !clockAdvanced && timeline.Position > 0)
             {
                 clockAdvanced = true;
+
                 Report(FormattableString.Invariant($"audio clock advanced; seconds={timeline.Position:F3}."));
             }
 
             if (selected)
             {
                 stage = "playback frame retrieval";
+
                 var frame = clip.GetFrame(index);
+
                 stage = "playback GPU presenter";
+
                 var frameAccepted = presenter.Present(frame);
+
                 stage = "playback timeline accounting";
+
                 timeline.Record(frameAccepted);
             }
 
             if (done)
             {
                 timeline.Finish();
+
                 stage = "completion and disposal";
+
                 if (diagnostics)
                 {
                     Report(FormattableString.Invariant(
@@ -185,10 +225,12 @@ public static class GpuMediaPlaybackSession
             }
 
             stage = "playback window pump";
+
             Thread.Sleep(2);
         }
 
         stage = "cancellation and disposal";
+
         if (diagnostics)
         {
             Report(FormattableString.Invariant(

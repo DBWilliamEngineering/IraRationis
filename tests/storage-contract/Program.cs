@@ -14,6 +14,7 @@ static void Require(bool condition, string name)
 static byte[] Compress(byte[] data)
 {
     using var memory = new MemoryStream();
+
     using (var stream = new ZLibStream(memory, CompressionLevel.Optimal, true))
     {
         stream.Write(data);

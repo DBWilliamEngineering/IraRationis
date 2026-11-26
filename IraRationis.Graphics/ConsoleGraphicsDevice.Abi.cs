@@ -12,83 +12,195 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static readonly Dictionary<int, string> DeviceMethods = new()
     {
-        [7] = "GetNodeCount", [8] = "CreateCommandQueue", [9] = "CreateCommandAllocator",
-        [10] = "CreateGraphicsPipelineState", [11] = "CreateComputePipelineState", [12] = "CreateCommandList",
-        [13] = "CheckFeatureSupport", [14] = "CreateDescriptorHeap", [15] = "GetDescriptorHandleIncrementSize",
-        [16] = "CreateRootSignature", [17] = "CreateConstantBufferView", [18] = "CreateShaderResourceView",
-        [19] = "CreateUnorderedAccessView", [20] = "CreateRenderTargetView", [21] = "CreateDepthStencilView",
-        [22] = "CreateSampler", [23] = "CopyDescriptors", [24] = "CopyDescriptorsSimple",
-        [25] = "GetResourceAllocationInfo", [26] = "GetCustomHeapProperties", [27] = "CreateCommittedResource",
-        [28] = "CreateHeap", [29] = "CreatePlacedResource", [36] = "CreateFence", [38] = "GetCopyableFootprints",
-        [39] = "CreateQueryHeap", [41] = "CreateCommandSignature", [48] = "CreateCommandQueueX",
-        [57] = "UnknownPipelineCreation_0x1C8", [61] = "CreateSamplerX", [62] = "CreateComputePipelineX",
-        [67] = "UnknownPipelineCreation_0x218", [69] = "DebugErrorFilter", [70] = "CreatePlacedSRV",
-        [71] = "CreatePlacedUAV", [73] = "CreateCommandListX", [74] = "RegisterPagePool", [75] = "UnregisterPagePool",
-        [76] = "CreateCommittedResourceX", [78] = "SetFrameInterval", [79] = "ScheduleFrameEvent",
-        [80] = "WaitFrameEvent", [81] = "GetFrameStatistics", [86] = "CreatePipelineStateStream",
-        [108] = "GetResourceAllocationInfo2", [127] = "CreateCommittedResource3", [133] = "CreateResourceAtAddress"
+        [7] = "GetNodeCount",
+        [8] = "CreateCommandQueue",
+        [9] = "CreateCommandAllocator",
+        [10] = "CreateGraphicsPipelineState",
+        [11] = "CreateComputePipelineState",
+        [12] = "CreateCommandList",
+        [13] = "CheckFeatureSupport",
+        [14] = "CreateDescriptorHeap",
+        [15] = "GetDescriptorHandleIncrementSize",
+        [16] = "CreateRootSignature",
+        [17] = "CreateConstantBufferView",
+        [18] = "CreateShaderResourceView",
+        [19] = "CreateUnorderedAccessView",
+        [20] = "CreateRenderTargetView",
+        [21] = "CreateDepthStencilView",
+        [22] = "CreateSampler",
+        [23] = "CopyDescriptors",
+        [24] = "CopyDescriptorsSimple",
+        [25] = "GetResourceAllocationInfo",
+        [26] = "GetCustomHeapProperties",
+        [27] = "CreateCommittedResource",
+        [28] = "CreateHeap",
+        [29] = "CreatePlacedResource",
+        [36] = "CreateFence",
+        [38] = "GetCopyableFootprints",
+        [39] = "CreateQueryHeap",
+        [41] = "CreateCommandSignature",
+        [48] = "CreateCommandQueueX",
+        [57] = "UnknownPipelineCreation_0x1C8",
+        [61] = "CreateSamplerX",
+        [62] = "CreateComputePipelineX",
+        [67] = "UnknownPipelineCreation_0x218",
+        [69] = "DebugErrorFilter",
+        [70] = "CreatePlacedSRV",
+        [71] = "CreatePlacedUAV",
+        [73] = "CreateCommandListX",
+        [74] = "RegisterPagePool",
+        [75] = "UnregisterPagePool",
+        [76] = "CreateCommittedResourceX",
+        [78] = "SetFrameInterval",
+        [79] = "ScheduleFrameEvent",
+        [80] = "WaitFrameEvent",
+        [81] = "GetFrameStatistics",
+        [86] = "CreatePipelineStateStream",
+        [108] = "GetResourceAllocationInfo2",
+        [127] = "CreateCommittedResource3",
+        [133] = "CreateResourceAtAddress"
     };
 
     private static readonly Dictionary<int, string> ListMethods = new()
     {
-        [7] = "GetDevice", [8] = "GetType", [9] = "Close", [10] = "Reset", [12] = "DrawInstanced",
-        [13] = "DrawIndexedInstanced", [14] = "Dispatch", [15] = "CopyBufferRegion", [16] = "CopyTextureRegion",
-        [17] = "CopyResource", [19] = "ResolveSubresource", [20] = "IASetPrimitiveTopology", [21] = "RSSetViewports",
-        [22] = "RSSetScissorRects", [23] = "OMSetBlendFactor", [24] = "OMSetStencilRef", [25] = "SetPipelineState",
-        [26] = "ResourceBarrier", [28] = "BeginQuery", [29] = "EndQuery", [30] = "ResolveQueryData",
-        [32] = "SetDescriptorHeaps", [33] = "SetComputeRootSignature", [34] = "SetGraphicsRootSignature",
-        [35] = "SetComputeRootDescriptorTable", [36] = "SetGraphicsRootDescriptorTable",
-        [37] = "SetComputeRoot32BitConstant", [38] = "SetGraphicsRoot32BitConstant",
-        [39] = "SetComputeRoot32BitConstants", [40] = "SetGraphicsRoot32BitConstants",
-        [41] = "SetComputeRootConstantBufferView", [42] = "SetGraphicsRootConstantBufferView",
-        [43] = "SetComputeRootShaderResourceView", [44] = "SetGraphicsRootShaderResourceView",
-        [45] = "SetComputeRootUnorderedAccessView", [46] = "SetGraphicsRootUnorderedAccessView",
-        [47] = "IASetIndexBuffer", [48] = "IASetVertexBuffers", [50] = "OMSetRenderTargets",
+        [7] = "GetDevice",
+        [8] = "GetType",
+        [9] = "Close",
+        [10] = "Reset",
+        [12] = "DrawInstanced",
+        [13] = "DrawIndexedInstanced",
+        [14] = "Dispatch",
+        [15] = "CopyBufferRegion",
+        [16] = "CopyTextureRegion",
+        [17] = "CopyResource",
+        [19] = "ResolveSubresource",
+        [20] = "IASetPrimitiveTopology",
+        [21] = "RSSetViewports",
+        [22] = "RSSetScissorRects",
+        [23] = "OMSetBlendFactor",
+        [24] = "OMSetStencilRef",
+        [25] = "SetPipelineState",
+        [26] = "ResourceBarrier",
+        [28] = "BeginQuery",
+        [29] = "EndQuery",
+        [30] = "ResolveQueryData",
+        [32] = "SetDescriptorHeaps",
+        [33] = "SetComputeRootSignature",
+        [34] = "SetGraphicsRootSignature",
+        [35] = "SetComputeRootDescriptorTable",
+        [36] = "SetGraphicsRootDescriptorTable",
+        [37] = "SetComputeRoot32BitConstant",
+        [38] = "SetGraphicsRoot32BitConstant",
+        [39] = "SetComputeRoot32BitConstants",
+        [40] = "SetGraphicsRoot32BitConstants",
+        [41] = "SetComputeRootConstantBufferView",
+        [42] = "SetGraphicsRootConstantBufferView",
+        [43] = "SetComputeRootShaderResourceView",
+        [44] = "SetGraphicsRootShaderResourceView",
+        [45] = "SetComputeRootUnorderedAccessView",
+        [46] = "SetGraphicsRootUnorderedAccessView",
+        [47] = "IASetIndexBuffer",
+        [48] = "IASetVertexBuffers",
+        [50] = "OMSetRenderTargets",
         [51] = "ClearDepthStencilView",
-        [52] = "ClearRenderTargetView", [59] = "ExecuteIndirect", [60] = "CopyMemory", [68] = "DepthBounds",
-        [69] = "Write32", [70] = "Write64", [71] = "WaitValue32", [72] = "WaitValue64", [73] = "PixelShaderDepthOrder",
-        [78] = "DispatchX", [83] = "CopyTextureRegionX", [84] = "CopyResourceX", [98] = "DispatchMeshX",
-        [99] = "DriverHint", [124] = "ShadingRate", [127] = "DispatchMesh", [129] = "TopOfPipeSync",
-        [130] = "BottomOfPipeSync", [137] = "ResetX"
+        [52] = "ClearRenderTargetView",
+        [59] = "ExecuteIndirect",
+        [60] = "CopyMemory",
+        [68] = "DepthBounds",
+        [69] = "Write32",
+        [70] = "Write64",
+        [71] = "WaitValue32",
+        [72] = "WaitValue64",
+        [73] = "PixelShaderDepthOrder",
+        [78] = "DispatchX",
+        [83] = "CopyTextureRegionX",
+        [84] = "CopyResourceX",
+        [98] = "DispatchMeshX",
+        [99] = "DriverHint",
+        [124] = "ShadingRate",
+        [127] = "DispatchMesh",
+        [129] = "TopOfPipeSync",
+        [130] = "BottomOfPipeSync",
+        [137] = "ResetX"
     };
 
     private static readonly Dictionary<int, string> QueueMethods = new()
     {
-        [7] = "GetDevice", [10] = "ExecuteCommandLists", [11] = "SetMarker", [12] = "BeginEvent", [13] = "EndEvent",
-        [14] = "Signal", [15] = "Wait", [16] = "GetTimestampFrequency", [26] = "GetDesc", [29] = "CopyPageMappings",
-        [30] = "PresentX", [32] = "Signal2X", [33] = "ExecuteCommandListsX"
+        [7] = "GetDevice",
+        [10] = "ExecuteCommandLists",
+        [11] = "SetMarker",
+        [12] = "BeginEvent",
+        [13] = "EndEvent",
+        [14] = "Signal",
+        [15] = "Wait",
+        [16] = "GetTimestampFrequency",
+        [26] = "GetDesc",
+        [29] = "CopyPageMappings",
+        [30] = "PresentX",
+        [32] = "Signal2X",
+        [33] = "ExecuteCommandListsX"
     };
 
     private static readonly Dictionary<int, string> ResourceMethods = new()
     {
-        [7] = "GetDevice", [8] = "Map", [9] = "Unmap", [10] = "GetDesc", [11] = "GetGPUVirtualAddress",
+        [7] = "GetDevice",
+        [8] = "Map",
+        [9] = "Unmap",
+        [10] = "GetDesc",
+        [11] = "GetGPUVirtualAddress",
         [14] = "GetHeapProperties"
     };
 
     private static readonly Dictionary<int, string> DescriptorHeapMethods = new()
     {
-        [7] = "GetDevice", [8] = "GetDesc", [9] = "GetCPUDescriptorHandleForHeapStart",
+        [7] = "GetDevice",
+        [8] = "GetDesc",
+        [9] = "GetCPUDescriptorHandleForHeapStart",
         [10] = "GetGPUDescriptorHandleForHeapStart"
     };
     private static readonly Dictionary<int, string> QueryHeapMethods = new() { [7] = "GetDevice" };
     private static readonly Dictionary<int, string>
-        PipelineMethods = new() { [7] = "GetDevice", [8] = "GetCachedBlob" };
+        PipelineMethods = new()
+        {
+            [7] = "GetDevice",
+            [8] = "GetCachedBlob"
+        };
     private static readonly Dictionary<int, string> RootSignatureMethods = new() { [7] = "GetDevice" };
     private static readonly Dictionary<int, string> HeapMethods = new() { [7] = "GetDevice", [8] = "GetDesc" };
     private static readonly Dictionary<int, string> FenceMethods = new()
     {
-        [7] = "GetDevice", [8] = "GetCompletedValue", [9] = "SetEventOnCompletion", [10] = "Signal",
-        [11] = "GetCreationFlags", [12] = "GetGPUVirtualAddress"
+        [7] = "GetDevice",
+        [8] = "GetCompletedValue",
+        [9] = "SetEventOnCompletion",
+        [10] = "Signal",
+        [11] = "GetCreationFlags",
+        [12] = "GetGPUVirtualAddress"
     };
     private static readonly Dictionary<int, string> AllocatorMethods = new()
-        { [7] = "GetDevice", [8] = "Reset", [9] = "AllocationCallback" };
+    {
+        [7] = "GetDevice",
+        [8] = "Reset",
+        [9] = "AllocationCallback"
+    };
     private static readonly Dictionary<int, string> DxgiDeviceMethods = new() { [6] = "GetParent", [7] = "GetAdapter" };
     private static readonly Dictionary<int, string> DxgiAdapterMethods =
-        new() { [6] = "GetParent", [7] = "EnumOutputs", [8] = "GetDesc" };
+        new()
+        {
+            [6] = "GetParent",
+            [7] = "EnumOutputs",
+            [8] = "GetDesc"
+        };
     private static readonly Dictionary<int, string> DxgiFactoryMethods =
-        new() { [7] = "EnumAdapters", [12] = "EnumAdapters1" };
+        new()
+        {
+            [7] = "EnumAdapters",
+            [12] = "EnumAdapters1"
+        };
     private static readonly Dictionary<int, string> DxgiOutputMethods = new()
-        { [6] = "GetParent", [21] = "GetDisplayModeListX" };
+    {
+        [6] = "GetParent",
+        [21] = "GetDisplayModeListX"
+    };
 
     private static string TableKind(nint table)
     {
@@ -147,9 +259,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             switch (index)
             {
-                case 142: return "UnknownState_0x470";
-                case 146: return "EnhancedBarrierGroups";
-                case 148: return "AllocateUpload";
+                case 142:
+                    return "UnknownState_0x470";
+
+                case 146:
+                    return "EnhancedBarrierGroups";
+
+                case 148:
+                    return "AllocateUpload";
             }
 
             if (index >= 61)
@@ -254,6 +371,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var emptySlot = (nint)0;
+
         try
         {
             ValidateTables([("test-null-slot", (nint)(&emptySlot), 1)]);
@@ -273,17 +391,29 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             ValidateTables(AllTables(_deviceTable));
+
             ValidateRootSignatureRegistration((nint*)_deviceTable);
+
             ValidateComputePipelineRegistration((nint*)_deviceTable);
+
             ValidateQueryHeapRegistration((nint*)_deviceTable);
+
             ValidateDeviceBatchRegistration((nint*)_deviceTable);
+
             ValidateOptionalDeviceRegistration((nint*)_deviceTable);
+
             ValidateCommandStateRegistration();
+
             ValidateCommandMemoryRegistration();
+
             ValidateBarrierRegistration();
+
             VerifyOptionalDeviceAbi((nint*)_deviceTable);
+
             VerifyCommandStateAbi();
+
             VerifyCommandMemoryAbi();
+
             VerifyKnownListOperations();
         }
     }
@@ -292,6 +422,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     public static void Preflight(TextWriter writer, string reportDirectory)
     {
         (string Name, nint Table, int Count)[] tables;
+
         lock (Gate)
         {
             if (_deviceTable == 0)
@@ -300,29 +431,43 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             tables = AllTables(_deviceTable);
+
             ValidateTables(tables);
+
             ValidateRootSignatureRegistration((nint*)_deviceTable);
+
             ValidateComputePipelineRegistration((nint*)_deviceTable);
+
             ValidateQueryHeapRegistration((nint*)_deviceTable);
+
             ValidateDeviceBatchRegistration((nint*)_deviceTable);
+
             ValidateOptionalDeviceRegistration((nint*)_deviceTable);
+
             ValidateCommandStateRegistration();
+
             ValidateCommandMemoryRegistration();
+
             ValidateBarrierRegistration();
         }
 
         Directory.CreateDirectory(reportDirectory);
+
         _evidencePath = Path.Combine(reportDirectory, "blocking-slots.tsv");
+
         var reportPath = Path.Combine(reportDirectory, "graphics-abi.tsv");
         var rows = new List<string> { "interface\tslot\toffset\tmethod\tstatus" };
+
         foreach (var (kind, table, count) in tables)
         {
             var registered = 0;
             var known = 0;
             var knownRegistered = 0;
+
             for (var index = 0; index < count; index++)
             {
                 var pointer = ((nint*)table)[index];
+
                 if (pointer == 0)
                 {
                     throw new InvalidOperationException($"Null ABI slot {kind} 0x{index * 8:X}.");
@@ -330,6 +475,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 var bound = pointer != MissingAddress(index);
                 var method = MethodName(kind, index);
+
                 if (bound)
                 {
                     registered++;
@@ -338,6 +484,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (method != null)
                 {
                     known++;
+
                     if (bound)
                     {
                         knownRegistered++;
@@ -355,6 +502,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     : CommandOperationsStatus(kind, index) ?? BarrierStatus(kind, index)
                     ?? CommandMemoryStatus(kind, index) ?? CommandStateStatus(kind, index)
                     ?? OptionalDeviceStatus(kind, index) ?? (cpuOnly ? "registered-cpu-only" : "registered-unverified");
+
                 rows.Add($"{kind}\t{index}\t0x{index * 8:X}\t{method ?? "(unnamed)"}\t{status}");
             }
 
@@ -363,12 +511,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         File.WriteAllLines(reportPath, rows);
+
         if (File.Exists(_evidencePath))
         {
             var seen = new HashSet<(string, int)>();
+
             foreach (var line in File.ReadLines(_evidencePath))
             {
                 var fields = line.Split('\t');
+
                 if (fields.Length < 4
                     || !int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out var slot)
                     || !seen.Add((fields[1], slot)))
@@ -383,11 +534,13 @@ public static unsafe partial class ConsoleGraphicsDevice
                         ? CommandStateStatus(fields[1], slot)
                           ?? OptionalDeviceStatus(fields[1], slot) ?? "now registered (unverified)"
                         : "still missing/unknown";
+
                 writer.WriteLine($"[abi] Previous blocker: {fields[1]} 0x{slot * 8:X} {fields[3]}: {status}.");
             }
         }
 
         writer.WriteLine($"[abi] Report: {reportPath}");
+
         writer.WriteLine(
             "[abi] Coverage counts registrations, not functional parity or methods the selected title necessarily calls.");
     }
@@ -403,6 +556,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var kind = TableKind(table);
         var method = MethodName(kind, index) ?? "unknown method";
         var path = _evidencePath;
+
         if (path != null)
         {
             try

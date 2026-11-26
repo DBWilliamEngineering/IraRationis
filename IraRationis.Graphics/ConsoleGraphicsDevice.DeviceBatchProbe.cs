@@ -29,8 +29,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     internal static void VerifyDeviceBatchAbi(nint device)
     {
         VerifyCommandSignatureAbi(device);
+
         VerifyGraphicsPipelineAbi(device);
+
         VerifyCopyFootprintsAbi(device);
+
         Console.WriteLine(
             "[graphics-probe] Command signature, graphics pipeline stream and resource footprint ABI tests passed.");
     }
@@ -43,6 +46,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var description = new CommandSignatureDescription { Stride = 16, Count = 1, Arguments = arguments };
         var iid = CommandSignatureId;
         var signature = (nint)0;
+
         try
         {
             if (create(device, &description, 0, &iid, &signature) != 0 || signature == 0)
@@ -51,7 +55,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             arguments[0] = 99;
+
             var stored = (CommandSignatureObject*)signature;
+
             if (stored->Stride != 16 || stored->Count != 1 || ((uint*)(stored + 1))[0] != 2)
             {
                 throw new InvalidOperationException("Command signature argument ownership failed.");
@@ -59,12 +65,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(signature, 0);
             var result = (nint)0;
+
             if (query(signature, &iid, &result) != 0 || result != signature || Drop(result) != 1)
             {
                 throw new InvalidOperationException("Command signature QueryInterface failed.");
             }
 
             description.Arguments = null;
+
             if (create(device, &description, 0, &iid, &result) != InvalidArgument || result != 0)
             {
                 throw new InvalidOperationException("Command signature invalid arguments accepted.");
@@ -91,6 +99,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var iid = PipelineId;
         var first = (nint)0;
         var second = (nint)0;
+
         try
         {
             if (create(device, &description, &iid, &first) != 0 || first == 0 ||
@@ -100,10 +109,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             code[0] = 99;
+
             lock (PipelineGate)
             {
                 var plain = GraphicsPipelines[first];
                 var streamed = GraphicsPipelines[second];
+
                 if (plain.Shaders.Count != 1 || streamed.Shaders.Count != 1
                                              || !ReferenceEquals(plain.Shaders[0].Container,
                                                  streamed.Shaders[0].Container) ||
@@ -115,7 +126,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             streamDescription.Size = 16;
+
             var rejected = (nint)123;
+
             if (createStream(device, &streamDescription, &iid, &rejected) != InvalidArgument || rejected != 0)
             {
                 throw new InvalidOperationException("Truncated pipeline stream accepted.");
@@ -145,40 +158,65 @@ public static unsafe partial class ConsoleGraphicsDevice
                 AllocationInfo*>)Slot(device, 108);
         var texture = new ResourceDescription
         {
-            Dimension = 3, Width = 65, Height = 3, DepthOrArraySize = 1, MipLevels = 1, Format = 28, SampleCount = 1
+            Dimension = 3,
+            Width = 65,
+            Height = 3,
+            DepthOrArraySize = 1,
+            MipLevels = 1,
+            Format = 28,
+            SampleCount = 1
         };
+
         CopyFootprint footprint = default;
+
         uint rows = 0;
+
         ulong rowSize = 0;
         ulong total = 0;
+
         copy(device, &texture, 0, 1, 1, &footprint, &rows, &rowSize, &total);
+
         if (footprint.Offset != 512 || footprint.RowPitch != 512 || rows != 3 || rowSize != 260 || total != 1795)
         {
             throw new InvalidOperationException("Copy footprint alignment failed.");
         }
 
         texture.Width = 5;
+
         texture.Height = 5;
+
         texture.Format = 71;
+
         copy(device, &texture, 0, 1, 0, &footprint, &rows, &rowSize, &total);
+
         if (footprint.Width != 8 || footprint.Height != 8 || rows != 2 || rowSize != 16 || total != 272)
         {
             throw new InvalidOperationException("Block-compressed footprint failed.");
         }
 
         copy(device, &texture, 1, 1, 0, &footprint, &rows, &rowSize, &total);
+
         if (total != ulong.MaxValue || footprint.Offset != ulong.MaxValue)
         {
             throw new InvalidOperationException("Invalid subresource accepted.");
         }
 
         var descriptions = stackalloc ResourceDescription1[2];
+
         descriptions[0] = new ResourceDescription1
-            { Description = new ResourceDescription { Dimension = 1, Width = 1, SampleCount = 1 } };
+        {
+            Description = new ResourceDescription { Dimension = 1, Width = 1, SampleCount = 1 }
+        };
+
         descriptions[1] = new ResourceDescription1
-            { Description = new ResourceDescription { Dimension = 1, Width = 1, Alignment = 131072, SampleCount = 1 } };
+        {
+            Description = new ResourceDescription { Dimension = 1, Width = 1, Alignment = 131072, SampleCount = 1 }
+        };
+
         var each = stackalloc AllocationInfo1[2];
+
         AllocationInfo result = default;
+
         if (allocation(&result, device, 0, 2, descriptions, each) != &result || result.Size != 262144
                                                                              || result.Alignment != 131072
                                                                              || each[0].Offset != 0

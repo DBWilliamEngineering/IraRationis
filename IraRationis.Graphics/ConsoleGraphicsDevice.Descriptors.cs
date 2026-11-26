@@ -51,9 +51,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var end = address + size;
+
         while (address < end)
         {
             var info = default(DescriptorMemoryInformation);
+
             if (QueryDescriptorMemory((nint)address, &info, (nuint)sizeof(DescriptorMemoryInformation)) == 0
                 || info.State != 0x1000 || (info.Protect & 0x100) != 0)
             {
@@ -61,12 +63,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var protection = info.Protect & 0xff;
+
             if (writable ? protection is not (4 or 8) : protection is not (2 or 4 or 8 or 0x20 or 0x40 or 0x80))
             {
                 return false;
             }
 
             var next = info.BaseAddress + (ulong)info.RegionSize;
+
             if (next <= address)
             {
                 return false;
@@ -98,6 +102,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var size = (ulong)DescriptorStride(description->Kind) * Math.Max(description->Count, 1U);
+
         if (size > DescriptorByteLimit)
         {
             return OutOfMemory;
@@ -109,48 +114,68 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nint owned = 0;
+
         DescriptorHeapObject* heap = null;
+
         try
         {
             // Upstream infers extended placement by exact size. ReadProcessMemory avoids an
             // unchecked read past a legacy description; the hint is not proof of ABI version.
             var placement = default(DescriptorPlacement);
+
             nuint read = 0;
+
             var placed = _newer && ReadDescriptorMemory(-1, (nint)(description + 1), &placement,
                                     (nuint)sizeof(DescriptorPlacement), &read) != 0
                                 && read == (nuint)sizeof(DescriptorPlacement) && placement.Address != 0
                                 && placement.Size == size;
-            if (placed && (placement.Address % DescriptorStride(description->Kind) != 0
-                           || !DescriptorRange(placement.Address, size, true)))
-            {
-                return InvalidArgument;
-            }
 
-            if (!placed)
+            switch (placed)
             {
-                owned = AllocateBacking(size, 64);
-                if (owned == 0)
+                case true when (placement.Address % DescriptorStride(description->Kind) != 0
+                                || !DescriptorRange(placement.Address, size, true)):
+                    return InvalidArgument;
+                case false:
                 {
-                    return OutOfMemory;
+                    owned = AllocateBacking(size, 64);
+
+                    if (owned == 0)
+                    {
+                        return OutOfMemory;
+                    }
+
+                    break;
                 }
             }
 
             heap = (DescriptorHeapObject*)NativeMemory.AllocZeroed((nuint)sizeof(DescriptorHeapObject));
+
             heap->Header.Table = _descriptorHeapTable;
             heap->Header.References = 1;
             heap->Description = *description;
-            heap->Start = placed ? placement.Address : (ulong)owned;
+
+            heap->Start = placed 
+                ? placement.Address 
+                : (ulong)owned;
+
             heap->OwnedMemory = owned;
+
             LiveObjects[(nint)heap] = _descriptorHeapTable;
+
             *output = (nint)heap;
+
             Console.WriteLine(
-                $"[graphics] Descriptor heap: type={description->Kind}, count={description->Count}, stride={DescriptorStride(description->Kind)}, {(placed ? "borrowed" : "owned")} CPU backing.");
+                $"[graphics] Descriptor heap: "
+                + $"type={description->Kind}, "
+                + $"count={description->Count}, "
+                + $"stride={DescriptorStride(description->Kind)}, {(placed ? "borrowed" : "owned")} CPU backing.");
 
             return 0;
         }
         catch (OutOfMemoryException)
         {
             NativeMemory.Free(heap);
+
             NativeMemory.AlignedFree((void*)owned);
 
             return OutOfMemory;
@@ -160,6 +185,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReleaseDescriptorHeap(nint value)
     {
         NativeMemory.AlignedFree((void*)((DescriptorHeapObject*)value)->OwnedMemory);
+
         foreach (var key in ResourcePrivateData.Keys)
         {
             if (key.Item1 == value)
@@ -169,6 +195,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _ = LiveObjects.TryRemove(value, out _);
+
         NativeMemory.Free((void*)value);
     }
 
@@ -222,13 +249,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var stride = DescriptorStride(heapKind);
+
         ValidateDescriptorRange(handle, stride, true);
+
         var generation = DescriptorResourceGeneration(resource);
         var counterGeneration = DescriptorResourceGeneration(counter);
+
         var bytes = description == null ? null : new ReadOnlySpan<byte>(description, words * sizeof(uint)).ToArray();
         var more = extra == null ? null : new ReadOnlySpan<byte>(extra, extraWords * sizeof(uint)).ToArray();
+
         var key =
             $"{kind}:{resource:X}:{generation}:{counter:X}:{counterGeneration}:{(bytes == null ? "-" : Convert.ToHexString(bytes))}:{(more == null ? "-" : Convert.ToHexString(more))}";
+
         lock (DescriptorGate)
         {
             if (!DescriptorKeys.TryGetValue(key, out var id))
@@ -240,12 +272,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 id = (ulong)DescriptorRecords.Count + 1;
+
                 DescriptorRecords.Add(id,
                     new DescriptorMetadata(kind, resource, generation, counter, counterGeneration, bytes, more));
+
                 DescriptorKeys.Add(key, id);
             }
 
             NativeMemory.Clear((void*)handle, stride);
+
             Unsafe.WriteUnaligned((void*)handle, new DescriptorToken { Tag = DescriptorTag, Kind = kind, Id = id });
         }
     }
@@ -259,10 +294,16 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ValidateDescriptorRange(handle, 32, true);
+
         NativeMemory.Clear((void*)handle, 32);
+
         Unsafe.WriteUnaligned((void*)handle,
             new ConstantDescriptor
-                { Tag = ConstantTag, Address = description[0] | ((ulong)description[1] << 32), Size = description[2] });
+            {
+                Tag = ConstantTag,
+                Address = description[0] | ((ulong)description[1] << 32),
+                Size = description[2]
+            });
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -327,18 +368,21 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void CopyDescriptorBytes(ulong destination, ulong source, ulong length)
     {
-        if (length == 0)
+        switch (length)
         {
-            return;
-        }
+            case 0:
+                return;
 
-        if (length > DescriptorByteLimit)
-        {
-            Environment.FailFast("[graphics] Descriptor copy exceeds the supported size.");
+            case > DescriptorByteLimit:
+                Environment.FailFast("[graphics] Descriptor copy exceeds the supported size.");
+
+                break;
         }
 
         ValidateDescriptorRange(source, length, false);
+
         ValidateDescriptorRange(destination, length, true);
+
         new ReadOnlySpan<byte>((void*)source, (int)length).CopyTo(new Span<byte>((void*)destination, (int)length));
     }
 
@@ -346,6 +390,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void CopyDescriptorsSimple(nint self, uint count, ulong destination, ulong source, uint kind)
     {
         var stride = DescriptorStride(kind);
+
         if (stride == 0)
         {
             Environment.FailFast("[graphics] Invalid descriptor copy type.");
@@ -357,6 +402,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static ulong DescriptorTotal(uint ranges, uint* sizes)
     {
         ulong count = 0;
+
         for (var index = 0U; index < ranges; index++)
         {
             count += sizes == null ? 1U : sizes[index];
@@ -370,12 +416,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         uint sourceRanges, ulong* sources, uint* sourceSizes, uint kind)
     {
         var stride = DescriptorStride(kind);
+
         if (stride == 0 || destinations == null || sources == null || destinationRanges > 65536 || sourceRanges > 65536)
         {
             Environment.FailFast("[graphics] Invalid descriptor range copy.");
         }
 
         var count = DescriptorTotal(sourceRanges, sourceSizes);
+
         if (count != DescriptorTotal(destinationRanges, destinationSizes) || count > DescriptorByteLimit / stride)
         {
             Environment.FailFast("[graphics] Descriptor range counts differ or exceed the supported size.");
@@ -389,21 +437,28 @@ public static unsafe partial class ConsoleGraphicsDevice
         // Snapshot all sources before writing any destinations, including overlapping ranges.
         var length = count * stride;
         var scratch = NativeMemory.Alloc((nuint)length);
+
         try
         {
             var offset = 0UL;
+
             for (var index = 0U; index < sourceRanges; index++)
             {
                 var bytes = (ulong)(sourceSizes == null ? 1U : sourceSizes[index]) * stride;
+
                 CopyDescriptorBytes((ulong)scratch + offset, sources[index], bytes);
+
                 offset += bytes;
             }
 
             offset = 0;
+
             for (var index = 0U; index < destinationRanges; index++)
             {
                 var bytes = (ulong)(destinationSizes == null ? 1U : destinationSizes[index]) * stride;
+
                 CopyDescriptorBytes(destinations[index], (ulong)scratch + offset, bytes);
+
                 offset += bytes;
             }
         }
@@ -425,23 +480,39 @@ public static unsafe partial class ConsoleGraphicsDevice
         device[14] =
             (nint)(delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)
             &CreateDescriptorHeap;
+
         device[17] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateCbv;
+
         device[18] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateSrv;
+
         device[19] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, uint*, ulong, void>)&CreateUav;
+
         device[20] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateRtv;
+
         device[21] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint*, ulong, void>)&CreateDsv;
+
         device[22] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateSampler;
+
         device[23] =
             (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong*, uint*, uint, ulong*, uint*, uint, void>)
             &CopyDescriptors;
+
         device[24] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, ulong, uint, void>)&CopyDescriptorsSimple;
+
         device[61] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, ulong, void>)&CreateSamplerX;
+
         device[70] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, uint*, ulong, void>)&CreatePlacedSrv;
+
         device[71] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, uint*, ulong, void>)&CreatePlacedUav;
+
         var heap = ChildTable(24);
+
         heap[8] = (nint)(delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, void>)&DescribeDescriptorHeap;
+
         heap[9] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&DescriptorHeapStart;
+
         heap[10] = heap[9];
+
         _descriptorHeapTable = (nint)heap;
     }
 

@@ -64,6 +64,7 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
     public void Dispose()
     {
         Interlocked.Exchange(ref _closed, 1);
+
         _queue.Writer.TryComplete();
     }
 
@@ -87,6 +88,7 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
             for (var i = 0; i < frames; i++)
             {
                 stereo[i * 2] = samples[i];
+
                 stereo[i * 2 + 1] = samples[i];
             }
         }
@@ -132,6 +134,7 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
             Check(WaveOutOpen(out device, uint.MaxValue, &format, 0, 0, 0), "open");
 
             headers = (WaveHeader*)NativeMemory.AllocZeroed(NativeSlots, (nuint)sizeof(WaveHeader));
+
             data = (short*)NativeMemory.Alloc(NativeSlots * MaxFrames * 2, sizeof(short));
 
             Console.Error.WriteLine("[audio] IRX-R40-MONITOR: Windows PCM device opened; rate=48000; channels=2.");
@@ -147,9 +150,13 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
                     if (prepared[slot] && (Volatile.Read(ref header->Flags) & HeaderDone) != 0)
                     {
                         Check(WaveOutUnprepareHeader(device, header, (uint)sizeof(WaveHeader)), "unprepare");
+
                         prepared[slot] = false;
+
                         active--;
+
                         Interlocked.Increment(ref _completed);
+
                         progress.Restart();
                     }
 
@@ -159,17 +166,23 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
                     }
 
                     var buffer = data + slot * MaxFrames * 2;
+
                     samples.AsSpan().CopyTo(new Span<short>(buffer, samples.Length));
 
                     *header = default;
+
                     header->Data = (nint)buffer;
+
                     header->Length = (uint)(samples.Length * sizeof(short));
 
                     Check(WaveOutPrepareHeader(device, header, (uint)sizeof(WaveHeader)), "prepare");
+
                     prepared[slot] = true;
+
                     active++;
 
                     Check(WaveOutWrite(device, header, (uint)sizeof(WaveHeader)), "write");
+
                     progress.Restart();
                 }
 
@@ -238,6 +251,7 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
             if (safeToFree)
             {
                 NativeMemory.Free(headers);
+
                 NativeMemory.Free(data);
             }
 

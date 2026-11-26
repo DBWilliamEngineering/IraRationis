@@ -26,13 +26,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         var result = check((nint)_host, (uint)D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5,
             &options, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
         var tier = result >= 0 ? (uint)options.RaytracingTier : 0U;
+
         Volatile.Write(ref _hostRaytracingTier, tier);
 
         var shaderModel = default(D3D12_FEATURE_DATA_SHADER_MODEL);
+
         shaderModel.HighestShaderModel = D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_5;
+
         var shaderResult = check((nint)_host, (uint)D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
             &shaderModel, (uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL));
         var model = shaderResult >= 0 ? (uint)shaderModel.HighestShaderModel : 0U;
+
         Volatile.Write(ref _hostRaytracingShaderModel, model);
 
         Console.Error.WriteLine(

@@ -16,7 +16,9 @@ internal sealed class RuntimePcmObservation : IDisposable
     private RuntimePcmObservation(WindowsPcmMonitor monitor, CountingSink sink, IDisposable registration)
     {
         _monitor = monitor;
+
         _sink = sink;
+
         _registration = registration;
     }
 
@@ -32,6 +34,7 @@ internal sealed class RuntimePcmObservation : IDisposable
         // Stop observing before closing the sink. The registration waits for any
         // in-flight diagnostic callback, and does not acquire a connection lock.
         registration.Dispose();
+
         _monitor.Dispose();
 
         var drained = _monitor.WaitForCompletion(TimeSpan.FromSeconds(8));
@@ -71,6 +74,7 @@ internal sealed class RuntimePcmObservation : IDisposable
         catch
         {
             monitor.Dispose();
+
             _ = monitor.WaitForCompletion(TimeSpan.FromSeconds(8));
 
             throw;
@@ -110,6 +114,7 @@ internal sealed class RuntimePcmObservation : IDisposable
         public bool TrySubmit(ReadOnlySpan<short> samples, int channels)
         {
             Interlocked.Increment(ref _observed);
+
             Interlocked.Add(ref _frames, samples.Length / channels);
 
             if (!monitor.TrySubmit(samples, channels))

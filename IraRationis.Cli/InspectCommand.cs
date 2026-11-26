@@ -46,6 +46,7 @@ internal static class InspectCommand
 
     private static void PrintImports(IReadOnlyList<ImportModule> modules, string label, TextWriter writer)
     {
+        // O(m+e) -- We should try and do this in O(m+1)
         foreach (var module in modules)
         {
             foreach (var entry in module.Entries)

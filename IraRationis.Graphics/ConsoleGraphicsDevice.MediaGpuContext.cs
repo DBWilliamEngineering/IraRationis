@@ -29,7 +29,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         public MediaGpuContext(TextWriter report, bool useRuntimeDevice = false)
         {
             ArgumentNullException.ThrowIfNull(report);
+
             _report = report;
+
             _runtimeBacked = useRuntimeDevice;
 
             if (!OperatingSystem.IsWindows())
@@ -48,8 +50,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                     var device = nint.Zero;
                     var deviceId = DeviceId;
                     var deviceResult = D3D12CreateDevice(0, 0xC000, &deviceId, &device);
+
                     _device = device;
+
                     CheckHostResult(deviceResult, "R44 device");
+
                     RequireR42Object(_device, "device");
                 }
 
@@ -59,13 +64,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var create =
                     (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
                 var result = create(_device, &description, &queueId, &queue);
+
                 _queue = queue;
+
                 CheckHostResult(result, "R44 queue");
+
                 RequireR42Object(_queue, "queue");
             }
             catch
             {
                 ReleaseR42Object(_queue);
+
                 ReleaseR42Object(_device);
 
                 throw;
@@ -75,6 +84,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         public void Dispose()
         {
             CheckThread();
+
             if (_disposed)
             {
                 return;
@@ -86,15 +96,22 @@ public static unsafe partial class ConsoleGraphicsDevice
             foreach (var entry in _pipelines.Values)
             {
                 ReleaseR42Object(entry.Pipeline);
+
                 ReleaseR42Object(entry.Root);
             }
 
             _pipelines.Clear();
+
             ReleaseR42Object(_queue);
+
             ReleaseR42Object(_device);
+
             _queue = 0;
+
             _device = 0;
+
             var deviceCreations = _runtimeBacked ? 0 : 1;
+
             _report.WriteLine(
                 $"[media] IRX-R45: runtimeBacked={_runtimeBacked}; contextDeviceCreations={deviceCreations}; " +
                 $"queueCreations=1; presenterAcquisitions={_acquisitions}; " +
@@ -111,12 +128,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             var version = 0x00020004U;
             var id = DeviceId;
             var result = create(0, &version, &id, null);
+
             CheckHostResult(result, "R45 runtime device initialization");
 
             lock (Gate)
             {
                 var device = (nint)_host;
+
                 RequireR42Object(device, "runtime host device");
+
                 AddReference(device);
 
                 return device;
@@ -126,16 +146,22 @@ public static unsafe partial class ConsoleGraphicsDevice
         internal void AcquireDeviceQueue(out nint device, out nint queue)
         {
             CheckUsable();
+
             AddReference(_device);
+
             AddReference(_queue);
+
             device = _device;
+
             queue = _queue;
+
             _acquisitions++;
         }
 
         internal void AcquirePipeline(string shader, out nint root, out nint pipeline)
         {
             CheckUsable();
+
             if (!_pipelines.TryGetValue(shader, out var entry))
             {
                 if (_pipelines.Count >= MaximumPipelines)
@@ -144,7 +170,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 CreateR42Pipeline(_device, _report, out var createdRoot, out var createdPipeline, shader);
+
                 entry = (createdRoot, createdPipeline);
+
                 try
                 {
                     _pipelines.Add(shader, entry);
@@ -152,6 +180,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 catch
                 {
                     ReleaseR42Object(createdPipeline);
+
                     ReleaseR42Object(createdRoot);
 
                     throw;
@@ -165,8 +194,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             AddReference(entry.Root);
+
             AddReference(entry.Pipeline);
+
             root = entry.Root;
+
             pipeline = entry.Pipeline;
         }
 
@@ -186,6 +218,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         private void CheckUsable()
         {
             CheckThread();
+
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
     }

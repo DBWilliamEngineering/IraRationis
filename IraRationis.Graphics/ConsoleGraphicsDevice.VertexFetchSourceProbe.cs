@@ -46,6 +46,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                          $"priorBoundaries={state.MemoryBoundaries.Count} (recording-time only).");
 
         Span<byte> header = stackalloc byte[headerLength];
+
         if (!TryReadR12Memory(view.Address, header))
         {
             report.WriteLine("[graphics] R12 source header is not fully CPU-readable.");
@@ -54,7 +55,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         WriteR12Field(report, "position", pair.Position, header);
+
         WriteR12Field(report, "attribute", pair.Attribute, header);
+
         if (!Rdna2VertexFetchCompiler.TryGetReadExtent(pair, header, draw.First, draw.Count,
                 R12MaximumSourceBytes, out var extent) || extent < (ulong)headerLength ||
             extent > R12MaximumSourceBytes || extent > ulong.MaxValue - view.Address)
@@ -70,9 +73,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         // required by the recognized shader; a later execution path must resolve it again.
         var length = checked((int)extent);
         var rented = ArrayPool<byte>.Shared.Rent(length);
+
         try
         {
             var source = rented.AsSpan(0, length);
+
             if (!TryReadR12Memory(view.Address, source))
             {
                 report.WriteLine($"[graphics] R12 source range not fully CPU-readable: bytes={length}.");
@@ -101,7 +106,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryR12HeaderLength(VertexFetchShaderPair pair, out int length)
     {
         length = 0;
+
         var end = Math.Max((ulong)pair.Position.HeaderOffset, pair.Attribute.HeaderOffset) + sizeof(uint);
+
         if (end > R12MaximumHeaderBytes || (pair.Position.HeaderOffset & 3U) != 0 ||
             (pair.Attribute.HeaderOffset & 3U) != 0)
         {
@@ -123,6 +130,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         fixed (byte* target = destination)
         {
             nuint transferred = 0;
+
             var count = (nuint)destination.Length;
 
             return ReadProcessMemory(-1, (void*)(nuint)address, target, count, &transferred) != 0 &&
@@ -147,6 +155,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var matches = 0;
         var materialized = 0;
+
         foreach (var value in state.Owned)
         {
             if (!IsResource(value))
@@ -156,18 +165,21 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             // The command state owns a reference for the lifetime of this inspection.
             var resource = (ResourceObject*)value;
+
             if (resource->Description.Dimension != 1 || resource->Address == 0 || address < resource->Address)
             {
                 continue;
             }
 
             var offset = address - resource->Address;
+
             if (offset > resource->Description.Width || extent > resource->Description.Width - offset)
             {
                 continue;
             }
 
             matches++;
+
             if (resource->HostResource != 0)
             {
                 materialized++;
@@ -182,7 +194,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var pair = new VertexFetchShaderPair(string.Empty, string.Empty, 0, 3,
             new VertexFetchField(0, 3), new VertexFetchField(12, 4));
-        var invalid = pair with { Attribute = new VertexFetchField(uint.MaxValue, 4) };
+        var invalid = pair with
+        {
+            Attribute = new VertexFetchField(uint.MaxValue, 4)
+        };
+
         if (!TryR12HeaderLength(pair, out var length) || length != 16 ||
             TryR12HeaderLength(invalid, out _) || TryReadR12Memory(0, Span<byte>.Empty))
         {
@@ -190,9 +206,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         Span<byte> source = stackalloc byte[128];
+
         source.Clear();
+
         BinaryPrimitives.WriteUInt32LittleEndian(source, (32U << 7) | (12U << 3) | 3U);
+
         BinaryPrimitives.WriteUInt32LittleEndian(source[12..], (80U << 7) | (16U << 3) | 4U);
+
         if (!Rdna2VertexFetchCompiler.TryGetReadExtent(pair, source[..length], 0, 3,
                 R12MaximumSourceBytes, out var extent) || extent != 128)
         {
@@ -202,6 +222,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (OperatingSystem.IsWindows())
         {
             Span<byte> copy = stackalloc byte[128];
+
             fixed (byte* pointer = source)
             {
                 if (!TryReadR12Memory((nuint)pointer, copy) || !copy.SequenceEqual(source))

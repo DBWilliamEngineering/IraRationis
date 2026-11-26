@@ -24,6 +24,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _commandSignatureTable = (nint)ChildTable(24);
+
         device[41] =
             (nint)(delegate* unmanaged[Stdcall]<nint, CommandSignatureDescription*, nint, Guid*, nint*, int>)
             &CreateCommandSignature;
@@ -57,22 +58,30 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         CommandSignatureObject* signature = null;
+
         var retained = false;
+
         try
         {
             var words = checked((int)description->Count * 4);
-            signature = (CommandSignatureObject*)NativeMemory.AllocZeroed((nuint)sizeof(CommandSignatureObject)
-                                                                          + (nuint)words * sizeof(uint));
+
+            signature = (CommandSignatureObject*)NativeMemory
+                .AllocZeroed(
+                    (nuint)sizeof(CommandSignatureObject) + (nuint)words * sizeof(uint));
+
             signature->Header.Table = _commandSignatureTable;
             signature->Header.References = 1;
             signature->Stride = description->Stride;
             signature->Count = description->Count;
             signature->Nodes = description->Nodes;
             signature->Root = root;
+
             new ReadOnlySpan<uint>(description->Arguments, words).CopyTo(new Span<uint>(signature + 1, words));
+
             if (root != 0)
             {
                 _ = Retain(root);
+
                 retained = true;
             }
 
@@ -91,6 +100,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = (nint)signature;
+
         Console.WriteLine(
             $"[graphics] Command signature: stride={signature->Stride}, arguments={signature->Count}, nodes=0x{signature->Nodes:X} (CPU layout only).");
 
@@ -100,7 +110,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReleaseCommandSignature(nint value)
     {
         var root = ((CommandSignatureObject*)value)->Root;
+
         _ = LiveObjects.TryRemove(value, out _);
+
         foreach (var key in ResourcePrivateData.Keys)
         {
             if (key.Item1 == value)
@@ -110,6 +122,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         NativeMemory.Free((void*)value);
+
         if (root != 0)
         {
             _ = Drop(root);

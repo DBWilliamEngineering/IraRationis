@@ -18,6 +18,7 @@ internal static unsafe class Program
         }
 
         TestVideo();
+
         TestAudio(args.Length == 1);
 
         Console.WriteLine("IRX-R40 runtime media contracts passed.");
@@ -32,23 +33,31 @@ internal static unsafe class Program
         var frame = Nv12UploadFrame.Capture(y, 6, uv, 6, 4, 2, 123);
 
         Array.Clear(y);
+
         Array.Clear(uv);
 
         var upload = new byte[768];
+
         upload.AsSpan().Fill(0xFF);
 
         frame.CopyToUpload(upload.AsSpan(0, 512), 256, upload.AsSpan(512), 256);
 
         Require(upload.AsSpan(0, 4).SequenceEqual(new byte[] { 16, 16, 16, 16 }), "Luma row zero");
+
         Require(upload.AsSpan(256, 4).SequenceEqual(new byte[] { 235, 235, 235, 235 }), "Luma row one");
+
         Require(upload.AsSpan(512, 4).SequenceEqual(new byte[] { 128, 128, 128, 128 }), "Chroma row");
+
         Require(upload.AsSpan(4, 252).IndexOfAnyExcept((byte)0) < 0, "Initialized padding");
+
         Require(frame.Timestamp == 123, "Timestamp ownership");
 
         var bgra = new byte[32];
+
         frame.ConvertToBgra(bgra, 16);
 
         Require(bgra.AsSpan(0, 4).SequenceEqual(new byte[] { 0, 0, 0, 255 }), "Black conversion");
+
         Require(bgra.AsSpan(16, 4).SequenceEqual(new byte[] { 255, 255, 255, 255 }), "White conversion");
 
         Console.WriteLine("[media] IRX-R40: NV12 snapshot ownership, pitched copy, padding and conversion passed.");
@@ -74,17 +83,20 @@ internal static unsafe class Program
         Require(connect(input, output, &handle) == 0 && handle != 0, "XApu connection");
 
         using var monitor = play ? new WindowsPcmMonitor() : null;
+
         var sink = new ProbeSink(monitor);
 
         try
         {
             Require(!XApuModule.AttachPcmSink(handle, 2, sink), "Invalid voice rejected");
+
             Require(XApuModule.AttachPcmSink(handle, 1, sink), "Sink attached");
 
             // Original synthetic 440 Hz Opus test packet from the repository's InteropTests.
             var packet = Convert.FromBase64String(
                 "/LQGWqe14f0LvgB/+QdyhNj0C69bh6dmtpD7sail85yTi1ueGeRgTYRPqYtjhKqkjPtSY0+EOenwjqA8KAaZE8Hu/n/KnGus1EAeaHscF95RABf3LfAPgm/XglZ+p4zh+MLd5oSTnZDV8VmfNi3Y9o7JGpQxKW243UkC7OBBZ1C2zFaXpTO5pTQPCUw0kKlTr418VyfjNJP5pPBhmd7PeddQ5YuJhGRyz4OIgzM7S6hSVdEQ59J64P0Q59IjgxQ5t1eqRLbfL4r+WGH12MBXJflBkV3msKUTYhWG9DaLDBcKUF8sg6v87g4oduJtPaBqdLgT/d2QqeVb03I2Hq5m0z/iTKHpy+AuYKPZ7G2T/Tz4i7haUHF7D5DEiWzewH8hNtL9Uq2k/tVt");
             var memory = (byte*)output[0];
+
             packet.AsSpan().CopyTo(new Span<byte>(memory, packet.Length));
 
             var command = stackalloc byte[64];
@@ -93,21 +105,32 @@ internal static unsafe class Program
             var resultBytes = new ReadOnlySpan<byte>(result, 80);
 
             commandBytes.Clear();
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 1);
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[4..], 1);
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[24..], 2);
+
             BinaryPrimitives.WriteSingleLittleEndian(commandBytes[40..], 1);
 
             Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
                     BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0, "Voice activation");
 
             commandBytes[24..].Clear();
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 3);
+
             BinaryPrimitives.WriteSingleLittleEndian(commandBytes[28..], 1);
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[36..], 960);
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[40..], (uint)packet.Length);
+
             BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[44..], (nuint)memory);
+
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[52..], 7680);
+
             BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[56..], (nuint)(memory + 4096));
 
             var packets = play ? 50 : 1;
@@ -130,6 +153,7 @@ internal static unsafe class Program
                 "Non-silent PCM reached attached sink");
 
             var guest = new ReadOnlySpan<float>(memory + 4096, 1920);
+
             Require(sink.LastPacket.Length == guest.Length, "Guest and observer lengths agree");
 
             for (var index = 0; index < guest.Length; index++)
@@ -138,6 +162,7 @@ internal static unsafe class Program
             }
 
             Require(XApuModule.AttachPcmSink(handle, 1, null), "Sink detached");
+
             Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
                     BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 && sink.Packets == packets,
                 "Detached sink not called");
@@ -195,7 +220,9 @@ internal static unsafe class Program
         public bool TrySubmit(ReadOnlySpan<short> samples, int channels)
         {
             LastPacket = samples.ToArray();
+
             Packets++;
+
             Frames += samples.Length / channels;
 
             foreach (var sample in samples)

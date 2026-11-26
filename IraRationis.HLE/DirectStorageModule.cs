@@ -49,8 +49,11 @@ public static unsafe class DirectStorageModule
     {
         var handle = GCHandle.Alloc(state);
         var instance = (NativeObject*)NativeMemory.AllocZeroed((nuint)sizeof(NativeObject));
+
         instance->Table = table;
+
         instance->State = GCHandle.ToIntPtr(handle);
+
         instance->References = 1;
 
         return (nint)instance;
@@ -86,6 +89,7 @@ public static unsafe class DirectStorageModule
             }
 
             handle.Free();
+
             NativeMemory.Free(instance);
         }
 
@@ -143,6 +147,7 @@ public static unsafe class DirectStorageModule
         }
 
         Console.WriteLine("[dstorage] Factory created.");
+
         *output = Factory;
 
         return 0;
@@ -283,6 +288,7 @@ public static unsafe class DirectStorageModule
         lock (StagingGate)
         {
             _stagingBytes = size;
+
             Monitor.PulseAll(StagingGate);
         }
 
@@ -343,7 +349,9 @@ public static unsafe class DirectStorageModule
         }
 
         Volatile.Write(ref entries[index], Pending);
+
         Retain(status);
+
         State<StorageQueue>(self).Enqueue(new Command(default, 0, status, index));
     }
 
@@ -362,6 +370,7 @@ public static unsafe class DirectStorageModule
     private static int Execute(Request request, nint file, out int bytesWritten)
     {
         bytesWritten = 0;
+
         try
         {
             var result = ExecuteCore(request, file, out bytesWritten);
@@ -383,6 +392,7 @@ public static unsafe class DirectStorageModule
     private static int ExecuteCore(Request request, nint file, out int bytesWritten)
     {
         bytesWritten = 0;
+
         if ((request.Options & ~(Zlib | BcPack | PageDestination | MemorySource)) != 0
             || (request.Options & BcPack) != 0)
         {
@@ -409,6 +419,7 @@ public static unsafe class DirectStorageModule
         if (!compressed && !physical)
         {
             var result = Read(request, file, new Span<byte>((void*)request.Destination, sourceSize));
+
             if (result >= 0)
             {
                 bytesWritten = sourceSize;
@@ -418,6 +429,7 @@ public static unsafe class DirectStorageModule
         }
 
         var staging = file != 0 ? sourceSize : 0;
+
         AcquireStaging(staging);
 
         try
@@ -445,6 +457,7 @@ public static unsafe class DirectStorageModule
 
             var buffer = physical ? new byte[destinationSize] : null;
             var output = physical ? buffer.AsSpan() : new Span<byte>((void*)request.Destination, destinationSize);
+
             if (!DirectStoragePayload.TryInflate(source, output, R32StrictLengths, out var written))
             {
                 return InvalidData;
@@ -516,6 +529,7 @@ public static unsafe class DirectStorageModule
         lock (StagingGate)
         {
             _staged -= bytes;
+
             Monitor.PulseAll(StagingGate);
         }
     }
@@ -530,7 +544,9 @@ public static unsafe class DirectStorageModule
         }
 
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)&Query;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&AddRef;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&Release;
 
         return table;
@@ -539,9 +555,13 @@ public static unsafe class DirectStorageModule
     private static nint CreateFactoryTable()
     {
         var table = NewTable(16);
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, char*, Guid*, nint*, int>)&OpenFile;
+
         table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, Guid*, nint*, int>)&CreateStatus;
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, int>)&SetStaging;
+
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, QueueDescription*, Guid*, nint*, int>)&CreateQueue;
 
         return (nint)table;
@@ -555,7 +575,9 @@ public static unsafe class DirectStorageModule
     private static nint CreateStatusTable()
     {
         var table = NewTable(5);
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte>)&IsComplete;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, int>)&GetStatus;
 
         return (nint)table;
@@ -564,9 +586,13 @@ public static unsafe class DirectStorageModule
     private static nint CreateQueueTable()
     {
         var table = NewTable(12);
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, Request*, void>)&EnqueueRequest;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, void>)&EnqueueStatus;
+
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, void>)&Submit;
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, void>)&Close;
 
         return (nint)table;
@@ -628,7 +654,9 @@ public static unsafe class DirectStorageModule
         public StorageQueue(int capacity)
         {
             _capacity = Math.Max(2, capacity);
+
             _worker = new Thread(Work) { IsBackground = true, Name = "irx-storage" };
+
             _worker.Start();
         }
 
@@ -667,6 +695,7 @@ public static unsafe class DirectStorageModule
         private void TraceCompletion(Request request, int result, int bytesWritten, long started)
         {
             _r32Completed++;
+
             if (result < 0)
             {
                 _r32Failed++;
@@ -690,6 +719,7 @@ public static unsafe class DirectStorageModule
                 while (!_closed && _pending.Count + _submitted.Count + (_running ? 1 : 0) >= _capacity - 1)
                 {
                     SubmitCore();
+
                     Monitor.Wait(_gate);
                 }
 
@@ -717,6 +747,7 @@ public static unsafe class DirectStorageModule
             }
 
             _pending.Clear();
+
             Monitor.PulseAll(_gate);
         }
 
@@ -750,6 +781,7 @@ public static unsafe class DirectStorageModule
                     }
 
                     command = _submitted.Dequeue();
+
                     _running = true;
                 }
 
@@ -759,8 +791,11 @@ public static unsafe class DirectStorageModule
                     {
                         var array = State<StatusArray>(command.Status);
                         var status = _firstFailure;
+
                         Volatile.Write(ref array.Entries[command.Index], status);
+
                         _firstFailure = 0;
+
                         if (R32TraceStorage && (Sample(++_r32StatusCount) || status < 0))
                         {
                             Console.Error.WriteLine(
@@ -790,6 +825,7 @@ public static unsafe class DirectStorageModule
                     lock (_gate)
                     {
                         _running = false;
+
                         Monitor.PulseAll(_gate);
                     }
                 }

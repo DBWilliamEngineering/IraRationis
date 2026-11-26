@@ -62,6 +62,7 @@ internal sealed record TexturePlane(
     internal uint[][] Patterns()
     {
         var existing = Volatile.Read(ref _patterns);
+
         if (existing != null)
         {
             return existing;
@@ -81,6 +82,7 @@ internal sealed record TexturePlane(
         var pattern = Micro[kind][BitOperations.Log2(Bytes)];
         var order = Thick ? "yxz" : "yx";
         var index = 0;
+
         for (var bit = 0; bit < 8; bit++)
         {
             if (pattern[bit * 2] != axis)
@@ -89,7 +91,9 @@ internal sealed record TexturePlane(
             }
 
             var source = pattern[bit * 2 + 1] - '0';
+
             index = Math.Max(index, source + 1);
+
             for (var v = 0; v < values.Length; v++)
             {
                 values[v] |= (((uint)v >> source) & 1U) << bit;

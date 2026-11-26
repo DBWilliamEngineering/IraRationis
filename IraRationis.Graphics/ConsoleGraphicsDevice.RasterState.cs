@@ -31,7 +31,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void SetTopology(nint self, uint topology)
     {
         var host = OpenGraphicsList(self);
+
         StateFor(self).Topology = topology;
+
         ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, HostRasterTopology(topology));
     }
 
@@ -39,12 +41,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void SetViewports(nint self, uint count, D3D12_VIEWPORT* values)
     {
         var host = OpenGraphicsList(self);
+
         if (count > 16 || (count != 0 && values == null))
         {
             Environment.FailFast("[graphics] Invalid viewport array.");
         }
 
         StateFor(self).Viewports = new ReadOnlySpan<D3D12_VIEWPORT>(values, (int)count).ToArray();
+
         ((delegate* unmanaged[Stdcall]<nint, uint, D3D12_VIEWPORT*, void>)Slot(host, 21))(host, count, values);
     }
 
@@ -52,12 +56,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void SetScissors(nint self, uint count, RECT* values)
     {
         var host = OpenGraphicsList(self);
+
         if (count > 16 || (count != 0 && values == null))
         {
             Environment.FailFast("[graphics] Invalid scissor array.");
         }
 
         StateFor(self).Scissors = new ReadOnlySpan<RECT>(values, (int)count).ToArray();
+
         ((delegate* unmanaged[Stdcall]<nint, uint, RECT*, void>)Slot(host, 22))(host, count, values);
     }
 
@@ -66,8 +72,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = OpenGraphicsList(self);
         var state = StateFor(self);
+
         state.Blend = factor == null ? null : new ReadOnlySpan<float>(factor, 4).ToArray();
+
         state.BlendSet = true;
+
         ((delegate* unmanaged[Stdcall]<nint, float*, void>)Slot(host, 23))(host, factor);
     }
 
@@ -75,7 +84,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void SetStencilReference(nint self, uint reference)
     {
         var host = OpenGraphicsList(self);
+
         StateFor(self).Stencil = reference;
+
         ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 24))(host, reference);
     }
 
@@ -87,6 +98,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var host = Host(self);
+
         if (state.Topology is { } topology)
         {
             ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(host, 20))(host, HostRasterTopology(topology));
@@ -127,9 +139,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RegisterRasterMethods(nint* table)
     {
         table[20] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void>)&SetTopology;
+
         table[21] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, D3D12_VIEWPORT*, void>)&SetViewports;
+
         table[22] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, RECT*, void>)&SetScissors;
+
         table[23] = (nint)(delegate* unmanaged[Stdcall]<nint, float*, void>)&SetBlendFactor;
+
         table[24] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void>)&SetStencilReference;
     }
 }

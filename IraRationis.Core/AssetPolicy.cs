@@ -10,7 +10,7 @@ public static class AssetPolicy
     public static string EnsureOutsideRepository(string path)
     {
         var resolved = ResolvePath(path);
-        var current = (DirectoryInfo?)new DirectoryInfo(resolved);
+        var current = new DirectoryInfo(resolved);
 
         while (current is not null)
         {
@@ -31,20 +31,27 @@ public static class AssetPolicy
         var absolute = Path.GetFullPath(path);
         var root = Path.GetPathRoot(absolute)!;
         var relative = absolute[root.Length..];
-        var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries);
+        var parts = 
+            relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], 
+                StringSplitOptions.RemoveEmptyEntries);
+
         var current = root;
 
         foreach (var part in parts)
         {
             current = Path.Combine(current, part);
+
             var info = new DirectoryInfo(current);
 
-            if (Directory.Exists(current) && info.LinkTarget is not null)
+            if (!Directory.Exists(current) || info.LinkTarget is null)
             {
-                var target = info.ResolveLinkTarget(true) ?? throw new IOException($"Cannot resolve {current}.");
-                current = target.FullName;
+                continue;
             }
+
+            var target = info.ResolveLinkTarget(true) 
+                         ?? throw new IOException($"Cannot resolve {current}.");
+
+            current = target.FullName;
         }
 
         return Path.GetFullPath(current);

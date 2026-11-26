@@ -36,11 +36,8 @@ public static class BinaryData
     {
         var end = data.IndexOf((byte)0);
 
-        if (end < 0)
-        {
-            throw new InvalidDataException("Unterminated string.");
-        }
-
-        return Encoding.UTF8.GetString(data[..end]);
+        return end < 0 
+            ? throw new InvalidDataException("Unterminated string.") 
+            : Encoding.UTF8.GetString(data[..end]);
     }
 }

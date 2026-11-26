@@ -32,6 +32,7 @@ public static partial class ConsoleGraphicsDevice
 
         var counter = R24TraceCounts.GetOrAdd((file, line), static _ => new R46TraceCounter());
         var count = Interlocked.Increment(ref counter.Count);
+
         if (count <= 4 || (count & (count - 1)) == 0)
         {
             Console.Error.WriteLine(message);
@@ -41,21 +42,27 @@ public static partial class ConsoleGraphicsDevice
     private static void RecordR24FenceWait(long ticks)
     {
         Interlocked.Add(ref _r24FenceTicks, ticks);
+
         Interlocked.Increment(ref _r24FenceWaits);
+
         ReportR24Metrics();
     }
 
     private static void RecordR24GuestWait(long ticks)
     {
         Interlocked.Add(ref _r24GuestWaitTicks, ticks);
+
         Interlocked.Increment(ref _r24GuestWaits);
+
         ReportR24Metrics();
     }
 
     private static void RecordR24Present(int hr, long ticks)
     {
         Interlocked.Add(ref _r24PresentTicks, ticks);
+
         Interlocked.Increment(ref _r24PresentAttempts);
+
         if (hr == 0)
         {
             Interlocked.Increment(ref _r24PresentSuccesses);
@@ -76,6 +83,7 @@ public static partial class ConsoleGraphicsDevice
             if (_r46ReportTimer is null)
             {
                 _r24LastReport = Stopwatch.GetTimestamp();
+
                 Volatile.Write(ref _r46ReportTimer, new Timer(static _ => ReportR46Metrics(), null, 2000, 2000));
             }
         }
@@ -84,6 +92,7 @@ public static partial class ConsoleGraphicsDevice
     private static void ReportR46Metrics()
     {
         var now = Stopwatch.GetTimestamp();
+
         if (now - Volatile.Read(ref _r24LastReport) < 2 * Stopwatch.Frequency || !Monitor.TryEnter(R24MetricsGate))
         {
             return;
@@ -92,7 +101,9 @@ public static partial class ConsoleGraphicsDevice
         try
         {
             now = Stopwatch.GetTimestamp();
+
             var elapsed = (now - _r24LastReport) / (double)Stopwatch.Frequency;
+
             if (elapsed < 2)
             {
                 return;
@@ -112,17 +123,28 @@ public static partial class ConsoleGraphicsDevice
             var attemptDelta = attempts - _r24PreviousAttempts;
             var waitMs = (ticks - _r24PreviousTicks) * 1000.0 / Stopwatch.Frequency;
             var presentMs = (presentTicks - _r24PreviousPresentTicks) * 1000.0 / Stopwatch.Frequency;
+
             Console.Error.WriteLine(FormattableString.Invariant(
                 $"[performance] IRX-R24: interval={elapsed:F2}s; presentRate={(successes - _r24PreviousSuccesses) / elapsed:F2}/s; presents={successes}; attempts={attemptDelta}; draws={draws - _r24PreviousDraws}; dispatches={dispatches - _r24PreviousDispatches}; fenceWaits={waitDelta}; fenceMsTotal={waitMs:F1}; fenceMsAvg={(waitDelta == 0 ? 0 : waitMs / waitDelta):F3}; guestWaits={guestWaits - _r24PreviousGuestWaits}; guestWaitMsTotal={guestWaitMs:F1}; presentMsAvg={(attemptDelta == 0 ? 0 : presentMs / attemptDelta):F3}; fencesCreated={Interlocked.Read(ref _r24FenceCreations)}; fenceReuses={Interlocked.Read(ref _r24FenceReuses)}."));
+
             _r24PreviousGuestWaits = guestWaits;
+
             _r24PreviousGuestWaitTicks = guestTicks;
+
             _r24PreviousWaits = waits;
+
             _r24PreviousTicks = ticks;
+
             _r24PreviousDraws = draws;
+
             _r24PreviousDispatches = dispatches;
+
             _r24PreviousAttempts = attempts;
+
             _r24PreviousSuccesses = successes;
+
             _r24PreviousPresentTicks = presentTicks;
+
             Volatile.Write(ref _r24LastReport, now);
         }
         catch (Exception)

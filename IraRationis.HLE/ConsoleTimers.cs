@@ -29,6 +29,7 @@ public sealed unsafe partial class ConsoleTimers : IDisposable
         // continues in this case and still requests millisecond timer resolution.
         _ = SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &state,
             (uint)sizeof(PowerThrottlingState));
+
         _active = TimeBeginPeriod(1) == 0;
     }
 
@@ -40,6 +41,7 @@ public sealed unsafe partial class ConsoleTimers : IDisposable
         }
 
         _ = TimeEndPeriod(1);
+
         _active = false;
     }
 

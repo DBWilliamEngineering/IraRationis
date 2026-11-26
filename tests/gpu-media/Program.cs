@@ -18,8 +18,11 @@ internal static class Program
         }
 
         TestInvalidInput();
+
         TestPattern(2, 2);
+
         TestPattern(320, 180);
+
         TestPattern(514, 34);
 
         if (args.Length == 2)
@@ -42,19 +45,26 @@ internal static class Program
         var random = new Random(42 + width);
 
         random.NextBytes(y);
+
         random.NextBytes(uv);
 
         // Explicit neutral black and white pixels, and a non-neutral chroma block.
         y[0] = 16;
+
         y[1] = 235;
+
         y[yStride] = 81;
+
         y[yStride + 1] = 145;
+
         uv[0] = 128;
+
         uv[1] = 128;
 
         if (width >= 4)
         {
             uv[2] = 16;
+
             uv[3] = 240;
         }
 
@@ -89,6 +99,7 @@ internal static class Program
         var actual = new byte[bytes];
 
         frame.ConvertToBgra(expected, frame.Width * 4);
+
         actual.AsSpan().Fill(0xCD);
 
         ConsoleGraphicsDevice.ConvertNv12FrameOnGpu(y, yStride, uv, uvStride,
@@ -101,6 +112,7 @@ internal static class Program
         for (var i = 0; i < actual.Length; i++)
         {
             var error = Math.Abs(actual[i] - expected[i]);
+
             maximumError = Math.Max(maximumError, error);
 
             if (error != 0)

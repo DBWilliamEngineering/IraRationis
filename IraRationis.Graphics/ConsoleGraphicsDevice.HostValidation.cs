@@ -45,8 +45,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var iid = HostDebugId;
+
         nint debug = 0;
+
         var hr = D3D12GetDebugInterface(&iid, &debug);
+
         if (hr < 0 || debug == 0)
         {
             Console.Error.WriteLine(
@@ -59,6 +62,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             // Windows ID3D12Debug::EnableDebugLayer, before device creation.
             ((delegate* unmanaged[Stdcall]<nint, void>)Slot(debug, 3))(debug);
+
             Console.Error.WriteLine("[graphics] D3D12 debug layer enabled (CPU validation).");
         }
         finally
@@ -75,15 +79,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var state = StateFor(self);
+
         state.LastHostCommand = operation;
+
         state.HostCommandCount++;
     }
 
     private static void ReportHostCloseFailure(nint self, int hr, string boundary)
     {
         var count = CommandStates.TryGetValue(self, out var state) ? state.MemoryBoundaries.Count : 0;
+
         Console.Error.WriteLine(
             $"[graphics] Host Close failed: HRESULT=0x{hr:X8}, guest=0x{self:X}, host=0x{Host(self):X}, kind={*(uint*)(self + 0x10)}, segment={count}, boundary={boundary}.");
+
         if (state != null)
         {
             Console.Error.WriteLine(
@@ -97,8 +105,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var device = (nint)_host;
         var iid = HostInfoQueueId;
+
         nint queue = 0;
+
         var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(device, 0);
+
         if (query(device, &iid, &queue) < 0 || queue == 0)
         {
             Console.Error.WriteLine("[graphics] No D3D12 information queue; rerun with IRX_D3D12_DEBUG=1.");
@@ -111,13 +122,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             // Device-wide queue: other recording threads can contribute messages.
             var available = ((delegate* unmanaged[Stdcall]<nint, ulong>)Slot(queue, 9))(queue);
             var getMessage = (delegate* unmanaged[Stdcall]<nint, ulong, HostDebugMessage*, nuint*, int>)Slot(queue, 5);
+
             Console.Error.WriteLine(
                 $"[graphics] D3D12 device-wide validation messages: {available}; showing up to {MaximumDiagnosticMessages} most recent.");
+
             for (var index = available > MaximumDiagnosticMessages ? available - MaximumDiagnosticMessages : 0;
                  index < available;
                  index++)
             {
                 nuint bytes = 0;
+
                 if (getMessage(queue, index, null, &bytes) < 0 || bytes < (nuint)sizeof(HostDebugMessage)
                                                                || bytes > MaximumDiagnosticMessageBytes)
                 {
@@ -125,6 +139,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var message = (HostDebugMessage*)NativeMemory.Alloc(bytes);
+
                 if (message == null)
                 {
                     break;
@@ -138,6 +153,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         var description = Marshal
                             .PtrToStringAnsi(message->Description, checked((int)message->DescriptionBytes))
                             ?.TrimEnd('\0');
+
                         Console.Error.WriteLine(
                             $"[graphics] D3D12 validation: id={message->Id}, severity={message->Severity}, category={message->Category}: {description}");
                     }

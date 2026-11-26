@@ -22,17 +22,21 @@ public static class OrderedPreparation
         ArgumentOutOfRangeException.ThrowIfGreaterThan(capacity, 256);
 
         cancellationToken.ThrowIfCancellationRequested();
+
         var options = new ParallelOptions
         {
             MaxDegreeOfParallelism = workerCount,
             CancellationToken = cancellationToken
         };
+
         var total = inputs.Count;
         var results = new TPrepared[Math.Min(total, capacity)];
         var offset = 0;
+
         while (offset < total)
         {
             var count = Math.Min(capacity, total - offset);
+
             try
             {
                 // Parallel.For joins all workers before consumption or cleanup.
@@ -45,6 +49,7 @@ public static class OrderedPreparation
                 for (var index = 0; index < count; index++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+
                     consume(results[index]);
                 }
             }

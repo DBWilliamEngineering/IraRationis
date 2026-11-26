@@ -33,10 +33,15 @@ public sealed class PeImage
         var optionalHeaderOffset = fileHeaderOffset + 20;
 
         Machine = BinaryData.ReadUInt16(bytes, fileHeaderOffset);
+
         var sectionCount = BinaryData.ReadUInt16(bytes, fileHeaderOffset + 2);
+
         Timestamp = BinaryData.ReadUInt32(bytes, fileHeaderOffset + 4);
+
         var optionalSize = BinaryData.ReadUInt16(bytes, fileHeaderOffset + 16);
+
         Characteristics = BinaryData.ReadUInt16(bytes, fileHeaderOffset + 18);
+
         var optional = BinaryData.Slice(bytes, optionalHeaderOffset, optionalSize);
 
         if (Machine != 0x8664 || BinaryData.ReadUInt16(optional, 0) != 0x20b)
@@ -87,10 +92,15 @@ public sealed class PeImage
         }
 
         Sections = sections.AsReadOnly();
+
         Imports = ParseImports(false);
+
         DelayImports = ParseImports(true);
+
         Exports = ParseExports();
+
         Tls = ParseTls();
+
         CodeView = ParseCodeView();
     }
 

@@ -22,6 +22,7 @@ public static unsafe partial class GameInputModule
     public static bool TryDecodeDualSenseUsb(ReadOnlySpan<byte> report, out PadState pad)
     {
         pad = default;
+
         if (report.Length != 64 || report[0] != 1)
         {
             return false;
@@ -30,12 +31,21 @@ public static unsafe partial class GameInputModule
         var face = report[8];
         var other = report[9];
         var hat = face & 0x0f;
+
         uint buttons = hat switch
         {
-            0 => 64, 1 => 64 | 512, 2 => 512, 3 => 128 | 512,
-            4 => 128, 5 => 128 | 256, 6 => 256, 7 => 64 | 256,
-            8 => 0, _ => uint.MaxValue
+            0 => 64,
+            1 => 64 | 512,
+            2 => 512,
+            3 => 128 | 512,
+            4 => 128,
+            5 => 128 | 256,
+            6 => 256,
+            7 => 64 | 256,
+            8 => 0,
+            _ => uint.MaxValue
         };
+
         if (buttons == uint.MaxValue)
         {
             return false;
@@ -105,28 +115,41 @@ public static unsafe partial class GameInputModule
         }
 
         Span<byte> report = stackalloc byte[64];
+
         report.Clear();
+
         report[0] = 1;
+
         report.Slice(1, 4).Fill(128);
+
         report[8] = 8;
+
         if (!TryDecodeDualSenseUsb(report, out var neutral) || neutral != default)
         {
             throw new InvalidOperationException("DualSense neutral report mismatch.");
         }
 
         report[8] = 0x88;
+
         if (!TryDecodeDualSenseUsb(report, out var triangle) || triangle.Buttons != 32)
         {
             throw new InvalidOperationException("DualSense Triangle mapping mismatch.");
         }
 
         report[8] = 1;
+
         report[9] = 0xf3;
+
         report[1] = 0;
+
         report[2] = 0;
+
         report[3] = 255;
+
         report[4] = 255;
+
         report[5] = 255;
+
         if (!TryDecodeDualSenseUsb(report, out var all)
             || all.Buttons != (64U | 512U | 1024U | 2048U | 1U | 2U | 4096U | 8192U) ||
             all.LeftX != -1 || all.LeftY != 1 || all.RightX != 1 || all.RightY != -1 || all.LeftTrigger != 1)
@@ -135,6 +158,7 @@ public static unsafe partial class GameInputModule
         }
 
         report[0] = 0x31;
+
         if (TryDecodeDualSenseUsb(report, out _) || TryDecodeDualSenseUsb(report[..10], out _))
         {
             throw new InvalidOperationException("DualSense unsupported report accepted.");
@@ -146,6 +170,7 @@ public static unsafe partial class GameInputModule
         var offset = value - 128;
         // Small fixed dead zone suppresses rest-position jitter; remap remaining range.
         const int deadZone = 8;
+
         if (Math.Abs(offset) <= deadZone)
         {
             return 0;
@@ -195,6 +220,7 @@ public static unsafe partial class GameInputModule
         public DualSenseProvider()
         {
             var thread = new Thread(Run) { IsBackground = true, Name = "irx DualSense HID" };
+
             thread.Start();
         }
 
@@ -233,6 +259,7 @@ public static unsafe partial class GameInputModule
         private void ReadDevice()
         {
             var path = FindDualSensePath();
+
             if (path is null)
             {
                 return;
@@ -242,6 +269,7 @@ public static unsafe partial class GameInputModule
             fixed (char* name = path)
             {
                 var handle = HidOpenR30(name, 0x80000000, 3, 0, 3, 0, 0);
+
                 if (handle == -1)
                 {
                     if (TraceInputR30 && SampleInputR30(Interlocked.Increment(ref _reports)))
@@ -265,8 +293,11 @@ public static unsafe partial class GameInputModule
                     }
 
                     Console.WriteLine("[input] IRX-R30-HID: Sony DualSense USB opened (054C:0CE6)");
+
                     Span<byte> report = stackalloc byte[64];
+
                     var previous = uint.MaxValue;
+
                     fixed (byte* data = report)
                     {
                         while (HidReadR30(handle, data, 64, out var bytes, 0) != 0)
@@ -280,6 +311,7 @@ public static unsafe partial class GameInputModule
                             }
 
                             var latest = Volatile.Read(ref _latest);
+
                             if (latest is null || latest.Pad != pad)
                             {
                                 Volatile.Write(ref _latest, new ReadingState(pad));
@@ -310,16 +342,20 @@ public static unsafe partial class GameInputModule
         private static string? FindDualSensePath()
         {
             uint count = 0;
+
             var entrySize = (uint)sizeof(RawDeviceR30);
+
             if (RawListR30(null, ref count, entrySize) == uint.MaxValue || count is 0 or > 4096)
             {
                 return null;
             }
 
             var devices = new RawDeviceR30[count];
+
             fixed (RawDeviceR30* entries = devices)
             {
                 var found = RawListR30(entries, ref count, entrySize);
+
                 if (found == uint.MaxValue || found > devices.Length)
                 {
                     return null;
@@ -334,6 +370,7 @@ public static unsafe partial class GameInputModule
 
                     var info = new RawInfoR30 { Size = (uint)sizeof(RawInfoR30) };
                     var bytes = info.Size;
+
                     if (RawInfoQueryR30(entries[i].Handle, 0x2000000B, &info, ref bytes) == uint.MaxValue ||
                         info.Type != 2 || info.Vendor != 0x054C || info.Product != 0x0CE6 ||
                         info.UsagePage != 1 || info.Usage is not (4 or 5))
@@ -342,6 +379,7 @@ public static unsafe partial class GameInputModule
                     }
 
                     uint chars = 0;
+
                     if (RawInfoQueryR30(entries[i].Handle, 0x20000007, null, ref chars) == uint.MaxValue ||
                         chars is 0 or > 4096)
                     {
@@ -349,6 +387,7 @@ public static unsafe partial class GameInputModule
                     }
 
                     var name = new char[chars + 1];
+
                     fixed (char* buffer = name)
                     {
                         if (RawInfoQueryR30(entries[i].Handle, 0x20000007, buffer, ref chars) == uint.MaxValue)
@@ -357,6 +396,7 @@ public static unsafe partial class GameInputModule
                         }
 
                         var end = Array.IndexOf(name, '\0');
+
                         if (end > 0)
                         {
                             return new string(name, 0, end);

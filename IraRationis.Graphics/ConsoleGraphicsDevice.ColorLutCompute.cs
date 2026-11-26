@@ -26,12 +26,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryR17Output(ulong handle, out R16Source? source)
     {
         source = null;
+
         if (!TryReadMappingRecord(handle, out DescriptorToken token) || token.Tag != DescriptorTag || token.Kind != 19)
         {
             return false;
         }
 
         DescriptorMetadata? record;
+
         lock (DescriptorGate)
         {
             _ = DescriptorRecords.TryGetValue(token.Id, out record);
@@ -44,6 +46,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var resource = (ResourceObject*)record.Resource;
         var desc = resource->Description;
+
         if (resource->Generation != record.ResourceGeneration || desc.Dimension != 4 || desc.MipLevels != 1 ||
             desc.SampleCount != 1 || desc.Width is < 33 or > 40 || desc.Height is < 33 or > 40 ||
             desc.DepthOrArraySize != 33 || (desc.Flags & 4U) == 0 || desc.Format is not (2 or 10 or 11 or 24 or 28))
@@ -86,6 +89,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var parameters = stackalloc D3D12_ROOT_PARAMETER1[3];
         var ranges = stackalloc D3D12_DESCRIPTOR_RANGE1[2];
+
         for (var i = 0; i < 2; i++)
         {
             parameters[i] = new D3D12_ROOT_PARAMETER1
@@ -93,7 +97,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ParameterType = (D3D12_ROOT_PARAMETER_TYPE)2,
                 ShaderVisibility = 0
             };
+
             parameters[i].Anonymous.Descriptor = new D3D12_ROOT_DESCRIPTOR1 { ShaderRegister = (uint)i };
+
             ranges[i] = new D3D12_DESCRIPTOR_RANGE1
             {
                 RangeType = (D3D12_DESCRIPTOR_RANGE_TYPE)i,
@@ -108,22 +114,29 @@ public static unsafe partial class ConsoleGraphicsDevice
             ParameterType = 0,
             ShaderVisibility = 0
         };
+
         parameters[2].Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE1
         {
             NumDescriptorRanges = 2,
             pDescriptorRanges = ranges
         };
+
         var description = new D3D12_VERSIONED_ROOT_SIGNATURE_DESC { Version = (D3D_ROOT_SIGNATURE_VERSION)2 };
+
         description.Anonymous.Desc_1_1 = new D3D12_ROOT_SIGNATURE_DESC1
         {
             NumParameters = 3,
             pParameters = parameters
         };
+
         nint blob = 0, errors = 0;
+
         try
         {
             var hr = SerializeR10RootNative(&description, &blob, &errors);
+
             Console.Error.WriteLine($"[graphics] R17 root serialization HRESULT=0x{hr:X8}.");
+
             if (errors != 0)
             {
                 Console.Error.WriteLine(Encoding.UTF8.GetString(ReadR10Blob(errors, 1024 * 1024)).TrimEnd('\0'));
@@ -149,16 +162,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         out nint root, out nint pipeline)
     {
         root = 0;
+
         pipeline = 0;
+
         if (R21ComputePipelines.Acquire(metadata, state) is { } shared)
         {
             root = shared.Root;
+
             pipeline = shared.Pipeline;
 
             return true;
         }
 
         byte[]? code;
+
         lock (R17PipelineGate)
         {
             if (_r17Bytecode == null)
@@ -166,8 +183,10 @@ public static unsafe partial class ConsoleGraphicsDevice
                 try
                 {
                     var hlsl = Rdna2ColorLutCompiler.Translate(metadata.Shader.Bytes);
+
                     Console.Error.WriteLine(
                         "[graphics] IRX-GFX-SHADER-R17: recognized captured 3D color transform; compiling cs_5_1.");
+
                     _r17Bytecode = CompileR10Shader(hlsl, "cs_5_1", Console.Error);
                 }
                 catch (Exception exception)
@@ -185,12 +204,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         void* nativeRoot = null, nativePipeline = null;
+
         try
         {
             var rootId = RootSignatureId;
+
             fixed (byte* bytes = rootBytes)
             {
                 var hr = (int)_host->CreateRootSignature(0, bytes, (nuint)rootBytes.Length, &rootId, &nativeRoot);
+
                 if (hr < 0 || nativeRoot == null)
                 {
                     return RefuseR17($"CreateRootSignature HRESULT=0x{hr:X8}");
@@ -198,6 +220,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var pipelineId = PipelineId;
+
             fixed (byte* bytes = code)
             {
                 var desc = new D3D12_COMPUTE_PIPELINE_STATE_DESC
@@ -206,6 +229,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     CS = new D3D12_SHADER_BYTECODE { pShaderBytecode = bytes, BytecodeLength = (nuint)code.Length }
                 };
                 var hr = (int)_host->CreateComputePipelineState(&desc, &pipelineId, &nativePipeline);
+
                 if (hr < 0 || nativePipeline == null)
                 {
                     return RefuseR17($"CreateComputePipelineState HRESULT=0x{hr:X8}");
@@ -213,11 +237,17 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             root = (nint)nativeRoot;
+
             pipeline = (nint)nativePipeline;
+
             state.HostViews.Add(root);
+
             nativeRoot = null;
+
             state.HostViews.Add(pipeline);
+
             nativePipeline = null;
+
             R21ComputePipelines.Publish(metadata, new R21ComputePipeline(root, pipeline));
 
             return true;
@@ -239,8 +269,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryRecordR17Compute(nint self, uint x, uint y, uint z, uint flags = 0)
     {
         using var r25Timing = BeginR25Timing(R25Stage.RecordCompute);
+
         var state = StateFor(self);
+
         ComputePipelineState? metadata;
+
         lock (PipelineGate)
         {
             _ = ComputePipelines.TryGetValue(state.Pipeline, out metadata);
@@ -312,10 +345,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         var outputResource = (ResourceObject*)output.Resource;
         var inputDesc = inputResource->Description;
         var outputDesc = outputResource->Description;
+
         TraceR24(
             $"[graphics] R17 SRV: size={inputDesc.Width}x{inputDesc.Height}, format={inputFormat}, layout=0x{inputDesc.Layout:X}, flags=0x{inputDesc.Flags:X}.");
+
         TraceR24(
             $"[graphics] R17 UAV: size={outputDesc.Width}x{outputDesc.Height}x{outputDesc.DepthOrArraySize}, format={outputDesc.Format}, layout=0x{outputDesc.Layout:X}.");
+
         if (input.Resource == output.Resource ||
             !ResourceFootprint(inputDesc, out var inputExtent) || !ResourceFootprint(outputDesc, out var outputExtent)
             ||
@@ -329,7 +365,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         state.RetainObject(input.Resource);
+
         state.RetainObject(output.Resource);
+
         if (MaterializeHostResource(input.Resource, out var inputHost) < 0 || inputHost == 0 ||
             MaterializeHostResource(output.Resource, out var outputHost) < 0 || outputHost == 0
             || inputHost == outputHost ||
@@ -341,6 +379,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // No guest reads occur until the earlier host segment and its memory operations complete.
         SealMemoryBoundary(self, state, null, null, compute: new R17ComputeBoundary(input, output, table,
             inputHost, outputHost, root, pipeline));
+
         TraceR24("[graphics] IRX-GFX-COMPUTE-R17: RECORDED 5x5x33 color transform dispatch; awaiting submission.");
 
         return true;
@@ -349,6 +388,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ExecuteR17Compute(nint queue, R17ComputeBoundary boundary)
     {
         using var r25Timing = BeginR25Timing(R25Stage.ExecuteCompute);
+
         if (!R16SourceUnchanged(boundary.Input) || !R16SourceUnchanged(boundary.Output) ||
             !TryR17Constants(boundary.Table + 64, R17SmallBytes, out var small) ||
             !TryR17Constants(boundary.Table + 96, R17LargeBytes, out var large))
@@ -357,6 +397,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var snapshot = new byte[R17UploadBytes];
+
         if (!TryReadR12Memory(small.Address, snapshot.AsSpan(0, R17SmallBytes)) ||
             !TryReadR12Memory(large.Address, snapshot.AsSpan(R17LargeOffset, R17LargeBytes)) ||
             !TryR17Constants(boundary.Table + 64, R17SmallBytes, out var smallCheck) ||
@@ -369,6 +410,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // The native scalar branch only reads the texture when this word is nonzero.
         var readsTexture = R16Word(snapshot, 0) != 0;
         var writer = R16Writer(boundary.Input.Resource);
+
         if (readsTexture && ((writer == 0 && !UploadR16Texture(queue, boundary.Input.Resource, boundary.InputHost)) ||
                              (writer != 0 && writer != queue)))
         {
@@ -376,26 +418,33 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var outputWriter = R16Writer(boundary.Output.Resource);
+
         if (outputWriter != 0 && outputWriter != queue)
         {
             throw new InvalidOperationException("R17 output was GPU-written on another queue.");
         }
 
         nint upload = 0, heap = 0, allocator = 0, list = 0;
+
         try
         {
             CheckHostResult(CreateHostResource(HostBufferDescription(R17UploadBytes), 2, GenericRead, &upload),
                 "R17 CBV upload");
+
             var noRead = default(HostRange);
+
             void* mapped = null;
+
             CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload, 8))
                 (upload, 0, &noRead, &mapped), "R17 CBV map");
+
             if (mapped == null)
             {
                 throw new InvalidOperationException("R17 CBV map returned null.");
             }
 
             var written = new HostRange { End = R17UploadBytes };
+
             try
             {
                 snapshot.AsSpan().CopyTo(new Span<byte>(mapped, R17UploadBytes));
@@ -408,9 +457,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var heapDescription = new DescriptorHeapDescription { Kind = 0, Count = 2, Flags = 1 };
             var heapId = DescriptorHeapId;
             var device = (nint)_host;
+
             CheckHostResult(
                 ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
                 (device, &heapDescription, &heapId, &heap), "R17 shader-visible heap");
+
             if (heap == 0)
             {
                 throw new InvalidOperationException("R17 descriptor heap returned null.");
@@ -421,6 +472,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var gpu = nativeHeap->GetGPUDescriptorHandleForHeapStart();
             var increment = _host->GetDescriptorHandleIncrementSize(0);
             var cbv = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
+
             if (cpu.ptr == 0 || gpu.ptr == 0 || increment == 0 || cbv == 0 || (cbv & 255UL) != 0)
             {
                 throw new InvalidOperationException("R17 invalid host binding address.");
@@ -431,34 +483,48 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 _host->CreateShaderResourceView((ID3D12Resource*)boundary.InputHost,
                     (D3D12_SHADER_RESOURCE_VIEW_DESC*)inputView, cpu);
+
                 cpu.ptr += increment;
+
                 _host->CreateUnorderedAccessView((ID3D12Resource*)boundary.OutputHost, null,
                     (D3D12_UNORDERED_ACCESS_VIEW_DESC*)outputView, cpu);
             }
 
             CreateR16UtilityList(out allocator, out list);
+
             TransitionHostResource(list, boundary.InputHost, 0, 0x40);
+
             TransitionHostResource(list, boundary.OutputHost, 0, 8);
+
             var commands = (ID3D12GraphicsCommandList*)list;
+
             commands->SetDescriptorHeaps(1, &nativeHeap);
             commands->SetPipelineState((ID3D12PipelineState*)boundary.Pipeline);
             commands->SetComputeRootSignature((ID3D12RootSignature*)boundary.Root);
             commands->SetComputeRootConstantBufferView(0, cbv);
             commands->SetComputeRootConstantBufferView(1, cbv + R17LargeOffset);
             commands->SetComputeRootDescriptorTable(2, gpu);
+
             TraceR24($"[graphics] IRX-GFX-COMPUTE-R17: BOUND 2 CBVs, SRV, UAV; readsTexture={readsTexture}.");
+
             commands->Dispatch(5, 5, 33);
+
             TransitionHostResource(list, boundary.OutputHost, 8, 0);
             TransitionHostResource(list, boundary.InputHost, 0x40, 0);
+
             SubmitR16UtilityList(queue, list);
+
             MarkR16GpuWrite(boundary.Output.Resource, queue);
+
             Interlocked.Increment(ref _r24Dispatches);
+
             TraceR24(
                 "[graphics] IRX-GFX-COMPUTE-R17: GPU COMPLETED 3D color transform (UAV content not numerically verified).");
         }
         finally
         {
             ReleaseR16Utility(list, allocator, upload);
+
             if (heap != 0)
             {
                 _ = HostRelease(heap);

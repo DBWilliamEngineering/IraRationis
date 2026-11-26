@@ -67,14 +67,18 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint* DisplayTable(int size)
     {
         var table = (nint*)NativeMemory.Alloc((nuint)size, (nuint)sizeof(nint));
+
         for (var index = 0; index < size; index++)
         {
             table[index] = MissingAddress(index);
         }
 
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)&Query;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&AddRef;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&Release;
+
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)&DisplayParent;
 
         return table;
@@ -83,7 +87,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint NewDisplayObject(nint table)
     {
         var value = (nint)NativeMemory.AllocZeroed((nuint)sizeof(Header));
+
         ((Header*)value)->Table = table;
+
         LiveObjects[value] = table;
 
         return value;
@@ -97,31 +103,48 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var device = DisplayTable(32);
+
         device[7] = (nint)(delegate* unmanaged[Stdcall]<nint, nint*, int>)&DisplayAdapter;
+
         _dxgiDeviceTable = (nint)device;
+
         _dxgiDevice = NewDisplayObject(_dxgiDeviceTable);
 
         var adapter = DisplayTable(24);
+
         adapter[7] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)&DisplayOutputs;
+
         adapter[8] = (nint)(delegate* unmanaged[Stdcall]<nint, AdapterDescription*, int>)&DescribeAdapter;
+
         _dxgiAdapterTable = (nint)adapter;
+
         _dxgiAdapter = NewDisplayObject(_dxgiAdapterTable);
 
         var factory = DisplayTable(32);
+
         factory[7] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)&DisplayAdapters;
+
         factory[12] = factory[7];
+
         _dxgiFactoryTable = (nint)factory;
+
         _dxgiFactory = NewDisplayObject(_dxgiFactoryTable);
 
         var output = DisplayTable(32);
+
         output[21] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, DisplayMode*, int>)&DisplayModes;
+
         _dxgiOutputTable = (nint)output;
+
         _dxgiOutput = NewDisplayObject(_dxgiOutputTable);
 
         // InitializeTables has already constructed both queue tables and holds Gate.
         RegisterPresentationMethods();
+
         ValidatePresentationRegistration();
+
         RegisterFenceAddressMethods();
+
         ValidateFenceAddressRegistration();
     }
 
@@ -130,17 +153,19 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var parent = self == _dxgiAdapter ? _dxgiFactory :
             self == _dxgiDevice || self == _dxgiOutput ? _dxgiAdapter : 0;
-        if (parent == 0)
-        {
-            if (output != null)
-            {
-                *output = 0;
-            }
 
-            return NoInterface;
+        if (parent != 0)
+        {
+            return Answer(parent, iid, output);
         }
 
-        return Answer(parent, iid, output);
+        if (output != null)
+        {
+            *output = 0;
+        }
+
+        return NoInterface;
+
     }
 
     private static int EnumerateDisplay(nint value, uint index, nint* output)
@@ -151,12 +176,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = 0;
+
         if (index != 0)
         {
             return DxgiNotFound;
         }
 
         _ = Retain(value);
+
         *output = value;
 
         return 0;
@@ -189,16 +216,22 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = default;
-        var name = "Ira Rationis console GPU";
+
+        const string name = "Ira Rationis console GPU";
+
         for (var index = 0; index < name.Length; index++)
         {
             output->Name[index] = name[index];
         }
 
         var (gpu, standard) = ConsoleConfiguration.GetTitleMemory(ConsoleConfiguration.Current);
+
         output->Vendor = 0x1002;
+
         output->DedicatedVideoMemory = (nuint)gpu;
+
         output->SharedSystemMemory = (nuint)standard;
+
         output->LuidLow = 1;
 
         return 0;
@@ -230,7 +263,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         // One logical 4K60 console mode, matching the upstream default.
         // This is not a host monitor enumeration or an actual swap chain.
         *output = new DisplayMode
-            { Width = 3840, Height = 2160, RefreshNumerator = 60, RefreshDenominator = 1, Scanlines = 1 };
+        {
+            Width = 3840,
+            Height = 2160,
+            RefreshNumerator = 60,
+            RefreshDenominator = 1,
+            Scanlines = 1
+        };
 
         return 0;
     }

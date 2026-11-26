@@ -46,45 +46,57 @@ public static class NativeProgramReader
     public static IReadOnlyList<NativeProgram> ReadPart(ReadOnlySpan<byte> part)
     {
         var programs = new List<NativeProgram>();
+
         if (part.Length < 28 || !part.Slice(24, 4).SequenceEqual("XDAT"u8))
         {
             return programs;
         }
 
         var count = U32(part, 28);
+
         if (count > 64)
         {
             throw new InvalidDataException("Too many XDAT entries.");
         }
 
         _ = Slice(part, 36, 12UL * count);
+
         ulong unpackedTotal = 0;
+
         for (var index = 0; index < count; index++)
         {
             var at = 36 + 12 * index;
+
             if (U32(part, at) != 0x0d)
             {
                 continue;
             }
 
             var blob = Slice(part, U32(part, at + 4), U32(part, at + 8));
+
             if (blob.Length < 24 || !blob[..4].SequenceEqual("XBCH"u8) || U32(blob, 4) != 3)
             {
                 throw new InvalidDataException("Unsupported XBCH header.");
             }
 
             var unpacked = U64(blob, 16);
+
             if (unpacked > MaximumBlobBytes || unpacked > MaximumNativeBytes - unpackedTotal)
             {
                 throw new InvalidDataException("Native shader decompression budget exceeded.");
             }
 
             unpackedTotal += unpacked;
+
             var packed = Slice(blob, 24, U64(blob, 8));
+
             using var input = new MemoryStream(packed.ToArray(), false);
             using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+
             var raw = new byte[(int)unpacked];
+
             zlib.ReadExactly(raw);
+
             if (zlib.ReadByte() != -1)
             {
                 throw new InvalidDataException("XBCH expands beyond its declared size.");
@@ -105,6 +117,7 @@ public static class NativeProgramReader
         }
 
         var payload = raw[16..];
+
         if (U64(payload, 0) != 6)
         {
             throw new InvalidDataException("Unexpected FSSM stage count.");
@@ -113,6 +126,7 @@ public static class NativeProgramReader
         for (var index = 0; index < SlotOffsets.Length; index++)
         {
             var offset = U64(payload, SlotOffsets[index]);
+
             if (offset == Absent)
             {
                 continue;
@@ -120,12 +134,14 @@ public static class NativeProgramReader
 
             var record = Slice(payload, offset, 0x54);
             var code = Slice(payload, U64(record, 0), U64(record, 8));
+
             if (code.IsEmpty || (code.Length & 3) != 0 || code.Length > MaximumBlobBytes)
             {
                 throw new InvalidDataException("Invalid GFX10 code length.");
             }
 
             var registers = U32(record, 0x50);
+
             if ((registers & 0x3ff) > 256)
             {
                 throw new InvalidDataException("Invalid VGPR count.");
@@ -134,10 +150,13 @@ public static class NativeProgramReader
             var root = ReadTable(payload, U64(record, 0x28), U32(record, 0x38));
             var used = ReadTable(payload, U64(record, 0x30), U32(record, 0x3c));
             var stage = (NativeShaderStage)index;
+
             uint[]? threads = null;
+
             if (stage == NativeShaderStage.Compute)
             {
                 var io = Slice(payload, offset + 0x54, 0x34);
+
                 threads = [U32(io, 0x28), U32(io, 0x2c), U32(io, 0x30)];
             }
 
@@ -155,17 +174,13 @@ public static class NativeProgramReader
 
     private static byte[] ReadTable(ReadOnlySpan<byte> payload, ulong offset, uint count)
     {
-        if (count == 0)
+        return count switch
         {
-            return [];
-        }
-
-        if (count > 65536)
-        {
-            throw new InvalidDataException("Excessive shader resource table count.");
-        }
-
-        return Slice(payload, offset, 20UL * count).ToArray();
+            0 => [],
+            > 65536 => 
+                throw new InvalidDataException("Excessive shader resource table count."),
+            _ => Slice(payload, offset, 20UL * count).ToArray()
+        };
     }
 
     private static ReadOnlySpan<byte> Slice(ReadOnlySpan<byte> data, ulong offset, ulong length)

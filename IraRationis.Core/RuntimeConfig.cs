@@ -66,6 +66,7 @@ public sealed record RuntimeConfig(
     private static string CreateSubdirectory(string root, string name)
     {
         var path = AssetPolicy.EnsureOutsideRepository(Path.Combine(root, name));
+
         Directory.CreateDirectory(path);
 
         return path;
@@ -127,4 +128,22 @@ public sealed class ConfigPaths
 [TomlSerializable(typeof(ConfigDocument))]
 internal partial class ConfigContext : TomlSerializerContext
 {
+    public ConfigContext(TomlTypeInfo<ConfigDocument>? configDocument, TomlTypeInfo<ConfigPaths>? configPaths,
+        TomlTypeInfo<string>? s, TomlTypeInfo<string[]>? stringArray)
+    {
+        _ConfigDocument = configDocument;
+        _ConfigPaths = configPaths;
+        _String = s;
+        _StringArray = stringArray;
+    }
+
+    public ConfigContext(TomlSerializerOptions options, TomlTypeInfo<ConfigDocument>? configDocument,
+        TomlTypeInfo<ConfigPaths>? configPaths, TomlTypeInfo<string>? s,
+        TomlTypeInfo<string[]>? stringArray) : base(options)
+    {
+        _ConfigDocument = configDocument;
+        _ConfigPaths = configPaths;
+        _String = s;
+        _StringArray = stringArray;
+    }
 }

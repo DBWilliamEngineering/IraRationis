@@ -34,8 +34,11 @@ public static class ImagePreparation
         var optionalHeader = checked(fileHeader + 20);
 
         WriteUInt16(bytes, fileHeader + 18, (ushort)(info.Characteristics | 0x2000));
+
         WriteUInt32(bytes, optionalHeader + 16, 0);
+
         WriteUInt32(bytes, optionalHeader + 64, 0);
+
         WriteUInt16(bytes, optionalHeader + 70, (ushort)(info.DllCharacteristics & ~0x0080));
 
         var importOffset = GetDirectoryOffset(bytes, fileHeader, optionalHeader, 1);
@@ -56,6 +59,7 @@ public static class ImagePreparation
                 }
 
                 WriteUInt32(bytes, import, terminator);
+
                 WriteUInt32(bytes, import + 4, ImportDescriptorSize);
             }
         }
@@ -74,6 +78,7 @@ public static class ImagePreparation
             var fieldRva = checked(tls.DirectoryRva + TlsCallbackOffset);
 
             BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(checked((int)offset + TlsCallbackOffset), 8), 0);
+
             ClearTlsRelocation(bytes, info, fieldRva);
         }
 

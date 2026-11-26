@@ -19,6 +19,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         public HostCompletionFence()
         {
             var device = (nint)_host;
+
             lock (PoolGate)
             {
                 while (Idle.TryPop(out var timeline))
@@ -26,6 +27,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     if (timeline.Device == device && timeline.Value < ulong.MaxValue - 1)
                     {
                         _timeline = timeline;
+
                         Interlocked.Increment(ref _r24FenceReuses);
 
                         return;
@@ -36,12 +38,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             _timeline = new FenceTimeline(device);
+
             Interlocked.Increment(ref _r24FenceCreations);
         }
 
         public void Dispose()
         {
             var timeline = Interlocked.Exchange(ref _timeline, null);
+
             if (timeline == null)
             {
                 return;
@@ -68,16 +72,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         public void Wait(nint queue)
         {
             var timeline = _timeline ?? throw new ObjectDisposedException(nameof(HostCompletionFence));
+
             if (_waiting || timeline.Value >= ulong.MaxValue - 1)
             {
                 Environment.FailFast("[graphics] R24 invalid completion fence lease or exhausted timeline.");
             }
 
             _waiting = true;
+
             var started = Stopwatch.GetTimestamp();
             var value = ++timeline.Value;
             var hr = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(queue, 14))(queue, timeline.Fence,
                 value);
+
             if (hr < 0)
             {
                 Environment.FailFast($"[graphics] Completion fence signal failed: 0x{hr:X8}.");
@@ -85,6 +92,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)Slot(timeline.Fence, 8);
             var completed = getCompleted(timeline.Fence);
+
             if (completed == ulong.MaxValue)
             {
                 Environment.FailFast("[graphics] GPU removed while waiting for command memory writes.");
@@ -95,8 +103,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 // A previously leased timeline has no outstanding registration.
                 // Reset before registering this signal's event, never after.
                 timeline.Completion.Reset();
+
                 var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(timeline.Fence, 9);
+
                 hr = setEvent(timeline.Fence, value, timeline.Completion.SafeWaitHandle.DangerousGetHandle());
+
                 if (hr < 0)
                 {
                     Environment.FailFast($"[graphics] Completion fence event registration failed: 0x{hr:X8}.");
@@ -108,6 +119,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 completed = getCompleted(timeline.Fence);
+
                 if (completed == ulong.MaxValue || completed < value)
                 {
                     Environment.FailFast($"[graphics] Invalid GPU completion: expected={value}, actual={completed}.");
@@ -115,6 +127,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             _waiting = false;
+
             RecordR24FenceWait(Stopwatch.GetTimestamp() - started);
         }
 
@@ -128,10 +141,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             public FenceTimeline(nint device)
             {
                 Device = device;
+
                 var iid = FenceId;
+
                 nint fence = 0;
+
                 var hr = ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36))
                     (device, 0, 0, &iid, &fence);
+
                 if (hr < 0 || fence == 0)
                 {
                     Environment.FailFast($"[graphics] Completion fence creation failed: 0x{hr:X8}.");
@@ -143,6 +160,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             public void Dispose()
             {
                 Completion.Dispose();
+
                 _ = HostRelease(Fence);
             }
         }

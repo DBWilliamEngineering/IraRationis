@@ -284,6 +284,7 @@ public static class Rdna2RectangleCompiler
                      pixelHash == "8CBEFFD17DE01EDD34E436FBF6D672A44BC5E63012CF49EF6D798AECE8DEF9B8";
         var array = vertexHash == "1A546262E886D089F19E7AF74BA9EAC4BF403FD424553EA3F71014E435EDAC3F" &&
                     pixelHash == "A33F9DF0EFFCFAD15A393BD879D1EB0F3AB4CE2B3AB2F499B6ED751A4D55C10D";
+
         if ((!single && !array) || Convert.ToHexString(SHA256.HashData(root.Span)) !=
             "DF44DC5144517A00F01BE4238EC63F9463BFFC8A035C2E02E73CA5AE165D9355")
         {
@@ -293,11 +294,14 @@ public static class Rdna2RectangleCompiler
         var vs = ReadProgram(ShaderContainer.Parse(vertex), NativeShaderStage.Vertex);
         var ps = ReadProgram(ShaderContainer.Parse(pixel), NativeShaderStage.Pixel);
         var register = array ? 0U : 7U;
+
         ReadOnlySpan<uint> layout = [3, 0, 1, register, 8, 0, 0, 2, 500, 265, 6, 0, 1, 0, 11];
+
         RequireWords(vs.RootLayout, layout, "indexed vertex root layout");
         RequireWords(ps.RootLayout, layout, "indexed pixel root layout");
         RequireWords(vs.UsedResources, [0x302, 0, register, 0, 0x804], "indexed vertex resources");
         RequireWords(ps.UsedResources, [], "indexed pixel resources");
+
         if (vs.Code.Length != (array ? 384 : 320) || ps.Code.Length != 384)
         {
             throw new NotSupportedException("Indexed native instruction extent differs.");
@@ -313,30 +317,40 @@ public static class Rdna2RectangleCompiler
     {
         var vs = ShaderContainer.Parse(vertex);
         var ps = ShaderContainer.Parse(pixel);
+
         ValidateSignature(vs, "ISG1", [
             ("POSITION", 0U, 0U, 7U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(vs, "OSG1", [
             ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(ps, "ISG1", [
             ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(ps, "OSG1", [("SV_Target", 64U, 0U, 15U)]);
+
         var rootData = (ShaderContainer.Parse(root).Part("RTS0") ??
                         throw new NotSupportedException("R14 missing root signature.")).Data.Span;
+
         RequireWords(rootData, [2, 1, 24, 0, 68, 1, 0, 0, 36, 1, 44, 2, 1, 27, 1, 1, uint.MaxValue],
             "root CBV table");
+
         var vp = ReadProgram(vs, NativeShaderStage.Vertex);
         var pp = ReadProgram(ps, NativeShaderStage.Pixel);
+
         RequireWords(vp.RootLayout, [3, 0, 1, 27, 8], "vertex root layout");
         RequireWords(pp.RootLayout, [3, 0, 1, 27, 8], "pixel root layout");
         RequireWords(vp.UsedResources, [], "vertex resources");
         RequireWords(pp.UsedResources, [0x302, 0, 27, 0, 0x804], "pixel resources");
+
         RecognizeVertex(vp.Code);
+
         RecognizePixel(pp.Code);
 
         return new RectangleShaderPair(Varyings + "\n" + Vertex, Varyings + "\n" + Geometry,
@@ -346,6 +360,7 @@ public static class Rdna2RectangleCompiler
     private static NativeProgram ReadProgram(ShaderContainer container, NativeShaderStage stage)
     {
         var programs = NativeProgramReader.Read(container);
+
         if (programs.Count != 1 || programs[0].Stage != stage || !programs[0].Wave64 || programs[0].LocalBytes != 0)
         {
             throw new NotSupportedException($"R14 unsupported native {stage} program.");
@@ -358,6 +373,7 @@ public static class Rdna2RectangleCompiler
         ReadOnlySpan<(string Name, uint System, uint Register, uint Mask)> expected)
     {
         var data = (container.Part(tag) ?? throw new NotSupportedException($"R14 missing {tag}.")).Data.Span;
+
         if (data.Length < 8 + 32 * expected.Length || Word(data, 0) != (uint)expected.Length || Word(data, 4) != 8)
         {
             throw new NotSupportedException($"R14 unsupported {tag} shape.");
@@ -368,6 +384,7 @@ public static class Rdna2RectangleCompiler
             var at = 8 + 32 * i;
             var e = expected[i];
             var nameOffset = Word(data, at + 4);
+
             if (nameOffset < 8 + 32 * expected.Length || nameOffset >= data.Length)
             {
                 throw new InvalidDataException($"R14 invalid {tag} semantic offset.");
@@ -375,6 +392,7 @@ public static class Rdna2RectangleCompiler
 
             var name = data[(int)nameOffset..];
             var end = name.IndexOf((byte)0);
+
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(e.Name)) ||
                 Word(data, at) != 0 || Word(data, at + 8) != 0 || Word(data, at + 12) != e.System ||
                 Word(data, at + 16) != 3 || Word(data, at + 20) != e.Register || data[at + 24] != e.Mask ||
@@ -433,7 +451,9 @@ public static class Rdna2RectangleCompiler
         while (offset <= code.Length - 8 && (Word(code, offset) & 0xffff0000U) == 0xd5800000U)
         {
             var operands = Word(code, offset + 4);
+
             offset += 8;
+
             if ((operands & 511U) == 255 || ((operands >> 9) & 511U) == 255 || ((operands >> 18) & 511U) == 255)
             {
                 offset += 4;
@@ -441,13 +461,16 @@ public static class Rdna2RectangleCompiler
         }
 
         var length = live.Length * sizeof(uint);
+
         if (offset > code.Length || length > code.Length - offset)
         {
             throw new NotSupportedException($"R14 truncated {stage} program.");
         }
 
         RequireWords(code.Slice(offset, length), live, stage);
+
         offset += length;
+
         while (offset < code.Length)
         {
             if (Word(code, offset) != 0xbf9f0000)
@@ -466,26 +489,35 @@ public static class Rdna2RectangleCompiler
     {
         var vs = ShaderContainer.Parse(vertex);
         var ps = ShaderContainer.Parse(pixel);
+
         ValidateSignature(vs, "ISG1", [
             ("POSITION", 0U, 0U, 7U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(vs, "OSG1", [
             ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(ps, "ISG1", [
             ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
         ]);
+
         ValidateSignature(ps, "OSG1", [("SV_Target", 64U, 0U, 15U)]);
+
         var rootData = (ShaderContainer.Parse(root).Part("RTS0") ??
                         throw new NotSupportedException("R16 missing root signature.")).Data.Span;
+
         RequireWords(rootData, [2, 1, 24, 0, 68, 1, 0, 0, 36, 1, 44, 2, 1, 27, 1, 1, uint.MaxValue],
             "textured root envelope");
+
         var vp = ReadProgram(vs, NativeShaderStage.Vertex);
         var pp = ReadProgram(ps, NativeShaderStage.Pixel);
+
         const string layout = "B02EC3209766F0B2667FF344AEDE52AB362CF64E6FB087D769870C6FAA942696";
+
         if (Convert.ToHexString(SHA256.HashData(vp.RootLayout)) != layout ||
             Convert.ToHexString(SHA256.HashData(pp.RootLayout)) != layout)
         {
@@ -496,10 +528,12 @@ public static class Rdna2RectangleCompiler
             0x00000300U, 0x00000000U, 0x00000007U, 0x00000040U, 0x00000804U, 0x00000302U,
             0x00000010U, 0x00000000U, 0x00000000U, 0x00000804U
         ], "textured vertex resources");
+
         RequireWords(pp.UsedResources, [
             0x00000401U, 0x00000000U, 0x0000000eU, 0x00000000U, 0x00020004U, 0x00000300U,
             0x00000008U, 0x00000115U, 0x00000004U, 0x00000808U
         ], "textured pixel resources");
+
         RecognizeCode(vp.Code, [
             0xbe842104U, 0xbfa00003U, 0xbe890380U, 0x7e260280U, 0xf4080104U, 0xfa000000U,
             0xf4080004U, 0xfa000040U, 0x7e2402f2U, 0xbf8cc07fU, 0xf4280502U, 0xfa000000U,
@@ -512,6 +546,7 @@ public static class Rdna2RectangleCompiler
             0x0608040fU, 0xf80008cfU, 0x04060503U, 0xf800020fU, 0x0b0a0908U, 0xf800021fU,
             0x12130d0cU, 0xbf810000U
         ], "textured vertex");
+
         RecognizeCode(pp.Code, [
             0xbfa00003U, 0xbe8c047eU, 0xbefe0a7eU, 0xbe820309U, 0xbe890380U, 0xbefc0302U,
             0xf40c0104U, 0xfa000020U, 0xc8080400U, 0xc80c0500U, 0xc8090401U, 0xc80d0501U,
@@ -526,8 +561,10 @@ public static class Rdna2RectangleCompiler
         var geometry = Geometry.Replace("if (corner == 3u)",
             "if (corner == 3u || input[0].Position.w != input[1].Position.w || input[0].Position.w != input[2].Position.w)",
             StringComparison.Ordinal);
-        var helpers = Pixel[Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..
-            Pixel.IndexOf("float4 main", StringComparison.Ordinal)];
+        var helpers =
+            Pixel[
+                Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..Pixel.IndexOf("float4 main",
+                    StringComparison.Ordinal)];
 
         return new RectangleShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + geometry,
             Varyings + "\n" + helpers + TexturedPixel, 0, 0);

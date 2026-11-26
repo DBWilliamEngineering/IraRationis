@@ -27,8 +27,11 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
         ArgumentOutOfRangeException.ThrowIfGreaterThan(capacity, 256);
 
         _prepare = prepare;
+
         _capacity = capacity;
+
         _pending = new Queue<Task<TPrepared>>(capacity);
+
         _workers = new SemaphoreSlim(workerCount, workerCount);
     }
 
@@ -45,12 +48,14 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     public void Dispose()
     {
         CheckOwner();
+
         if (_disposed)
         {
             return;
         }
 
         _disposed = true;
+
         try
         {
             _stop.Cancel();
@@ -80,15 +85,18 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     public bool TryEnqueue(TInput input)
     {
         CheckUsable();
+
         if (_pending.Count == _capacity)
         {
             return false;
         }
 
         var token = _stop.Token;
+
         var task = Task.Run(async () =>
         {
             await _workers.WaitAsync(token).ConfigureAwait(false);
+
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -110,6 +118,7 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     public bool TryTakeNext(out TPrepared? result)
     {
         CheckUsable();
+
         if (!_pending.TryPeek(out var task) || !task.IsCompleted)
         {
             result = default;
@@ -118,6 +127,7 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
         }
 
         _ = _pending.Dequeue();
+
         result = task.GetAwaiter().GetResult();
 
         return true;
@@ -127,12 +137,10 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     public TPrepared TakeNext()
     {
         CheckUsable();
-        if (!_pending.TryDequeue(out var task))
-        {
-            throw new InvalidOperationException("No deferred preparation is pending.");
-        }
 
-        return task.GetAwaiter().GetResult();
+        return !_pending.TryDequeue(out var task) 
+            ? throw new InvalidOperationException("No deferred preparation is pending.") 
+            : task.GetAwaiter().GetResult();
     }
 
     private void CheckOwner()
@@ -146,6 +154,7 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     private void CheckUsable()
     {
         CheckOwner();
+
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

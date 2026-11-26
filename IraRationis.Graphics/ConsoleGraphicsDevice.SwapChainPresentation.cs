@@ -34,6 +34,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ConfigureR191Window()
     {
         using var r25Timing = BeginR25Timing(R25Stage.WindowSetup);
+
         if (!EnableR19SwapChain || !EnableR191Windowed1080)
         {
             return;
@@ -47,6 +48,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var window = FindR19Window();
+
             if (window == 0)
             {
                 return;
@@ -57,6 +59,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var style = unchecked((uint)(nuint)R19GetWindowLongPtr(window, -16));
                 var exStyle = unchecked((uint)(nuint)R19GetWindowLongPtr(window, -20));
                 var dpi = R191GetDpiForWindow(window);
+
                 if (dpi == 0)
                 {
                     dpi = 96;
@@ -64,6 +67,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 var menu = R191GetMenu(window) != 0 ? 1 : 0;
                 var bounds = new R19Rect { Right = R191ClientWidth, Bottom = R191ClientHeight };
+
                 if (R191AdjustWindowRectExForDpi(ref bounds, style, menu, exStyle, dpi) == 0)
                 {
                     ReportR191WindowFailure("could not determine window decorations");
@@ -80,10 +84,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var clientHeight = R191ClientHeight;
                 var workWidth = info.Work.Right - info.Work.Left;
                 var workHeight = info.Work.Bottom - info.Work.Top;
+
                 if (hasWorkArea)
                 {
                     var availableWidth = workWidth - extraWidth;
                     var availableHeight = workHeight - extraHeight;
+
                     if (availableWidth <= 0 || availableHeight <= 0)
                     {
                         ReportR191WindowFailure("monitor work area is too small");
@@ -93,9 +99,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     var scale = Math.Min(1.0, Math.Min((double)availableWidth / R191ClientWidth,
                         (double)availableHeight / R191ClientHeight));
+
                     clientWidth = Math.Max(1, (int)Math.Floor(R191ClientWidth * scale));
+
                     clientHeight = Math.Max(1, (int)Math.Floor(R191ClientHeight * scale));
+
                     bounds = new R19Rect { Right = clientWidth, Bottom = clientHeight };
+
                     if (R191AdjustWindowRectExForDpi(ref bounds, style, menu, exStyle, dpi) == 0)
                     {
                         ReportR191WindowFailure("could not adjust fitted client size");
@@ -106,6 +116,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 var width = bounds.Right - bounds.Left;
                 var height = bounds.Bottom - bounds.Top;
+
                 if (width <= 0 || height <= 0)
                 {
                     ReportR191WindowFailure("invalid adjusted window size");
@@ -120,9 +131,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 const uint noOwnerZOrder = 0x0200;
                 const uint asyncWindowPos = 0x4000;
                 const uint noMove = 0x0002;
+
                 var flags = noZOrder | noActivate | noOwnerZOrder | asyncWindowPos;
                 var x = hasWorkArea ? info.Work.Left + (workWidth - width) / 2 : 0;
                 var y = hasWorkArea ? info.Work.Top + (workHeight - height) / 2 : 0;
+
                 if (!hasWorkArea)
                 {
                     flags |= noMove;
@@ -136,6 +149,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 _r191ConfiguredWindow = window;
+
                 Console.Error.WriteLine(
                     $"[graphics] IRX-GFX-WINDOW-R19.1: REQUESTED client={clientWidth}x{clientHeight}, hwnd=0x{window:X}, dpi={dpi}; asynchronous resize, guest render extent unchanged.");
             }
@@ -157,6 +171,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryPresentR19(nint queue, nint target)
     {
         using var r25Timing = BeginR25Timing(R25Stage.SwapChain);
+
         if (!EnableR19SwapChain || queue == 0 || !IsResource(target) || R16Writer(target) != queue)
         {
             return false;
@@ -166,6 +181,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var resource = (ResourceObject*)target;
             var description = resource->Description;
+
             if (resource->HostResource == 0 || description.Dimension != 3 || description.Width is 0 or > 8192 ||
                 description.Height is 0 or > 8192 || description.DepthOrArraySize != 1 || description.MipLevels != 1 ||
                 description.SampleCount != 1 || description.Format is not (28 or 87))
@@ -180,6 +196,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var width = checked((uint)description.Width);
                 var height = description.Height;
                 var presenter = _r19Presenter;
+
                 if (presenter != null && (presenter.Queue != queue
                                           || !presenter.Matches(width, height, description.Format)
                                           || R19IsWindow(presenter.Window) == 0))
@@ -194,6 +211,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (presenter == null)
                 {
                     var window = FindR19Window();
+
                     if (window == 0)
                     {
                         ReportR19PresentFailure(
@@ -203,7 +221,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
 
                     presenter = new R19Presenter(window, queue, width, height, description.Format);
+
                     _r19Presenter = presenter;
+
                     Console.Error.WriteLine(
                         $"[graphics] IRX-GFX-PRESENT-R19: SWAPCHAIN READY hwnd=0x{window:X}, {width}x{height}, format={description.Format}, buffers={R19BufferCount}, flipDiscard=True.");
                 }
@@ -211,9 +231,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                 // Bounded color-flow checks are enabled during development.
                 // Unsampled frames stay on the GPU; disable tracing for timing.
                 TraceR171Color(queue, target, "PresentX");
+
                 var started = Stopwatch.GetTimestamp();
                 var hr = presenter.Present(resource->HostResource);
+
                 RecordR24Present(hr, Stopwatch.GetTimestamp() - started);
+
                 if (hr < 0)
                 {
                     ReportR19PresentFailure($"DXGI Present failed: 0x{hr:X8}");
@@ -222,10 +245,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var count = Interlocked.Increment(ref _r19PresentCount);
+
                 if (count <= 4 || (count & (count - 1)) == 0)
                 {
                     Console.Error.WriteLine(
                         $"[graphics] IRX-GFX-PRESENT-R19: ACCEPTED frame #{count}, HRESULT=0x{hr:X8}; GPU copy; content unverified.");
+
                     if (R19GetClientRect(presenter.Window, out var client) != 0)
                     {
                         Console.Error.WriteLine(
@@ -255,6 +280,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint FindR19Window()
     {
         var candidates = new R19WindowCandidates();
+
         _ = R19EnumWindows(&VisitR19Window, (nint)(&candidates));
 
         return candidates.Count == 1 ? candidates.Window : 0;
@@ -266,6 +292,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             _ = R19GetWindowThreadProcessId(window, out var process);
+
             if (process != (uint)Environment.ProcessId || R19IsWindowVisible(window) == 0 ||
                 R19GetWindow(window, 4) != 0 || (R19GetWindowLongPtr(window, -20) & 0x80) != 0
                 || R19GetClientRect(window, out var rect) == 0 ||
@@ -276,12 +303,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var className = stackalloc char[512];
             var length = R19GetClassName(window, className, 512);
+
             if (length <= 0)
             {
                 return 1;
             }
 
             var name = new ReadOnlySpan<char>(className, length);
+
             if (name.StartsWith("IraRationis.GuestPreview", StringComparison.OrdinalIgnoreCase) ||
                 (!string.IsNullOrWhiteSpace(R19WindowClass)
                  && !name.Equals(R19WindowClass.AsSpan(), StringComparison.Ordinal)))
@@ -290,7 +319,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var candidates = (R19WindowCandidates*)argument;
+
             candidates->Count++;
+
             candidates->Window = window;
 
             return 1;
@@ -381,44 +412,72 @@ public static unsafe partial class ConsoleGraphicsDevice
         public R19Presenter(nint window, nint queue, uint width, uint height, uint format)
         {
             Window = window;
+
             Queue = queue;
+
             _width = width;
+
             _height = height;
+
             _format = format;
+
             _ = ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(queue, 1))(queue);
+
             nint factory = 0, baseChain = 0, chain = 0, fence = 0;
+
             try
             {
                 var factoryId = R19FactoryId;
+
                 CheckHostResult(R19CreateDxgiFactory(0, &factoryId, &factory), "R19 CreateDXGIFactory2");
+
                 var desc = new R19SwapDescription
                 {
-                    Width = width, Height = height, Format = format, SampleCount = 1,
-                    BufferUsage = 0x20, BufferCount = R19BufferCount,
-                    Scaling = 0, SwapEffect = 4, AlphaMode = 3
+                    Width = width,
+                    Height = height,
+                    Format = format,
+                    SampleCount = 1,
+                    BufferUsage = 0x20,
+                    BufferCount = R19BufferCount,
+                    Scaling = 0,
+                    SwapEffect = 4,
+                    AlphaMode = 3
                 };
+
                 CheckHostResult(
                     ((delegate* unmanaged[Stdcall]<nint, nint, nint, R19SwapDescription*, void*, nint, nint*, int>)Slot(
                         factory, 15))
                     (factory, queue, window, &desc, null, 0, &baseChain), "R19 CreateSwapChainForHwnd");
+
                 var chainId = R19SwapChainId;
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(baseChain, 0))
                     (baseChain, &chainId, &chain), "R19 IDXGISwapChain3");
+
                 _chain = chain;
+
                 var fenceId = FenceId;
                 var device = (nint)_host;
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot(device, 36))
                     (device, 0, 0, &fenceId, &fence), "R19 frame fence");
+
                 _fence = fence;
+
                 for (var i = 0; i < _slots.Length; i++)
                 {
                     var slot = _slots[i];
                     var resourceId = ResourceId;
+
                     nint buffer = 0;
+
                     CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot(_chain, 9))
                         (_chain, (uint)i, &resourceId, &buffer), "R19 GetBuffer");
+
                     slot.Buffer = buffer;
+
                     CreateR16UtilityList(out slot.Allocator, out slot.List);
+
                     CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(slot.List, 9))(slot.List),
                         "R19 initial close");
                 }
@@ -442,6 +501,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 _ = HostRelease(queue);
+
                 _event.Dispose();
 
                 throw;
@@ -483,6 +543,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var completed = ((delegate* unmanaged[Stdcall]<nint, ulong>)Slot(_fence, 8))(_fence);
+
             if (completed == ulong.MaxValue)
             {
                 throw new InvalidOperationException("R19 GPU removed");
@@ -492,12 +553,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(_fence, 9))
                     (_fence, slot.FenceValue, _event.SafeWaitHandle.DangerousGetHandle()), "R19 frame fence event");
+
                 if (!_event.WaitOne(MemoryWaitTimeoutMilliseconds))
                 {
                     throw new InvalidOperationException("R19 frame fence timed out");
                 }
 
                 completed = ((delegate* unmanaged[Stdcall]<nint, ulong>)Slot(_fence, 8))(_fence);
+
                 if (completed == ulong.MaxValue || completed < slot.FenceValue)
                 {
                     throw new InvalidOperationException("R19 frame fence completion invalid");
@@ -507,6 +570,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (slot.Source != 0)
             {
                 _ = HostRelease(slot.Source);
+
                 slot.Source = 0;
             }
 
@@ -523,36 +587,51 @@ public static unsafe partial class ConsoleGraphicsDevice
             try
             {
                 var index = ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(_chain, 36))(_chain);
+
                 if (index >= _slots.Length)
                 {
                     throw new InvalidOperationException("R19 invalid swap-chain buffer index");
                 }
 
                 var slot = _slots[index];
+
                 WaitForSlot(slot);
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(slot.Allocator, 8))(slot.Allocator),
                     "R19 allocator reset");
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)Slot(slot.List, 10))
                     (slot.List, slot.Allocator, 0), "R19 list reset");
                 // Guest draw paths currently restore COMMON. PRESENT is also 0.
                 TransitionHostResource(slot.List, source, 0, CopySource);
+
                 TransitionHostResource(slot.List, slot.Buffer, 0, CopyDestination);
+
                 ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)Slot(slot.List, 17))(slot.List, slot.Buffer,
                     source);
+
                 TransitionHostResource(slot.List, slot.Buffer, CopyDestination, 0);
+
                 TransitionHostResource(slot.List, source, CopySource, 0);
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(slot.List, 9))(slot.List),
                     "R19 list close");
                 // Keep the source alive until the copy completes, even if the
                 // guest releases its resource immediately after PresentX.
                 _ = ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(source, 1))(source);
+
                 slot.Source = source;
+
                 var list = slot.List;
+
                 ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(Queue, 10))(Queue, 1, &list);
+
                 var hr = ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)Slot(_chain, 8))(_chain, 1, 0);
                 var value = ++_nextValue;
+
                 CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(Queue, 14))
                     (Queue, _fence, value), "R19 frame fence signal");
+
                 slot.FenceValue = value;
 
                 return hr;

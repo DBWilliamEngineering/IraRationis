@@ -81,7 +81,9 @@ public static unsafe partial class KernelImageModule
             }
 
             var length = Math.Min(path.Length, checked((int)size) - 1);
+
             path.AsSpan(0, length).CopyTo(new Span<char>(buffer, length));
+
             buffer[length] = '\0';
 
             if (length < path.Length)
@@ -138,7 +140,9 @@ public static unsafe partial class KernelImageModule
                 }
 
                 var length = Math.Min(required, checked((int)size) - 1);
+
                 bytes.AsSpan(0, length).CopyTo(new Span<byte>(buffer, length));
+
                 buffer[length] = 0;
 
                 if (length < required)

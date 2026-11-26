@@ -26,6 +26,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void PipelineSync(nint self, uint flags, uint control, ulong address, ulong size)
     {
         RecordConservativeGlobalBarrier(self);
+
         if (Interlocked.Exchange(ref _reportedPipelineSync, 1) == 0)
         {
             Console.Error.WriteLine(
@@ -51,10 +52,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var enhanced = *(nint*)(self + ListEnhancedHost);
+
         if (enhanced == 0)
         {
             var options = default(D3D12_FEATURE_DATA_D3D12_OPTIONS12);
             var check = (delegate* unmanaged[Stdcall]<nint, uint, void*, uint, int>)Slot((nint)_host, 13);
+
             var result = check((nint)_host, (uint)D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12,
                 &options, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12));
 
@@ -66,7 +69,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             var host = Host(self);
             var iid = EnhancedListId;
             var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(host, 0);
+
             result = query(host, &iid, &enhanced);
+
             if (result < 0 || enhanced == 0)
             {
                 Environment.FailFast($"[graphics] ID3D12GraphicsCommandList7 unavailable: 0x{result:X8}.");
@@ -128,8 +133,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         RecordConservativeGlobalBarrier(self);
+
         ref var reported = ref enhanced ? ref _reportedEnhancedGroups : ref _reportedLegacyBarriers;
+
         var calls = Interlocked.Increment(ref reported);
+
         if (calls <= 4 || (calls & (calls - 1)) == 0)
         {
             Console.Error.WriteLine(
@@ -140,6 +148,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RegisterBarrierMethods(nint* table, bool newer)
     {
         table[26] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void*, void>)&LegacyResourceBarriers;
+
         if (newer)
         {
             table[146] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void*, void>)&EnhancedBarrierGroups;
@@ -150,6 +159,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var legacy = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void*, void>)&LegacyResourceBarriers;
         var enhanced = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void*, void>)&EnhancedBarrierGroups;
+
         if (((nint*)_listOld)[26] != legacy || ((nint*)_listNew)[26] != legacy ||
             ((nint*)_listNew)[146] != enhanced || ((nint*)_listOld)[146] != MissingAddress(146))
         {
@@ -158,6 +168,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         // Empty batches must never dereference a record pointer or query the GPU.
         ((delegate* unmanaged[Stdcall]<nint, uint, void*, void>)legacy)(0, 0, null);
+
         ((delegate* unmanaged[Stdcall]<nint, uint, void*, void>)enhanced)(0, 0, null);
     }
 
@@ -176,7 +187,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         var legacy = (delegate* unmanaged[Stdcall]<nint, uint, void*, void>)Slot(list, 26);
         var legacyRecord = new HostTransition { Type = 2 }; // UAV barrier, null resource.
         legacy(list, 0, null);
+
         legacy(list, 1, &legacyRecord);
+
         if (newer)
         {
             var barrier = new D3D12_GLOBAL_BARRIER
@@ -193,7 +206,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 Barriers = &barrier
             };
             var enhanced = (delegate* unmanaged[Stdcall]<nint, uint, void*, void>)Slot(list, 146);
+
             enhanced(list, 0, null);
+
             enhanced(list, 1, &group);
         }
     }

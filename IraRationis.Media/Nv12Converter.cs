@@ -12,9 +12,13 @@ public static class Nv12Converter
         }
 
         var rowBytes = checked(width * 4);
+
         Validate(y.Length, yStride, width, height);
+
         Validate(uv.Length, uvStride, width, height / 2);
+
         Validate(bgra.Length, outputStride, rowBytes, height);
+
         if (y.Overlaps(bgra) || uv.Overlaps(bgra))
         {
             throw new ArgumentException("Input and output must not overlap.");
@@ -25,15 +29,20 @@ public static class Nv12Converter
             var luma = y.Slice(row * yStride, width);
             var chroma = uv.Slice(row / 2 * uvStride, width);
             var output = bgra.Slice(row * outputStride, rowBytes);
+
             for (var x = 0; x < width; x++)
             {
                 var c = luma[x] - 16;
                 var d = chroma[x & ~1] - 128;
                 var e = chroma[(x & ~1) + 1] - 128;
                 var offset = x * 4;
+
                 output[offset] = Clamp((298 * c + 541 * d + 128) >> 8);
+
                 output[offset + 1] = Clamp((298 * c - 55 * d - 136 * e + 128) >> 8);
+
                 output[offset + 2] = Clamp((298 * c + 459 * e + 128) >> 8);
+
                 output[offset + 3] = 255;
             }
         }

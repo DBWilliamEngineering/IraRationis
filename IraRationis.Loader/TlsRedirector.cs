@@ -40,6 +40,7 @@ public static unsafe class TlsRedirector
 
         var page = AllocateNear(address, info.SizeOfImage);
         var code = new Span<byte>((void*)page, 4096);
+
         code.Fill(0xCC);
 
         for (var register = 0; register < 16; register++)
@@ -48,6 +49,7 @@ public static unsafe class TlsRedirector
         }
 
         ExecutableMemory.Seal(page, 4096);
+
         var patched = 0;
 
         foreach (var section in info.Sections)
@@ -72,6 +74,7 @@ public static unsafe class TlsRedirector
             }
 
             ExecutableMemory.Write((nint)start, bytes, true);
+
             patched += count;
         }
 
@@ -96,13 +99,21 @@ public static unsafe class TlsRedirector
                 && instruction[6] == 0 && instruction[7] == 0 && instruction[8] == 0 && register != 4)
             {
                 var relative = checked((long)thunks + register * ThunkSize - ((long)address + offset + 5));
+
                 instruction[0] = 0xE8;
+
                 BinaryPrimitives.WriteInt32LittleEndian(instruction[1..], checked((int)relative));
+
                 instruction[5] = 0x0F;
+
                 instruction[6] = 0x1F;
+
                 instruction[7] = 0x40;
+
                 instruction[8] = 0;
+
                 count++;
+
                 offset += LoadLength;
             }
             else
@@ -119,10 +130,15 @@ public static unsafe class TlsRedirector
         var high = register >> 3;
         var low = register & 7;
         var load = new byte[] { 0x65, (byte)(0x48 | (high << 2)), 0x8B, (byte)((low << 3) | 4), 0x25, 0x58, 0, 0, 0 };
+
         load.CopyTo(code);
+
         code[9] = (byte)(0x48 | (high << 2) | high);
+
         code[10] = 0x8D;
+
         code[11] = (byte)(0x80 | (low << 3) | low);
+
         var cursor = 12;
 
         if (low == 4)
@@ -131,6 +147,7 @@ public static unsafe class TlsRedirector
         }
 
         BinaryPrimitives.WriteUInt32LittleEndian(code[cursor..], checked(index * 8));
+
         code[cursor + 4] = 0xC3;
     }
 

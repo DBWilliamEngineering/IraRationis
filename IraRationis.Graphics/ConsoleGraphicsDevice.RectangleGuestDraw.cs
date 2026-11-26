@@ -31,6 +31,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryReadR14InputLayout(ulong address, uint count, out R14InputElement[]? elements)
     {
         elements = null;
+
         if (count == 0)
         {
             elements = [];
@@ -44,8 +45,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var result = new R14InputElement[(int)count];
+
         Span<byte> record = stackalloc byte[32];
         Span<byte> name = stackalloc byte[64];
+
         for (var i = 0; i < result.Length; i++)
         {
             if (!TryReadR12Memory(address + (ulong)i * 32, record))
@@ -55,6 +58,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var pointer = BinaryPrimitives.ReadUInt64LittleEndian(record);
             var length = 0;
+
             if (pointer == 0 || pointer > ulong.MaxValue - (ulong)name.Length)
             {
                 return false;
@@ -115,6 +119,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryNormalizeR14Layout(R14InputElement[]? input, uint stride, out R14InputElement[] elements)
     {
         elements = [];
+
         if (input is not { Length: 3 } || stride is 0 or > 256)
         {
             return false;
@@ -123,6 +128,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var result = new R14InputElement[input.Length];
         var seen = 0U;
         var next = 0U;
+
         for (var i = 0; i < input.Length; i++)
         {
             var element = input[i];
@@ -135,6 +141,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             };
             var width = R14ElementBytes(element);
             var offset = element.Offset == uint.MaxValue ? next : element.Offset;
+
             if (semantic == 0 || (seen & semantic) != 0 || element.Index != 0 || element.Slot != 0 ||
                 element.Class != 0 || element.Step != 0 || width == 0 || offset > stride || width > stride - offset)
             {
@@ -142,8 +149,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             seen |= semantic;
+
             next = offset + width;
-            result[i] = element with { Offset = offset };
+
+            result[i] = element with
+            {
+                Offset = offset
+            };
         }
 
         elements = result;
@@ -155,6 +167,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         out R14InputElement[] elements)
     {
         elements = [];
+
         if (stride != 16 || input is not { Length: 3 })
         {
             return false;
@@ -166,9 +179,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             new("COLOR", 1, 28, 0, 4, 0, 0),
             new("POSITION", 0, 16, 0, 8, 0, 0)
         ];
+
         for (var i = 0; i < expected.Length; i++)
         {
-            var element = input[i] with { Name = input[i].Name.ToUpperInvariant() };
+            var element = input[i] with
+            {
+                Name = input[i].Name.ToUpperInvariant()
+            };
+
             if (element != expected[i])
             {
                 return false;
@@ -190,12 +208,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static R14Pipeline? GetR14Pipeline(RecordedCommandState state, uint stride, bool indexedColor)
     {
         GraphicsPipelineMetadata? metadata;
+
         lock (PipelineGate)
         {
             _ = GraphicsPipelines.TryGetValue(state.Pipeline, out metadata);
         }
 
         R14InputElement[] elements;
+
         if (metadata == null || metadata.Root != state.Graphics.Signature || !IsRootSignature(metadata.Root) ||
             !metadata.IsStream || !metadata.CompleteStream || metadata.Shaders.Count != 2 ||
             !(indexedColor
@@ -208,6 +228,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var cache = R14Pipelines.GetOrCreateValue(state);
+
         if (cache.TryGetValue(state.Pipeline, out var cached))
         {
             return cached;
@@ -216,6 +237,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var vertex = metadata.Shaders.SingleOrDefault(static stage => stage.Stage == 1);
         var pixel = metadata.Shaders.SingleOrDefault(static stage => stage.Stage == 2);
         var depth = metadata.State.SingleOrDefault(static record => record.Kind == 21);
+
         if (vertex == null || pixel == null || depth == null || depth.Bytes.Length != 64 ||
             BinaryPrimitives.ReadUInt32LittleEndian(depth.Bytes.AsSpan(56)) != 0)
         {
@@ -232,7 +254,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         void* root = null;
+
         nint pipeline = 0;
+
         try
         {
             var report = Console.Error;
@@ -240,11 +264,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             var pair = indexedColor
                 ? Rdna2RectangleCompiler.TranslateIndexedColor(vertex.Container.Bytes, pixel.Container.Bytes, rootBytes)
                 : Rdna2RectangleCompiler.Translate(vertex.Container.Bytes, pixel.Container.Bytes, rootBytes);
+
             report.WriteLine(indexedColor
                 ? pair.IndexedArray
                     ? "[graphics] IRX-GFX-SHADER-R23: recognized indexed array color transform; up to 256 parameter blocks."
                     : "[graphics] IRX-GFX-SHADER-R22: recognized indexed triangle color transform; 64-byte vertex CBV."
                 : "[graphics] IRX-GFX-SHADER-R14: recognized rectangle IA fetch / perspective COLOR / CBV modulation; b27, space1.");
+
             var vs = CompileR10Shader(pair.VertexSource, "vs_5_1", report);
             var gs = indexedColor ? null : CompileR10Shader(pair.GeometrySource, "gs_5_1", report);
             var ps = CompileR10Shader(pair.PixelSource, "ps_5_1", report);
@@ -252,6 +278,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var contract = new VertexFetchShaderPair(string.Empty, string.Empty, pair.Register, pair.Space, default,
                 default);
             var blob = SerializeR10HostRoot(contract, report, true);
+
             if (vs == null || (!indexedColor && gs == null) || ps == null || blob == null)
             {
                 _ = RefuseR14("host shader compilation or root serialization failed");
@@ -260,9 +287,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var iid = RootSignatureId;
+
             fixed (byte* bytes = blob)
             {
                 var hr = (int)_host->CreateRootSignature(0, bytes, (nuint)blob.Length, &iid, &root);
+
                 if (hr < 0 || root == null)
                 {
                     _ = RefuseR14($"host root creation HRESULT=0x{hr:X8}");
@@ -272,6 +301,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var native = stackalloc R14NativeInput[3];
+
             fixed (byte* position = "POSITION\0"u8)
             fixed (byte* color = "COLOR\0"u8)
             fixed (byte* uv = "TEXCOORD\0"u8)
@@ -279,6 +309,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 for (var i = 0; i < elements.Length; i++)
                 {
                     var element = elements[i];
+
                     native[i] = new R14NativeInput
                     {
                         Name = element.Name.ToUpperInvariant() switch
@@ -294,6 +325,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         Class = element.Class,
                         Step = element.Step
                     };
+
                     report.WriteLine(
                         $"[graphics] R14 input {element.Name}: format={element.Format}, offset={element.Offset}.");
                 }
@@ -310,11 +342,17 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var result = new R14Pipeline((nint)root, pipeline, elements, pair.IndexedArray);
+
             state.HostViews.Add((nint)root);
+
             root = null;
+
             state.HostViews.Add(pipeline);
+
             pipeline = 0;
+
             cache.Add(state.Pipeline, result);
+
             R21RectanglePipelines.Publish(metadata, result);
 
             return result;
@@ -345,6 +383,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         bool indexed = false, int baseVertex = 0)
     {
         using var r25Timing = BeginR25Timing(R25Stage.RecordRectangle);
+
         if (!ExecuteGuestVertexFetch)
         {
             return RefuseR14("guest execution explicitly disabled");
@@ -352,6 +391,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var state = StateFor(self);
         var indexedColor = indexed && state.Topology == 4;
+
         if (_host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 || instances != 1 ||
             (!indexed && (vertices != 3 || first != 0)) || firstInstance != 0
             || (!indexedColor && state.Topology != R14RectangleTopology) ||
@@ -367,7 +407,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var stride = vertex.FormatOrStride;
+
         R20IndexedUploadPlan? plan = null;
+
         if (indexed)
         {
             if (vertices == 0 || vertices % 3 != 0 || state.Index is not { } index ||
@@ -378,6 +420,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var capacity = plan?.Capacity ?? R14UploadCapacity;
+
         if (stride is 0 or > 256 || vertex.Size < stride * 3U || vertex.Address == 0 || table == 0 ||
             state.MemoryBoundaries.Count > MaximumMemoryOperations - 2 ||
             state.HostViews.Count > R13MaximumHostViews - 5 || (ulong)capacity > UploadBudget ||
@@ -387,12 +430,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var translated = GetR14Pipeline(state, stride, indexedColor);
+
         if (translated == null)
         {
             return false;
         }
 
         var constantOffset = 0;
+
         if (translated.IndexedArray)
         {
             if (plan == null || !indexedColor)
@@ -401,7 +446,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             constantOffset = checked((capacity + 255) & ~255);
+
             capacity = checked(constantOffset + R23ArrayBytes);
+
             if (capacity > R20MaximumIndexedUpload || (ulong)capacity > UploadBudget ||
                 state.UploadBytes > UploadBudget - (ulong)capacity)
             {
@@ -418,15 +465,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nint upload = 0;
+
         try
         {
             var hr = CreateHostResource(HostBufferDescription((ulong)capacity), 2, GenericRead, &upload);
+
             if (hr < 0 || upload == 0)
             {
                 return RefuseR14($"host upload allocation HRESULT=0x{hr:X8}");
             }
 
             var gpu = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
+
             if (gpu == 0 || (gpu & 255UL) != 0)
             {
                 return RefuseR14("host CBV alignment invalid");
@@ -442,10 +492,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                 Capacity = capacity,
                 ConstantBytes = translated.IndexedArray ? R23ArrayBytes : indexedColor ? 64 : R14ConstantBytes
             };
+
             state.HostViews.Add(upload);
+
             upload = 0;
+
             state.UploadBytes += (ulong)capacity;
+
             SealMemoryBoundary(self, state, null, null, rectangle: new R14DrawBoundary(deferred, false));
+
             var list = Host(self);
             var commands = (ID3D12GraphicsCommandList*)list;
             var vb = new D3D12_VERTEX_BUFFER_VIEW
@@ -456,13 +511,21 @@ public static unsafe partial class ConsoleGraphicsDevice
             };
             var colorView = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = rtv };
             var depthView = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = dsv };
+
             TransitionHostResource(list, color, 0, 4);
+
             TransitionHostResource(list, depth, 0, 0x10);
+
             commands->SetPipelineState((ID3D12PipelineState*)translated.Pipeline);
+
             commands->SetGraphicsRootSignature((ID3D12RootSignature*)translated.Root);
+
             commands->SetGraphicsRootConstantBufferView(0, gpu + (ulong)constantOffset);
+
             commands->IASetVertexBuffers(0, 1, &vb);
+
             commands->OMSetRenderTargets(1, &colorView, false, &depthView);
+
             if (plan != null)
             {
                 var ib = new D3D12_INDEX_BUFFER_VIEW
@@ -471,7 +534,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                     SizeInBytes = (uint)plan.IndexBytes,
                     Format = (DXGI_FORMAT)plan.IndexFormat
                 };
+
                 commands->IASetIndexBuffer(&ib);
+
                 TraceHostCommand(self,
                     indexedColor ? "R22 triangle DrawIndexedInstanced" : "R20 rectangle DrawIndexedInstanced");
                 // The staged index view starts at the requested first index.
@@ -480,13 +545,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             else
             {
                 TraceHostCommand(self, "R14 rectangle DrawInstanced");
+
                 commands->DrawInstanced(vertices, instances, first, firstInstance);
             }
 
             commands->OMSetRenderTargets(0, null, false, null);
+
             TransitionHostResource(list, depth, 0x10, 0);
+
             TransitionHostResource(list, color, 4, 0);
+
             SealMemoryBoundary(self, state, null, null, rectangle: new R14DrawBoundary(deferred, true));
+
             TraceR24(indexedColor
                 ? $"[graphics] IRX-GFX-INDEX-{(translated.IndexedArray ? "R23" : "R22")}: RECORDED indexed triangle; count={vertices}, first={first}, baseVertex={baseVertex}, awaiting submission."
                 : plan == null
@@ -507,7 +577,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ExecuteR14DrawBoundary(nint queue, R14DrawBoundary boundary)
     {
         using var r25Timing = BeginR25Timing(R25Stage.ExecuteRectangle);
+
         var upload = boundary.Upload;
+
         if (boundary.Complete)
         {
             if (Interlocked.CompareExchange(ref upload.Phase, 2, 1) != 1)
@@ -516,7 +588,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             MarkR16GpuWrite(upload.Target, queue);
+
             Interlocked.Increment(ref _r24Draws);
+
             if (!upload.IndexedColor)
             {
                 TraceR24("[graphics] IRX-GFX-DRAW-R14: GPU COMPLETED guest rectangle (presentation unverified).");
@@ -525,6 +599,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             TraceR171Color(queue, upload.Target, upload.IndexedArray ? "R23-indexed-output" :
                 upload.IndexedColor ? "R22-indexed-output" :
                 upload.Indexed == null ? "R14-output" : "R20-indexed-output");
+
             if (upload.Indexed != null)
             {
                 TraceR24(upload.IndexedColor
@@ -542,18 +617,24 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Span<byte> token = stackalloc byte[16];
         Span<byte> recheck = stackalloc byte[16];
+
         var plan = upload.Indexed;
         var capacity = upload.Capacity;
         var rented = plan != null && capacity <= 4 * 1024 * 1024
             ? ArrayPool<byte>.Shared.Rent(capacity)
             : null;
+
         try
         {
             var snapshot = plan == null ? stackalloc byte[R14UploadCapacity] :
                 rented == null ? new byte[capacity] : rented.AsSpan(0, capacity);
+
             snapshot.Clear();
+
             var vertexBytes = plan?.VertexBytes ?? checked((int)(upload.Stride * 3U));
+
             token.Clear();
+
             if (!TryReadR12Memory(upload.Table, token) || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag)
             {
                 Environment.FailFast($"[graphics] R14/R22/R23 submission-time descriptor is not an IRXC CBV token; " +
@@ -564,9 +645,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var vertices = snapshot.Slice(R14VertexOffset, vertexBytes);
             var readOffset = 0;
             var readBytes = vertexBytes;
+
             if (plan != null)
             {
                 var indices = snapshot.Slice(plan.IndexOffset, plan.IndexBytes);
+
                 if (!TryReadR12Memory(plan.IndexAddress, indices))
                 {
                     Environment.FailFast("[graphics] R26 submission-time index source unreadable.");
@@ -584,6 +667,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (EnableR26NarrowVertexReads && upload.IndexedColor)
                 {
                     readOffset = referencedOffset;
+
                     readBytes = referencedBytes;
                 }
             }
@@ -594,6 +678,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var requiredBytes = upload.ConstantBytes;
+
             if (upload.IndexedArray)
             {
                 if (plan == null || !TryR23ConstantExtent(plan, vertices,
@@ -605,6 +690,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var declaredBytes = BinaryPrimitives.ReadUInt32LittleEndian(token[4..]);
+
             if (constants == 0 || declaredBytes < (uint)requiredBytes ||
                 constants > ulong.MaxValue - (ulong)requiredBytes ||
                 !TryReadR12Memory(constants, snapshot.Slice(upload.ConstantOffset, requiredBytes)) ||
@@ -617,11 +703,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (EnableR171ColorFlow && plan == null)
             {
                 var observation = Interlocked.Increment(ref _r21RectangleInputs);
+
                 if (observation <= 4 || (observation <= 64 && (observation & (observation - 1)) == 0))
                 {
                     var m = snapshot.Slice(32, 16);
                     var multiplier = FormattableString.Invariant(
                         $"({BinaryPrimitives.ReadSingleLittleEndian(m):G9}, {BinaryPrimitives.ReadSingleLittleEndian(m[4..]):G9}, {BinaryPrimitives.ReadSingleLittleEndian(m[8..]):G9}, {BinaryPrimitives.ReadSingleLittleEndian(m[12..]):G9})");
+
                     Console.Error.WriteLine(
                         $"[graphics] IRX-GFX-INPUT-R21: R14 observation={observation}, CBV multiplier={multiplier}, stride={upload.Stride}, vertexBytes={Convert.ToHexString(snapshot.Slice(R14VertexOffset, vertexBytes))}.");
                 }
@@ -630,6 +718,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (upload.IndexedColor && !upload.IndexedArray && plan != null && EnableR171ColorFlow)
             {
                 var observation = Interlocked.Increment(ref _r22IndexedInputs);
+
                 if (observation <= 4 || (observation <= 64 && (observation & (observation - 1)) == 0))
                 {
                     var indices = snapshot.Slice(plan.IndexOffset, plan.IndexBytes);
@@ -639,6 +728,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     var effective = firstIndex + plan.BaseVertex;
                     var vertexOffset = checked(R14VertexOffset + (int)(effective * plan.VertexStride));
                     var firstVertex = snapshot.Slice(vertexOffset, 16);
+
                     Console.Error.WriteLine($"[graphics] IRX-GFX-INPUT-R22: observation={observation}, " +
                                             $"firstIndex={firstIndex}, effectiveVertex={effective}, firstVertex={Convert.ToHexString(firstVertex)}, "
                                             +
@@ -649,6 +739,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (upload.IndexedArray && EnableR171ColorFlow)
             {
                 var observation = Interlocked.Increment(ref _r23IndexedInputs);
+
                 if (observation <= 4 || (observation <= 64 && (observation & (observation - 1)) == 0))
                 {
                     Console.Error.WriteLine($"[graphics] IRX-GFX-INPUT-R23: observation={observation}, " +
@@ -657,9 +748,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var noRead = default(HostRange);
+
             void* mapped = null;
+
             var hr = ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload.Host, 8))
                 (upload.Host, 0, &noRead, &mapped);
+
             if (hr < 0 || mapped == null)
             {
                 Environment.FailFast($"[graphics] R14 host upload Map HRESULT=0x{hr:X8}.");
@@ -669,9 +763,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var copiedBytes = capacity;
             var sparse = EnableR29SparseUpload && EnableR26NarrowVertexReads &&
                          upload.IndexedColor && plan != null;
+
             try
             {
                 var destination = new Span<byte>(mapped, capacity);
+
                 if (sparse && plan != null)
                 {
                     // The recognized indexed-color shaders only read IA attributes
@@ -679,11 +775,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                     // vertex semantics; publish all potentially addressable CBV bytes.
                     var constantExtent = upload.ConstantBytes;
                     var vertexOffset = checked(R14VertexOffset + readOffset);
+
                     snapshot.Slice(vertexOffset, readBytes).CopyTo(destination.Slice(vertexOffset, readBytes));
+
                     snapshot.Slice(plan.IndexOffset, plan.IndexBytes)
                         .CopyTo(destination.Slice(plan.IndexOffset, plan.IndexBytes));
+
                     snapshot.Slice(upload.ConstantOffset, constantExtent)
                         .CopyTo(destination.Slice(upload.ConstantOffset, constantExtent));
+
                     copiedBytes = checked(readBytes + plan.IndexBytes + constantExtent);
                 }
                 else
@@ -704,6 +804,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (sparse)
             {
                 var observation = Interlocked.Increment(ref _r29SparseUploads);
+
                 if (observation <= 4 || (observation & (observation - 1)) == 0)
                 {
                     Console.Error.WriteLine(
@@ -714,6 +815,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (plan != null && upload.IndexedColor && EnableR26NarrowVertexReads)
             {
                 var observation = Interlocked.Increment(ref _r26VertexReads);
+
                 if (observation <= 4 || (observation & (observation - 1)) == 0)
                 {
                     Console.Error.WriteLine(
@@ -723,9 +825,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TraceR24(
                 $"[graphics] IRX-GFX-DRAW-R14: UPLOADED {vertexBytes} vertex bytes and {requiredBytes} CBV bytes.");
+
             if (plan != null)
             {
                 var stage = upload.IndexedArray ? "R23" : upload.IndexedColor ? "R22" : "R20";
+
                 TraceR24(
                     $"[graphics] IRX-GFX-INDEX-{stage}: UPLOADED {plan.IndexBytes} index bytes; all referenced vertices within view.");
             }
@@ -743,6 +847,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         ReadOnlySpan<byte> indices, out int bytes)
     {
         bytes = 0;
+
         if (plan.VertexStride != 16 || vertices.Length != plan.VertexBytes || indices.IsEmpty ||
             !ValidateR20Indices(plan, indices))
         {
@@ -750,6 +855,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var size = plan.IndexFormat == 57 ? 2 : 4;
+
         for (var offset = 0; offset < indices.Length; offset += size)
         {
             var raw = size == 2
@@ -757,6 +863,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 : BinaryPrimitives.ReadUInt32LittleEndian(indices[offset..]);
             var effective = raw + plan.BaseVertex;
             var blue = vertices[checked((int)(effective * 16 + 6))];
+
             bytes = Math.Max(bytes, (blue + 1) * 64);
         }
 
@@ -766,11 +873,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyR23ConstantExtent()
     {
         var plan = new R20IndexedUploadPlan(0x1000, 57, 48, 16, 304, 6, 310, -1);
+
         Span<byte> vertices = stackalloc byte[48];
+
         vertices.Clear();
+
         vertices[6] = 5;
+
         vertices[22] = 255;
+
         vertices[38] = 8;
+
         if (!TryR23ConstantExtent(plan, vertices, [1, 0, 3, 0, 1, 0], out var small) || small != 576 ||
             !TryR23ConstantExtent(plan, vertices, [2, 0, 3, 0, 1, 0], out var large) || large != R23ArrayBytes ||
             TryR23ConstantExtent(plan, vertices, [0, 0, 1, 0, 2, 0], out _))
@@ -784,13 +897,16 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyR14InputLayout()
     {
         VerifyR20IndexedUpload();
+
         VerifyR23ConstantExtent();
+
         R14InputElement[] sample =
         [
             new("POSITION", 0, 6, 0, 0, 0, 0),
             new("COLOR", 0, 28, 0, uint.MaxValue, 0, 0),
             new("TEXCOORD", 0, 16, 0, uint.MaxValue, 0, 0)
         ];
+
         if (sizeof(R14NativeInput) != 32 || !TryNormalizeR14Layout(sample, 24, out var resolved) ||
             resolved[1].Offset != 12 || resolved[2].Offset != 16 || TryNormalizeR14Layout(sample, 23, out _) ||
             HostRasterTopology(17) != 4 || HostRasterTopology(4) != 4)
@@ -804,13 +920,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             new("COLOR", 1, 28, 0, 4, 0, 0),
             new("POSITION", 0, 16, 0, 8, 0, 0)
         ];
+
         if (!TryNormalizeR22Layout(indexedSample, 16, out var indexedElements) ||
             indexedElements[1].Index != 1 || TryNormalizeR22Layout(indexedSample, 15, out _))
         {
             throw new InvalidOperationException("R22 indexed color input layout regression failed.");
         }
 
-        indexedSample[1] = indexedSample[1] with { Index = 0 };
+        indexedSample[1] = indexedSample[1] with
+        {
+            Index = 0
+        };
+
         if (TryNormalizeR22Layout(indexedSample, 16, out _))
         {
             throw new InvalidOperationException("R22 duplicated COLOR semantic accepted.");
@@ -821,10 +942,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (OperatingSystem.IsWindows())
         {
             Span<byte> semantic = stackalloc byte[9];
+
             "POSITION\0"u8.CopyTo(semantic);
+
             fixed (byte* name = semantic)
             {
                 var native = new R14NativeInput { Name = (nint)name, Format = 6 };
+
                 if (!TryReadR14InputLayout((nuint)(&native), 1, out var copied) ||
                     copied is not { Length: 1 })
                 {
@@ -832,7 +956,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 native.Format = 28;
+
                 semantic[0] = (byte)'X';
+
                 if (copied[0].Name != "POSITION" || copied[0].Format != 6)
                 {
                     throw new InvalidOperationException("R14 input descriptor retained mutable guest state.");

@@ -10,8 +10,11 @@ public sealed class Nv12UploadFrame
     private Nv12UploadFrame(int width, int height, long timestamp, byte[] pixels)
     {
         Width = width;
+
         Height = height;
+
         Timestamp = timestamp;
+
         _pixels = pixels;
     }
 
@@ -40,12 +43,14 @@ public sealed class Nv12UploadFrame
         }
 
         ValidatePlane(luma.Length, lumaStride, width, height);
+
         ValidatePlane(chroma.Length, chromaStride, width, height / 2);
 
         var yBytes = checked(width * height);
         var pixels = new byte[checked(yBytes + yBytes / 2)];
 
         CopyRows(luma, lumaStride, pixels.AsSpan(0, yBytes), width, width, height);
+
         CopyRows(chroma, chromaStride, pixels.AsSpan(yBytes), width, width, height / 2);
 
         return new Nv12UploadFrame(width, height, timestamp, pixels);
@@ -72,8 +77,11 @@ public sealed class Nv12UploadFrame
         var uv = chroma[..uvLength];
 
         y.Clear();
+
         uv.Clear();
+
         CopyRows(_pixels.AsSpan(0, yBytes), Width, y, lumaPitch, Width, Height);
+
         CopyRows(_pixels.AsSpan(yBytes), Width, uv, chromaPitch, Width, Height / 2);
     }
 

@@ -41,6 +41,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryRecordR13GuestDraw(nint self, uint vertices, uint instances, uint first, uint firstInstance)
     {
         using var r25Timing = BeginR25Timing(R25Stage.RecordR13);
+
         if (Volatile.Read(ref _r131ExecutionReported) == 0 &&
             Interlocked.Exchange(ref _r131ExecutionReported, 1) == 0)
         {
@@ -55,6 +56,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var state = StateFor(self);
+
         if (_host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0)
         {
             return RefuseR13("host direct command list unavailable");
@@ -100,12 +102,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         R13Pipeline? translated;
+
         nint color, depth;
+
         nuint rtv, dsv;
+
         nint upload = 0;
+
         try
         {
             translated = GetR13Pipeline(state);
+
             if (translated == null)
             {
                 return RefuseR13("no supported translated native PSO");
@@ -144,12 +151,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             // Capacity is fixed for this diagnostic slice; no guest payload is read during recording.
             var hr = CreateHostResource(HostBufferDescription(R13UploadCapacity), 2, GenericRead, &upload);
+
             if (hr < 0 || upload == 0)
             {
                 return RefuseR13($"host upload creation failed: 0x{hr:X8}");
             }
 
             var gpuAddress = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
+
             if (gpuAddress == 0 || (gpuAddress & 3UL) != 0)
             {
                 return RefuseR13("host upload GPU virtual address is invalid");
@@ -159,34 +168,48 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 Target = R16FindOwnedResource(state, color)
             };
+
             state.HostViews.Add(upload);
+
             upload = 0;
+
             state.UploadBytes += R13UploadCapacity;
 
             // No recoverable fallback after a segment has been sealed: doing so would leave a
             // partly recorded draw in the list. The existing segment helper fail-fasts on failure.
             SealMemoryBoundary(self, state, null, null, draw: new R13DrawBoundary(deferred, false));
+
             var list = Host(self);
             var commands = (ID3D12GraphicsCommandList*)list;
             var colorView = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = rtv };
             var depthView = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = dsv };
 
             TransitionHostResource(list, color, 0, 4);
+
             TransitionHostResource(list, depth, 0, 0x10);
+
             commands->SetPipelineState((ID3D12PipelineState*)translated.Pipeline);
+
             commands->SetGraphicsRootSignature((ID3D12RootSignature*)translated.Root);
+
             commands->SetGraphicsRootShaderResourceView(0, gpuAddress);
             // SealMemoryBoundary already replayed topology, viewports, scissors, blend and stencil.
             commands->OMSetRenderTargets(1, &colorView, false, &depthView);
+
             TraceHostCommand(self, "R13 DrawInstanced");
+
             commands->DrawInstanced(vertices, instances, first, firstInstance);
+
             commands->OMSetRenderTargets(0, null, false, null);
+
             TransitionHostResource(list, depth, 0x10, 0);
+
             TransitionHostResource(list, color, 4, 0);
 
             // A second boundary proves that the submitted draw has completed before we report success.
             // This is deliberately synchronous validation, not the production queue scheduling design.
             SealMemoryBoundary(self, state, null, null, draw: new R13DrawBoundary(deferred, true));
+
             TraceR24($"[graphics] IRX-GFX-DRAW-R13: RECORDED guest draw; " +
                      $"source=0x{source.Address:X}, vertices={vertices}, boundaries={state.MemoryBoundaries.Count}; awaiting submission.");
 
@@ -216,6 +239,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var cache = R13Pipelines.GetOrCreateValue(state);
+
         if (cache.TryGetValue(state.Pipeline, out var cached))
         {
             // Even on cache hits, require the current guest root to match the retained pipeline.
@@ -229,6 +253,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         GraphicsPipelineMetadata? pipeline;
+
         lock (PipelineGate)
         {
             _ = GraphicsPipelines.TryGetValue(state.Pipeline, out pipeline);
@@ -243,6 +268,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var vertex = pipeline.Shaders.FirstOrDefault(static shader => shader.Stage == 1);
         var pixel = pipeline.Shaders.FirstOrDefault(static shader => shader.Stage == 2);
         var depth = pipeline.State.FirstOrDefault(static record => record.Kind == 21);
+
         if (vertex == null || pixel == null || depth == null || depth.Bytes.Length != 64)
         {
             return null;
@@ -260,7 +286,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var root = (void*)null;
+
         nint nativePipeline = 0;
+
         try
         {
             var pair = Rdna2VertexFetchCompiler.Translate(vertex.Container.Bytes, pixel.Container.Bytes,
@@ -269,15 +297,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             var vs = CompileR10Shader(pair.VertexSource, "vs_5_1", report);
             var ps = CompileR10Shader(pair.PixelSource, "ps_5_1", report);
             var rootBlob = SerializeR10HostRoot(pair, report);
+
             if (vs == null || ps == null || rootBlob == null)
             {
                 return null;
             }
 
             var iid = RootSignatureId;
+
             fixed (byte* bytes = rootBlob)
             {
                 var hr = (int)_host->CreateRootSignature(0, bytes, (nuint)rootBlob.Length, &iid, &root);
+
                 if (hr < 0 || root == null)
                 {
                     _ = RefuseR13($"native root creation failed: 0x{hr:X8}");
@@ -287,18 +318,26 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             nativePipeline = CreateR10PipelineCandidate(root, vs, ps, pipeline, report);
+
             if (nativePipeline == 0)
             {
                 return null;
             }
 
             var result = new R13Pipeline(pair, (nint)root, nativePipeline, depthBoundsEnabled);
+
             state.HostViews.Add((nint)root);
+
             root = null;
+
             state.HostViews.Add(nativePipeline);
+
             nativePipeline = 0;
+
             cache.Add(state.Pipeline, result);
+
             R21VertexPipelines.Publish(pipeline, result);
+
             report.WriteLine(
                 "[graphics] IRX-GFX-DRAW-R13: retained translated root and PSO for command-list lifetime.");
 
@@ -332,8 +371,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             new VertexFetchField(0, 3), new VertexFetchField(12, 4));
         var upload = new R13VertexUpload(pair, 0x10000, 0, 3, 0);
         var before = state.MemoryBoundaries.Count;
+
         SealMemoryBoundary(list, state, null, null, draw: new R13DrawBoundary(upload, false));
+
         SealMemoryBoundary(list, state, null, null, draw: new R13DrawBoundary(upload, true));
+
         if (state.MemoryBoundaries.Count != before + 2 || upload.Phase != 0 ||
             state.MemoryBoundaries[before].Draw is not { Complete: false } prepare ||
             state.MemoryBoundaries[before + 1].Draw is not { Complete: true } complete ||
@@ -348,7 +390,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ExecuteR13DrawBoundary(nint queue, R13DrawBoundary boundary)
     {
         using var r25Timing = BeginR25Timing(R25Stage.ExecuteR13);
+
         var upload = boundary.Upload;
+
         if (boundary.Complete)
         {
             if (Interlocked.CompareExchange(ref upload.Phase, 2, 1) != 1)
@@ -357,9 +401,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             MarkR16GpuWrite(upload.Target, queue);
+
             Interlocked.Increment(ref _r24Draws);
+
             TraceR24("[graphics] IRX-GFX-DRAW-R13: GPU COMPLETED guest draw " +
                      "(CPU-authoritative source assumption; presentation not verified).");
+
             TraceR171Color(queue, upload.Target, "R13-output");
 
             return;
@@ -378,7 +425,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         Span<byte> header = stackalloc byte[headerLength];
+
         ulong extent = 0;
+
         if (!TryReadR12Memory(upload.Address, header) ||
             !Rdna2VertexFetchCompiler.TryGetReadExtent(upload.Pair, header, upload.First, upload.Count,
                 R13UploadCapacity, out extent) || extent < (ulong)headerLength)
@@ -387,10 +436,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var bytes = checked((int)extent);
+
         byte[]? rented = null;
+
         var snapshot = bytes <= 256
             ? stackalloc byte[bytes]
             : (rented = ArrayPool<byte>.Shared.Rent(bytes)).AsSpan(0, bytes);
+
         try
         {
             if (!TryReadR12Memory(upload.Address, snapshot) || !snapshot[..headerLength].SequenceEqual(header))
@@ -400,18 +452,23 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             // Copy the validated CPU snapshot once into write-combined memory; never read back from the UPLOAD heap.
             var noRead = default(HostRange);
+
             void* mapped = null;
+
             var hr = ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload.Host, 8))
                 (upload.Host, 0, &noRead, &mapped);
+
             if (hr < 0 || mapped == null)
             {
                 Environment.FailFast($"[graphics] R13 upload map failed: 0x{hr:X8}.");
             }
 
             var written = default(HostRange);
+
             try
             {
                 snapshot.CopyTo(new Span<byte>(mapped, bytes));
+
                 written.End = (nuint)bytes;
             }
             finally
@@ -445,6 +502,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         public R21PipelineCache(string name, Func<TValue, (nint Root, nint Pipeline)> handles)
         {
             _name = name;
+
             _handles = handles;
         }
 
@@ -458,11 +516,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var handles = _handles(entry);
+
                 RetainR21Host(handles.Root);
+
                 RetainR21Host(handles.Pipeline);
+
                 state.HostViews.Add(handles.Root);
+
                 state.HostViews.Add(handles.Pipeline);
+
                 var hits = ++_hits;
+
                 if (hits <= 2 || (hits & (hits - 1)) == 0)
                 {
                     Console.Error.WriteLine($"[graphics] IRX-GFX-PSO-R21: {_name} cache hit #{hits}.");
@@ -482,7 +546,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var handles = _handles(value);
+
                 RetainR21Host(handles.Root);
+
                 RetainR21Host(handles.Pipeline);
             }
         }

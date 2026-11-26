@@ -19,8 +19,11 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
     internal WindowsVideoWindow(int width, int height)
     {
         _width = width;
+
         _height = height;
+
         _instance = GetModuleHandle(null);
+
         fixed (char* name = _className)
         {
             var wc = new WindowClass
@@ -29,6 +32,7 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
                 Instance = _instance,
                 ClassName = (nint)name
             };
+
             if (RegisterClass(&wc) == 0)
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -36,10 +40,12 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
         }
 
         _registered = true;
+
         try
         {
             _window = CreateWindowEx(0, _className, "Ira Rationis | Media playback", 0x10CF0000,
                 unchecked((int)0x80000000), unchecked((int)0x80000000), 960, 580, 0, 0, _instance, 0);
+
             if (_window == 0)
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -58,12 +64,14 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
         if (_window != 0)
         {
             DestroyWindow(_window);
+
             _window = 0;
         }
 
         if (_registered)
         {
             UnregisterClass(_className, _instance);
+
             _registered = false;
         }
     }
@@ -78,6 +86,7 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
             }
 
             TranslateMessage(&message);
+
             DispatchMessage(&message);
         }
 
@@ -93,6 +102,7 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
 
         var width = rect.Right - rect.Left;
         var height = rect.Bottom - rect.Top;
+
         if (width <= 0 || height <= 0 || IsIconic(_window) != 0)
         {
             return false;
@@ -104,6 +114,7 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
         var x = (width - w) / 2;
         var y = (height - h) / 2;
         var dc = GetDC(_window);
+
         if (dc == 0)
         {
             throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -115,19 +126,23 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
             if (x > 0 || width - x - w > 0)
             {
                 PatBlt(dc, 0, 0, x, height, 0x42);
+
                 PatBlt(dc, x + w, 0, width - x - w, height, 0x42);
             }
 
             if (y > 0 || height - y - h > 0)
             {
                 PatBlt(dc, 0, 0, width, y, 0x42);
+
                 PatBlt(dc, 0, y + h, width, height - y - h, 0x42);
             }
 
             var info = new BitmapHeader { Size = 40, Width = _width, Height = -_height, Planes = 1, BitCount = 32 };
+
             fixed (byte* data = pixels)
             {
                 var lines = StretchDIBits(dc, x, y, w, h, 0, 0, _width, _height, data, &info, 0, 0x00CC0020);
+
                 if (lines == 0 || lines == -1)
                 {
                     throw new InvalidOperationException("StretchDIBits failed.");

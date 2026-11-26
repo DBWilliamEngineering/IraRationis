@@ -28,10 +28,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int SetFrameInterval(nint self, nint output, uint length, uint period, uint flags)
     {
         var interval = length == 0 ? 16_667U : length;
+
         lock (FrameGate)
         {
             _firstFrameTick = Math.Max(LastFrameTicks[0], Math.Max(LastFrameTicks[1], LastFrameTicks[2]));
+
             _frameStart = Stopwatch.GetTimestamp();
+
             _frameInterval = IntervalTicks(interval);
         }
 
@@ -59,9 +62,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int WaitFrameEvent(nint self, uint kind, uint timeoutMs, nint list, uint flags, ulong* token)
     {
         using var timing = BeginR25Timing(R25Stage.FrameEvent);
+
         var index = (int)Math.Min(kind, 2U);
         var timeout = timeoutMs * (Stopwatch.Frequency / 1000.0);
         var lockStarted = Stopwatch.GetTimestamp();
+
         lock (FrameEventGates[index])
         {
             if (EnableR25Timing)
@@ -71,16 +76,21 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             long tick;
             long delay;
+
             lock (FrameGate)
             {
                 var elapsed = Math.Max(0, Stopwatch.GetTimestamp() - _frameStart);
                 var next = _firstFrameTick + elapsed / _frameInterval + 1;
+
                 tick = Math.Max(next, LastFrameTicks[index] + 1);
+
                 delay = Math.Max(0, (tick - _firstFrameTick) * _frameInterval - elapsed);
+
                 if (timeout >= delay && tick > LastFrameTicks[index] + 1)
                 {
                     // A late blocking wait can consume the tick which already passed.
                     tick--;
+
                     delay = 0;
                 }
             }
@@ -88,6 +98,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var timedOut = delay > timeout;
             var sleepTicks = timedOut ? (long)timeout : delay;
             var started = Stopwatch.GetTimestamp();
+
             using (BeginR25Timing(R25Stage.FrameSleep))
             {
                 SleepFrameTicks(sleepTicks);
@@ -104,23 +115,30 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (kind == 0 && (!timedOut || (flags & 2) != 0))
             {
                 var frame = (ulong)Interlocked.Increment(ref _frameToken);
+
                 if (token != null)
                 {
                     *token = frame;
                 }
             }
 
-            if (EnableR25Timing)
+            if (!EnableR25Timing)
             {
-                var observation = Interlocked.Increment(ref _r26FrameWaits);
-                if (observation <= 4 || (observation & (observation - 1)) == 0)
-                {
-                    var actualMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-                    var requestedMs = sleepTicks * 1000.0 / Stopwatch.Frequency;
-                    LogR25(FormattableString.Invariant(
-                        $"[performance] IRX-R26-FRAME: observation={observation}; kind={kind}; timeoutMs={timeoutMs}; flags=0x{flags:X}; requestedSleepMs={requestedMs:F3}; elapsedMs={actualMs:F3}; timedOut={timedOut}."));
-                }
+                return timedOut ? 1 : 0;
             }
+
+            var observation = Interlocked.Increment(ref _r26FrameWaits);
+
+            if (observation > 4 && (observation & (observation - 1)) != 0)
+            {
+                return timedOut ? 1 : 0;
+            }
+
+            var actualMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var requestedMs = sleepTicks * 1000.0 / Stopwatch.Frequency;
+
+            LogR25(FormattableString.Invariant(
+                $"[performance] IRX-R26-FRAME: observation={observation}; kind={kind}; timeoutMs={timeoutMs}; flags=0x{flags:X}; requestedSleepMs={requestedMs:F3}; elapsedMs={actualMs:F3}; timedOut={timedOut}."));
 
             return timedOut ? 1 : 0;
         }
@@ -134,15 +152,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var deadline = Stopwatch.GetTimestamp() + ticks;
+
         while (true)
         {
             var remaining = deadline - Stopwatch.GetTimestamp();
+
             if (remaining <= 0)
             {
                 return;
             }
 
             var milliseconds = remaining * (1000.0 / Stopwatch.Frequency);
+
             if (milliseconds >= 2)
             {
                 Thread.Sleep((int)Math.Min(int.MaxValue, Math.Floor(milliseconds - 1)));
@@ -171,8 +192,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RegisterFrameMethods(nint* table)
     {
         table[78] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, uint, int>)&SetFrameInterval;
+
         table[79] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, nint, uint, int>)&ScheduleFrameEvent;
+
         table[80] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, nint, uint, ulong*, int>)&WaitFrameEvent;
+
         table[81] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, uint*, nint, int>)&FrameStatistics;
     }
 }

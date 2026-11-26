@@ -18,6 +18,7 @@ public static partial class ConsoleGraphicsDevice
 
         // Snapshot shared containers under the registry lock, then decompress outside it.
         List<(string Hash, ShaderContainer Container)> shaders = new();
+
         lock (PipelineGate)
         {
             if (ComputePipelines.TryGetValue(pipeline, out var compute))
@@ -44,13 +45,16 @@ public static partial class ConsoleGraphicsDevice
             try
             {
                 var native = NativeProgramReader.Read(Shaders.ShaderContainer.Parse(container.Bytes));
+
                 Console.Error.WriteLine(
                     $"[shader] {hash[..16]} native programs={native.Count} (diagnostic, not executable).");
+
                 foreach (var program in native)
                 {
                     try
                     {
                         var ir = Rdna2ScalarCompiler.Decode(program.Code);
+
                         Console.Error.WriteLine(
                             $"[shader] {program.Stage} wave{(program.Wave64 ? 64 : 32)} scalar IR instructions={ir.Count}.");
                     }

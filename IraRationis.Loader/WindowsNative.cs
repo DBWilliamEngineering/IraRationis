@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.Loader;
 
-internal static partial class WindowsNative
+internal static unsafe partial class WindowsNative
 {
     internal const uint ReadWrite = 4;
     internal const uint ExecuteRead = 0x20;

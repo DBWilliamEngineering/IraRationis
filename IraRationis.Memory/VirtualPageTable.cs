@@ -28,7 +28,9 @@ public sealed class VirtualPageTable
         }
 
         _ = checked(guestBase + bytes - 1);
+
         _ = checked(cpuBase + (nuint)(bytes - 1));
+
         _ = checked(gpuBase + bytes - 1);
 
         lock (_gate)
@@ -61,6 +63,7 @@ public sealed class VirtualPageTable
             }
 
             var offset = guestAddress % PageSize;
+
             page = new MemoryPage(entry.CpuAddress + (nuint)offset, entry.GpuAddress + offset, entry.Residency);
 
             return true;

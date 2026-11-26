@@ -45,6 +45,7 @@ public static unsafe partial class PhysicalPageModule
         }
 
         var requested = (ulong)*count;
+
         *count = 0;
 
         try
@@ -69,6 +70,7 @@ public static unsafe partial class PhysicalPageModule
 
                 var section = new SafeFileHandle(handle, true);
                 var first = _nextPage;
+
                 ulong inserted = 0;
 
                 try
@@ -76,8 +78,11 @@ public static unsafe partial class PhysicalPageModule
                     for (ulong index = 0; index < requested; index++)
                     {
                         var page = first + index * FramesPerPage;
+
                         Pages.Add(page, new Slice(section, index));
+
                         inserted++;
+
                         pages[index] = (nuint)page;
                     }
                 }
@@ -94,7 +99,9 @@ public static unsafe partial class PhysicalPageModule
                 }
 
                 _nextPage += requested * FramesPerPage;
+
                 *count = (nuint)requested;
+
                 Console.WriteLine(
                     $"[xmem] Allocated {requested} physical pages ({size >> 20} MiB reserved, flags 0x{flags:X}).");
 
@@ -242,7 +249,10 @@ public static unsafe partial class PhysicalPageModule
             if (ReferenceEquals(previous.First.Section, slice.Section)
                 && previous.First.Index + previous.Count == slice.Index)
             {
-                runs[^1] = previous with { Count = previous.Count + 1 };
+                runs[^1] = previous with
+                {
+                    Count = previous.Count + 1
+                };
 
                 return;
             }
@@ -271,6 +281,7 @@ public static unsafe partial class PhysicalPageModule
             }
 
             Views.Remove(address);
+
             var viewEnd = address + view.Size;
 
             if (address < start && !MapView(address, start - address, view.Slice))
@@ -279,7 +290,10 @@ public static unsafe partial class PhysicalPageModule
             }
 
             if (viewEnd > end && !MapView(end, viewEnd - end,
-                    view.Slice with { Index = view.Slice.Index + (end - address) / PageSize }))
+                    view.Slice with
+                    {
+                        Index = view.Slice.Index + (end - address) / PageSize
+                    }))
             {
                 return false;
             }
@@ -293,9 +307,11 @@ public static unsafe partial class PhysicalPageModule
         // Split a larger placeholder to fit this run. A complete placeholder
         // may reject the split; MapViewOfFile3 is the authoritative check.
         _ = VirtualFree((nint)address, (nuint)size, MemRelease | MemPreservePlaceholder);
+
         var process = GetCurrentProcess();
         var mapped = MapViewOfFile3(slice.Section.DangerousGetHandle(), process, (nint)address, slice.Index * PageSize,
             (nuint)size, MemReplacePlaceholder, PageReadWrite, 0, 0);
+
         GC.KeepAlive(slice.Section);
 
         if (mapped != (nint)address)
@@ -313,7 +329,10 @@ public static unsafe partial class PhysicalPageModule
             {
                 for (ulong offset = 0; offset < size; offset += PageSize)
                 {
-                    if (!MapView(address + offset, PageSize, slice with { Index = slice.Index + offset / PageSize }))
+                    if (!MapView(address + offset, PageSize, slice with
+                        {
+                            Index = slice.Index + offset / PageSize
+                        }))
                     {
                         return false;
                     }
@@ -330,6 +349,7 @@ public static unsafe partial class PhysicalPageModule
         if (VirtualAlloc(mapped, (nuint)size, MemCommit, PageReadWrite) == 0)
         {
             Report("VirtualAlloc (physical commit)", address, size);
+
             _ = UnmapViewOfFile2(process, mapped, MemPreservePlaceholder);
 
             return false;
@@ -359,6 +379,7 @@ public static unsafe partial class PhysicalPageModule
                 for (ulong offset = 0; offset < size; offset += PageSize)
                 {
                     var address = source + offset;
+
                     Slice? slice = null;
 
                     foreach (var (start, view) in Views)
@@ -370,7 +391,10 @@ public static unsafe partial class PhysicalPageModule
 
                         if (address - start < view.Size)
                         {
-                            slice = view.Slice with { Index = view.Slice.Index + (address - start) / PageSize };
+                            slice = view.Slice with
+                            {
+                                Index = view.Slice.Index + (address - start) / PageSize
+                            };
 
                             break;
                         }
@@ -444,6 +468,7 @@ public static unsafe partial class PhysicalPageModule
                 var sectionOffset = run.First.Index * PageSize;
                 var view = MapViewOfFile(run.First.Section.DangerousGetHandle(), 2,
                     (uint)(sectionOffset >> 32), (uint)sectionOffset, (nuint)length);
+
                 GC.KeepAlive(run.First.Section);
 
                 if (view == 0)
@@ -463,8 +488,11 @@ public static unsafe partial class PhysicalPageModule
                     }
 
                     var bytes = (int)Math.Min(length - offset, (ulong)(data.Length - done));
+
                     data.Slice(done, bytes).CopyTo(new Span<byte>((byte*)view + (nuint)offset, bytes));
+
                     done += bytes;
+
                     offset = 0;
                 }
                 finally
@@ -488,6 +516,7 @@ public static unsafe partial class PhysicalPageModule
     private static void Report(string function, ulong address, ulong size)
     {
         var error = Marshal.GetLastPInvokeError();
+
         Console.Error.WriteLine($"[xmem] {function} failed at 0x{address:X}, size 0x{size:X}, Win32 {error}.");
     }
 

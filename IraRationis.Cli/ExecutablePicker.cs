@@ -21,6 +21,7 @@ internal static unsafe partial class ExecutablePicker
         }
 
         var buffer = new char[BufferLength];
+
         const string filter = "Executable files (*.exe)\0*.exe\0\0";
         const string title = "Ira Rationis | Select the title executable";
 
@@ -57,12 +58,9 @@ internal static unsafe partial class ExecutablePicker
             {
                 var error = CommDlgExtendedError();
 
-                if (error != 0)
-                {
-                    throw new InvalidOperationException($"Windows file selection failed (0x{error:X8}).");
-                }
-
-                return null;
+                return error != 0
+                    ? throw new InvalidOperationException($"Windows file selection failed (0x{error:X8}).")
+                    : null;
             }
 
             var path = new string(file);

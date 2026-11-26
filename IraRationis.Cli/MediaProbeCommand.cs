@@ -38,10 +38,10 @@ internal static class MediaProbeCommand
         if (args.Length == 3 && args[2] == "--gpu")
         {
             // Skip CPU thumbnail generation and inspection in this explicit GPU playback mode.
-            var result = GpuMediaPlaybackSession.Play(clip, (window, width, height) =>
-            {
-                return new GpuPresenter(window, width, height, writer);
-            });
+            var result =
+                GpuMediaPlaybackSession.Play(clip,
+                    (window, width, height) => new GpuPresenter(window, width, height, writer));
+
             writer.WriteLine($"[media] IRX-R43: presented={result.PresentedFrames}; skipped={result.SkippedFrames}; " +
                              $"cancelled={result.Cancelled}; audioSeconds={result.AudioSeconds:F3}; sourceFrames={clip.FrameCount}.");
 
@@ -60,6 +60,7 @@ internal static class MediaProbeCommand
         writer.WriteLine($"[media] {revision}: frames={report.Frames}; unique={report.DistinctFrames}; " +
                          $"audioSamples={report.AudioSamples}; peak={report.Peak}; sampleRate={report.SampleRate}; " +
                          $"channels={report.Channels}; backend={backend}");
+
         writer.WriteLine($"[media] Output: {report.OutputDirectory}");
 
         if (args.Length != 3)
@@ -90,6 +91,7 @@ internal static class MediaProbeCommand
     private static void PrintUsage(TextWriter writer)
     {
         writer.WriteLine("Usage: irx media-probe <ffmpeg.exe> <local clip> [--play|--stream|--gpu]");
+
         writer.WriteLine("       irx media-probe --mf <local MP4> [--play|--gpu]");
     }
 

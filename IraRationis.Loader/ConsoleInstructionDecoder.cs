@@ -61,6 +61,7 @@ public static class ConsoleInstructionDecoder
             if (prefix is >= 0x40 and <= 0x4F)
             {
                 rex = prefix;
+
                 offset++;
 
                 continue;
@@ -82,6 +83,7 @@ public static class ConsoleInstructionDecoder
 
                 case 0xF3:
                     hasF3 = true;
+
                     repeat = 0xF3;
 
                     break;
@@ -107,6 +109,7 @@ public static class ConsoleInstructionDecoder
             }
 
             rex = 0;
+
             offset++;
         }
 
@@ -265,6 +268,7 @@ public static class ConsoleInstructionDecoder
             }
 
             baseRegister = code[1] & 7;
+
             length++;
         }
 

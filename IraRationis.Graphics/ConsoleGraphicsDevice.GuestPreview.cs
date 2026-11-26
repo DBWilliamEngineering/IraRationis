@@ -48,7 +48,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         lock (R18StatusGate)
         {
             _r18CompileStarted++;
+
             _r18CompileActive++;
+
             _r18LastProfile = profile;
         }
 
@@ -66,6 +68,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         lock (R18StatusGate)
         {
             _r18CompileActive--;
+
             if (succeeded)
             {
                 _r18CompileSucceeded++;
@@ -97,12 +100,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool ReserveR171ColorSample(string stage)
     {
         var count = R171ColorSamples.GetValueOrDefault(stage);
+
         if (count >= R172LastColorObservation)
         {
             return false;
         }
 
         count++;
+
         R171ColorSamples[stage] = count;
 
         // Sample startup and later frame boundaries without an unbounded readback cost.
@@ -127,14 +132,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (EnableR31InputColorTrace && Volatile.Read(ref _r31InputColorRequested) != 0)
             {
                 var count = R31InputColorSamples.GetValueOrDefault(stage);
+
                 if (count >= R31InputColorObservations)
                 {
                     return;
                 }
 
                 count++;
+
                 R31InputColorSamples[stage] = count;
+
                 stage = "R31-after-Y/" + stage;
+
                 R171ColorSamples[stage] = count;
             }
             else if (!EnableR171ColorFlow || !ReserveR171ColorSample(stage))
@@ -143,6 +152,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var writer = R16Writer(target);
+
             if (writer != queue && !(cpuUploadCompleted && writer == 0))
             {
                 Console.Error.WriteLine(
@@ -170,19 +180,25 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var nonBlack = 0;
         var nonZeroAlpha = 0;
+
         byte maxRgb = 0;
+
         var left = width;
         var top = height;
         var right = -1;
         var bottom = -1;
+
         for (var y = 0; y < height; y++)
         {
             var row = data.Slice(y * pitch, width * 4);
+
             for (var x = 0; x < width; x++)
             {
                 var offset = x * 4;
                 var maximum = Math.Max(row[offset], Math.Max(row[offset + 1], row[offset + 2]));
+
                 maxRgb = Math.Max(maxRgb, maximum);
+
                 if (row[offset + 3] != 0)
                 {
                     nonZeroAlpha++;
@@ -194,9 +210,13 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 nonBlack++;
+
                 left = Math.Min(left, x);
+
                 top = Math.Min(top, y);
+
                 right = Math.Max(right, x);
+
                 bottom = Math.Max(bottom, y);
             }
         }
@@ -217,19 +237,23 @@ public static unsafe partial class ConsoleGraphicsDevice
         var rowPitch = checked((int)pitch);
         var stats = MeasureR171Color(data, width, height, rowPitch);
         var bounds = stats.NonBlack == 0 ? "none" : $"{stats.Left},{stats.Top}..{stats.Right},{stats.Bottom}";
+
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-COLOR-R17.2: stage={stage}, observation={R171ColorSamples.GetValueOrDefault(stage)}, generation={resource->Generation}, guest=0x{resource->Address:X}, size={width}x{height}, format={desc.Format}, nonBlack={stats.NonBlack}/{width * height}, nonZeroAlpha={stats.NonZeroAlpha}, maxRgb={stats.MaxRgb}, bounds={bounds}, centerRaw=0x{stats.Center:X8}.");
+
         if (EnableR31InputColorTrace)
         {
             // Exclude row padding: compare only the actual pixel bytes.
             using var hash = IncrementalHash.CreateHash(
                 HashAlgorithmName.SHA256);
+
             for (var y = 0; y < height; y++)
             {
                 hash.AppendData(data.Slice(y * rowPitch, width * 4));
             }
 
             var digest = Convert.ToHexString(hash.GetHashAndReset());
+
             Console.Error.WriteLine(
                 $"[graphics] IRX-R31-COLOR: stage={stage}; observation={R171ColorSamples.GetValueOrDefault(stage)}; generation={resource->Generation}; size={width}x{height}; format={desc.Format}; sha256={digest}; qpc={Stopwatch.GetTimestamp()}");
         }
@@ -239,19 +263,28 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         // Padded rows: the nonzero padding must never count as image content.
         Span<byte> data = stackalloc byte[24];
+
         data.Clear();
+
         data[8] = 255;
+
         data[20] = 255;
+
         data[3] = 255;
+
         data[16] = 17;
+
         data[19] = 255;
+
         var stats = MeasureR171Color(data, 2, 2, 12);
+
         if (stats != new R171ColorStats(1, 2, 17, 1, 1, 1, 1, 0xFF000011))
         {
             throw new InvalidOperationException("R17.1 color statistics regression failed.");
         }
 
         int[] expectedObservations = [1, 2, 3, 4, 8, 16, 32, 64];
+
         if (!Enumerable.Range(1, 65).Where(IsR172ColorObservation).SequenceEqual(expectedObservations) ||
             IsR172ColorObservation(0) || IsR172ColorObservation(-1))
         {
@@ -260,6 +293,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Console.Error.WriteLine(
             "[graphics-probe] R17.2 full-resolution color statistics and sampling passed (CPU only).");
+
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-COLOR-R17.2: enabled={EnableR171ColorFlow}; observations=1,2,3,4,8,16,32,64; set IRX_TRACE_COLOR_FLOW=0 to disable.");
     }
@@ -293,6 +327,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             try
             {
                 var frame = ReadR16PreviewFrame(queue, target, present);
+
                 if (frame == null)
                 {
                     return false;
@@ -304,6 +339,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 _r16LastPreview = now;
+
                 if (frame.Id <= 4 || (frame.Id & (frame.Id - 1)) == 0)
                 {
                     Console.Error.WriteLine(
@@ -329,6 +365,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var resource = (ResourceObject*)target;
         var desc = resource->Description;
+
         if (resource->HostResource == 0 || desc.Dimension != 3 || desc.Width is 0 or > 8192 ||
             desc.Height is 0 or > 8192 || desc.DepthOrArraySize != 1 || desc.MipLevels != 1 || desc.SampleCount != 1 ||
             desc.Format is not (28 or 29 or 87 or 91))
@@ -346,33 +383,50 @@ public static unsafe partial class ConsoleGraphicsDevice
         var height = desc.Height;
         var pitch = (width * 4U + 255U) & ~255U;
         var bytes = (ulong)pitch * height;
+
         if (bytes > R16MaximumTextureBytes)
         {
             return null;
         }
 
         nint readback = 0, allocator = 0, list = 0;
+
         try
         {
             CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback),
                 "R16 preview readback allocation");
+
             CreateR16UtilityList(out allocator, out list);
+
             var from = new ClearProbeCopyLocation { Resource = resource->HostResource };
             var to = new ClearProbeCopyLocation
             {
-                Resource = readback, Kind = 1, Format = desc.Format, Width = width, Height = height, Depth = 1,
+                Resource = readback,
+                Kind = 1,
+                Format = desc.Format,
+                Width = width,
+                Height = height,
+                Depth = 1,
                 Pitch = pitch
             };
+
             TransitionHostResource(list, resource->HostResource, 0, CopySource);
+
             ((delegate* unmanaged[Stdcall]<nint, ClearProbeCopyLocation*, uint, uint, uint, ClearProbeCopyLocation*,
                     void*, void>)Slot(list, 16))
                 (list, &to, 0, 0, 0, &from, null);
+
             TransitionHostResource(list, resource->HostResource, CopySource, 0);
+
             SubmitR16UtilityList(queue, list);
+
             var range = new HostRange { End = (nuint)bytes };
+
             void* mapped = null;
+
             CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(readback, 8))
                 (readback, 0, &range, &mapped), "R16 map preview readback");
+
             if (mapped == null)
             {
                 return null;
@@ -397,20 +451,27 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var previewHeight = Math.Max(1, (int)(height * scale));
                 var pixels = new byte[checked(previewWidth * previewHeight * 4)];
                 var nonBlack = 0;
+
                 for (var y = 0; y < previewHeight; y++)
                 {
                     var sourceY = (uint)((ulong)y * height / (uint)previewHeight);
                     var row = (byte*)mapped + (nuint)((ulong)sourceY * pitch);
+
                     for (var x = 0; x < previewWidth; x++)
                     {
                         var sourceX = (uint)((ulong)x * width / (uint)previewWidth);
                         var pixel = row + sourceX * 4;
                         var index = (y * previewWidth + x) * 4;
                         var rgba = desc.Format is 28 or 29;
+
                         pixels[index] = pixel[rgba ? 2 : 0];
+
                         pixels[index + 1] = pixel[1];
+
                         pixels[index + 2] = pixel[rgba ? 0 : 2];
+
                         pixels[index + 3] = 255;
+
                         if ((pixels[index] | pixels[index + 1] | pixels[index + 2]) != 0)
                         {
                             nonBlack++;
@@ -424,6 +485,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             finally
             {
                 var written = default(HostRange);
+
                 ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9))(readback, 0, &written);
             }
         }
@@ -471,12 +533,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             try
             {
                 var thread = new Thread(Run) { IsBackground = true, Name = "IraRationis GPU preview" };
+
                 thread.Start();
             }
             catch (Exception exception)
             {
                 Volatile.Write(ref _closed, 1);
+
                 Ready.Set();
+
                 Console.Error.WriteLine($"[graphics] R18 preview startup failed: {exception.Message}");
             }
         }
@@ -489,6 +554,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             Volatile.Write(ref _latest, frame);
+
             EnsureStarted();
 
             return Ready.Wait(TimeSpan.FromSeconds(2)) && Volatile.Read(ref _closed) == 0;
@@ -497,6 +563,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         private static void Run()
         {
             nint window = 0;
+
             try
             {
                 if (sizeof(PreviewWindowClass) != 80 || sizeof(PreviewPaintStruct) != 72)
@@ -505,6 +572,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var instance = GetModuleHandleW(0);
+
                 fixed (char* className = PreviewClassName)
                 {
                     var windowClass = new PreviewWindowClass
@@ -516,6 +584,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         Cursor = LoadCursorW(0, 32512), // IDC_ARROW
                         ClassName = (nint)className
                     };
+
                     if (RegisterClassExW(&windowClass) == 0)
                     {
                         Console.Error.WriteLine(
@@ -527,6 +596,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 window = CreateWindowExW(0, PreviewClassName, PreviewTitle, 0x10CF0000,
                     int.MinValue, int.MinValue, 1280, 760, 0, 0, instance, 0);
+
                 if (window == 0)
                 {
                     Console.Error.WriteLine(
@@ -536,13 +606,18 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 Ready.Set();
+
                 Console.Error.WriteLine(
                     "[graphics] IRX-GFX-PREVIEW-R16: WINDOW READY (readback preview, not a swap chain).");
+
                 Console.Error.WriteLine(
                     $"[graphics] IRX-GFX-STATUS-R18.1: owned WM_PAINT window ready; startup overlay enabled={EnableR18StartupStatus}.");
+
                 string? previousCaption = null;
+
                 long previousFrame = -1;
                 long lastRefresh = 0;
+
                 while (IsWindow(window) != 0)
                 {
                     while (PeekMessageW(out var message, 0, 0, 0, 1) != 0)
@@ -553,12 +628,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                         }
 
                         _ = TranslateMessage(ref message);
+
                         _ = DispatchMessageW(ref message);
                     }
 
                     var frame = Volatile.Read(ref _latest);
                     var caption = BuildCaption(frame);
                     var captionChanged = !string.Equals(previousCaption, caption, StringComparison.Ordinal);
+
                     if (captionChanged)
                     {
                         if (SetWindowTextW(window, caption) == 0)
@@ -582,7 +659,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                         }
 
                         _ = UpdateWindow(window);
+
                         previousFrame = frameId;
+
                         lastRefresh = now;
                     }
 
@@ -601,7 +680,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 Volatile.Write(ref _closed, 1);
+
                 Volatile.Write(ref _latest, null);
+
                 Ready.Set();
             }
         }
@@ -643,6 +724,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     var paint = default(PreviewPaintStruct);
                     var dc = BeginPaint(window, &paint);
+
                     if (dc == 0)
                     {
                         ReportPaintFailure("BeginPaint");
@@ -658,6 +740,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         }
 
                         var frame = Volatile.Read(ref _latest);
+
                         if (Draw(window, dc, frame) && frame != null &&
                             Interlocked.Exchange(ref _displayed, frame.Id) != frame.Id &&
                             (frame.Id <= 4 || (frame.Id & (frame.Id - 1)) == 0))
@@ -699,12 +782,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var clientWidth = bounds.Right - bounds.Left;
             var clientHeight = bounds.Bottom - bounds.Top;
+
             if (PatBlt(dc, 0, 0, clientWidth, clientHeight, 0x00000042) == 0)
             {
                 ReportPaintFailure("PatBlt");
             }
 
             var displayed = false;
+
             if (frame != null)
             {
                 var scale = Math.Min((double)clientWidth / frame.Width, (double)clientHeight / frame.Height);
@@ -714,10 +799,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var y = (clientHeight - height) / 2;
                 var info = new BitmapHeader
                 {
-                    Size = 40, Width = frame.Width, Height = -frame.Height, Planes = 1, Bits = 32,
+                    Size = 40,
+                    Width = frame.Width,
+                    Height = -frame.Height,
+                    Planes = 1,
+                    Bits = 32,
                     ImageBytes = (uint)frame.Pixels.Length
                 };
+
                 _ = SetStretchBltMode(dc, 3);
+
                 fixed (byte* pixels = frame.Pixels)
                 {
                     displayed = StretchDIBits(dc, x, y, width, height, 0, 0, frame.Width, frame.Height,
@@ -751,18 +842,25 @@ public static unsafe partial class ConsoleGraphicsDevice
             var previous = font == 0 ? 0 : SelectObject(dc, font);
             var background = SetBkMode(dc, 1); // TRANSPARENT
             var color = SetTextColor(dc, 0x00E8E8E8);
+
             try
             {
                 var heading = status.Active > 0 ? "Compiling shaders..." : "Waiting for visible guest output...";
+
                 WriteStatusLine(dc, left, top, "IRARATIONIS  |  FIRST LIGHT");
+
                 WriteStatusLine(dc, left, top + 30, heading);
+
                 WriteStatusLine(dc, left, top + 56,
                     $"Host shader compilations: {status.Succeeded} succeeded / {status.Failed} failed / {status.Active} active");
+
                 WriteStatusLine(dc, left, top + 80,
                     $"Attempts: {status.Started}  |  Latest profile: {status.Profile}");
+
                 WriteStatusLine(dc, left, top + 104, frame == null
                     ? "No guest frame received yet."
                     : $"Preview frame #{frame.Id}: no non-black sampled pixels.");
+
                 WriteStatusLine(dc, left, top + 128, "Guest GPU preview  |  See console for detailed diagnostics.");
             }
             finally

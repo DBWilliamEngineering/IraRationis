@@ -44,22 +44,26 @@ public static class LocalMediaDecoder
 
         var executable = Path.GetFullPath(ffmpegPath);
         var input = Path.GetFullPath(inputPath);
+
         if (!File.Exists(executable) || !File.Exists(input))
         {
             throw new FileNotFoundException("FFmpeg executable or local clip not found.");
         }
 
         var directory = Directory.CreateTempSubdirectory("irx-media-");
+
         try
         {
             var video = Path.Combine(directory.FullName, "video.nv12");
             var audio = Path.Combine(directory.FullName, "audio.pcm");
             var duration = seconds.ToString(CultureInfo.InvariantCulture);
+
             await RunAsync(executable, input, [
                 "-map", "0:v:0", "-an", "-t", duration, "-vf",
                 $"scale={width}:{height}:out_color_matrix=bt709:out_range=tv,fps=30,format=nv12", "-f", "rawvideo",
                 video
             ]);
+
             await RunAsync(executable, input, [
                 "-map", "0:a:0", "-vn", "-t", duration,
                 "-ac", "2", "-ar", "48000", "-f", "s16le", audio
@@ -68,6 +72,7 @@ public static class LocalMediaDecoder
             var frameBytes = checked(width * height * 3 / 2);
             var videoSize = new FileInfo(video).Length;
             var audioSize = new FileInfo(audio).Length;
+
             if (videoSize <= 0 || videoSize % frameBytes != 0 || videoSize > (long)frameBytes * 30 * seconds ||
                 audioSize <= 0 || audioSize % 4 != 0 || audioSize > 48000L * 4 * seconds)
             {
@@ -77,6 +82,7 @@ public static class LocalMediaDecoder
             var frames = await File.ReadAllBytesAsync(video);
             var bytes = await File.ReadAllBytesAsync(audio);
             var pcm = new short[bytes.Length / 2];
+
             for (var i = 0; i < pcm.Length; i++)
             {
                 pcm[i] = BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(i * 2, 2));
@@ -93,7 +99,12 @@ public static class LocalMediaDecoder
     private static async Task RunAsync(string executable, string input, string[] outputArgs)
     {
         var start = new ProcessStartInfo(executable)
-            { UseShellExecute = false, RedirectStandardError = true, CreateNoWindow = true };
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
         foreach (var arg in new[]
                  {
                      "-hide_banner", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-i", input
@@ -108,8 +119,11 @@ public static class LocalMediaDecoder
         }
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("FFmpeg did not start.");
+
         var errors = process.StandardError.ReadToEndAsync();
+
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
         try
         {
             await process.WaitForExitAsync(timeout.Token);
@@ -127,6 +141,7 @@ public static class LocalMediaDecoder
         }
 
         var message = await errors;
+
         if (process.ExitCode != 0)
         {
             throw new InvalidDataException($"FFmpeg exit {process.ExitCode}: {message}");

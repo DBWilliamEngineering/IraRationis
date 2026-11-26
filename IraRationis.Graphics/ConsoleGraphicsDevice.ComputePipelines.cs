@@ -12,7 +12,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private const int MaximumComputeShaderBytes = 64 * 1024 * 1024;
     private const long MaximumRetainedComputeBytes = 512L * 1024 * 1024;
     private static readonly Guid PipelineId = new("765a30f3-f624-4c6f-a828-ace948622445");
-    private static readonly object PipelineGate = new();
+    private static readonly Lock PipelineGate = new();
     private static readonly Dictionary<string, ShaderContainer> ComputeShaders = new();
     private static readonly Dictionary<nint, ComputePipelineState> ComputePipelines = new();
     private static long _retainedComputeBytes;
@@ -21,7 +21,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool IsPipeline(nint value)
     {
-        return value != 0 && LiveObjects.TryGetValue(value, out var table) && table == _pipelineTable;
+        lock (PipelineGate)
+        {
+            return value != 0 && LiveObjects.TryGetValue(value, out var table) && table == _pipelineTable;
+        }
     }
 
     private static void RegisterComputePipelineMethods(nint* device)
@@ -32,8 +35,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _pipelineTable = (nint)ChildTable(24);
+
         device[11] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ComputeDescription*, Guid*, nint*, int>)&CreateComputePipeline;
+
         device[62] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ComputeDescription*, uint, void*, Guid*, nint*, int>)
             &CreateComputePipelineX;
@@ -63,18 +68,19 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int CreateComputePipelineX(nint self, ComputeDescription* description, uint extensionCount,
         void* extensions, Guid* iid, nint* output)
     {
-        if (extensionCount != 0 && extensions == null)
+        if (extensionCount == 0 || extensions != null)
         {
-            if (output != null)
-            {
-                *output = 0;
-            }
-
-            return InvalidArgument;
+            return CreateComputePipelineCore(description, extensionCount, iid, output);
         }
 
+        if (output != null)
+        {
+            *output = 0;
+        }
+
+        return InvalidArgument;
+
         // As upstream, console shader extensions are not interpreted yet.
-        return CreateComputePipelineCore(description, extensionCount, iid, output);
     }
 
     private static int CreateComputePipelineCore(ComputeDescription* description, uint extensionCount, Guid* iid,
@@ -98,6 +104,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var root = description->Root;
+
         if (root != 0 && !IsRootSignature(root))
         {
             return InvalidArgument;
@@ -109,20 +116,31 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         PipelineObject* pipeline = null;
+
         ShaderContainer? shader = null;
+
         string? hash = null;
+
         var shaderRetained = false;
         var rootRetained = false;
         var published = false;
+
         try
         {
             var bytes = new ReadOnlySpan<byte>(description->Code, (int)description->Size);
+
             Span<byte> digest = stackalloc byte[32];
+
             _ = SHA256.HashData(bytes, digest);
+
             hash = Convert.ToHexString(digest);
+
             pipeline = (PipelineObject*)NativeMemory.AllocZeroed((nuint)sizeof(PipelineObject));
+
             pipeline->Header.Table = _pipelineTable;
+
             pipeline->Header.References = 1;
+
             lock (PipelineGate)
             {
                 if (!ComputeShaders.TryGetValue(hash, out shader))
@@ -133,7 +151,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
 
                     shader = new ShaderContainer(bytes.ToArray());
+
                     ComputeShaders.Add(hash, shader);
+
                     _retainedComputeBytes += shader.Bytes.Length;
                 }
                 else if (!bytes.SequenceEqual(shader.Bytes))
@@ -142,20 +162,27 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 shader.References++;
+
                 shaderRetained = true;
+
                 if (root != 0)
                 {
                     _ = Retain(root);
+
                     rootRetained = true;
                 }
 
                 ComputePipelines.Add((nint)pipeline, new ComputePipelineState(root, hash, shader));
+
                 LiveObjects[(nint)pipeline] = _pipelineTable;
+
                 published = true;
             }
 
             *output = (nint)pipeline;
+
             var created = Interlocked.Increment(ref _computeCreated);
+
             if (created <= 8 || (created & (created - 1)) == 0)
             {
                 Console.WriteLine(
@@ -177,6 +204,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     if (pipeline != null)
                     {
                         _ = ComputePipelines.Remove((nint)pipeline);
+
                         _ = LiveObjects.TryRemove((nint)pipeline, out _);
                     }
 
@@ -203,9 +231,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void DropShader(string hash, ShaderContainer shader)
     {
         shader.References--;
+
         if (shader.References == 0)
         {
             _ = ComputeShaders.Remove(hash);
+
             _retainedComputeBytes -= shader.Bytes.Length;
         }
     }
@@ -213,10 +243,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReleasePipeline(nint value)
     {
         ComputePipelineState? state;
+
         GraphicsPipelineMetadata? graphics;
+
         lock (PipelineGate)
         {
             _ = LiveObjects.TryRemove(value, out _);
+
             if (ComputePipelines.Remove(value, out state))
             {
                 DropShader(state.Hash, state.Shader);
@@ -240,7 +273,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         NativeMemory.Free((void*)value);
+
         var root = state?.Root ?? graphics?.Root ?? 0;
+
         if (root != 0)
         {
             _ = Drop(root);

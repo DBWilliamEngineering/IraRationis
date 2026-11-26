@@ -121,77 +121,73 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static uint Drop(nint value)
     {
         ref var references = ref ((Header*)value)->References;
+
         int observed;
+
         do
         {
             observed = Volatile.Read(ref references);
+
             if (observed <= 0)
             {
                 return 0;
             }
         } while (Interlocked.CompareExchange(ref references, observed - 1, observed) != observed);
 
-        if (observed == 1 && IsCommandSignature(value))
+        switch (observed)
         {
-            ReleaseCommandSignature(value);
+            case 1 when IsCommandSignature(value):
+                ReleaseCommandSignature(value);
 
-            return 0;
-        }
+                return 0;
+            case 1 when IsQueryHeap(value):
+                ReleaseQueryHeap(value);
 
-        if (observed == 1 && IsQueryHeap(value))
-        {
-            ReleaseQueryHeap(value);
+                return 0;
+            case 1 when IsPipeline(value):
+                ReleasePipeline(value);
 
-            return 0;
-        }
+                return 0;
+            case 1 when IsRootSignature(value):
+                ReleaseRootSignature(value);
 
-        if (observed == 1 && IsPipeline(value))
-        {
-            ReleasePipeline(value);
+                return 0;
+            case 1 when IsDescriptorHeap(value):
+                ReleaseDescriptorHeap(value);
 
-            return 0;
-        }
+                return 0;
+            case 1 when (IsResource(value) || IsHeap(value)):
+                ReleaseResourceStorage(value);
 
-        if (observed == 1 && IsRootSignature(value))
-        {
-            ReleaseRootSignature(value);
-
-            return 0;
-        }
-
-        if (observed == 1 && IsDescriptorHeap(value))
-        {
-            ReleaseDescriptorHeap(value);
-
-            return 0;
-        }
-
-        if (observed == 1 && (IsResource(value) || IsHeap(value)))
-        {
-            ReleaseResourceStorage(value);
-
-            return 0;
-        }
-
-        if (observed == 1 && value != _device && !IsDisplayObject(value))
-        {
-            var allocator = IsList(value) ? *(nint*)(value + ListAllocator) : 0;
-            ReleaseCommandState(value);
-            _ = LiveObjects.TryRemove(value, out _);
-            if (IsList(value))
+                return 0;
+            case 1 when value != _device && !IsDisplayObject(value):
             {
-                var enhanced = *(nint*)(value + ListEnhancedHost);
-                if (enhanced != 0)
+                var allocator = IsList(value) ? *(nint*)(value + ListAllocator) : 0;
+
+                ReleaseCommandState(value);
+
+                _ = LiveObjects.TryRemove(value, out _);
+
+                if (IsList(value))
                 {
-                    _ = HostRelease(enhanced);
-                }
-            }
+                    var enhanced = *(nint*)(value + ListEnhancedHost);
 
-            _ = HostRelease(Host(value));
-            NativeMemory.Free((void*)value);
-            if (allocator != 0)
-            {
-                _ = Drop(allocator);
+                    if (enhanced != 0)
+                    {
+                        _ = HostRelease(enhanced);
+                    }
+                }
+
+                _ = HostRelease(Host(value));
+
+                NativeMemory.Free((void*)value);
+
+                if (allocator != 0)
+                {
+                    _ = Drop(allocator);
+                }
+
+                break;
             }
         }
 
@@ -267,12 +263,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = 0;
+
         if (iid == null || !Knows(value, *iid))
         {
             return NoInterface;
         }
 
         _ = Retain(value);
+
         *output = value;
 
         return 0;
@@ -352,10 +350,15 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint Allocate(nint table, int size, int hostOffset, nint host)
     {
         var child = (nint)NativeMemory.AllocZeroed((nuint)size);
+
         ((Header*)child)->Table = table;
+
         ((Header*)child)->Bits = 0;
+
         ((Header*)child)->References = 1;
+
         *(nint*)(child + hostOffset) = host;
+
         LiveObjects[child] = table;
 
         return child;
@@ -396,6 +399,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var adapterId = new Guid("29038f61-3839-4626-91fd-086879011a05");
         var factory = (nint)0;
         var hr = CreateDXGIFactory2(0, &factoryId, &factory);
+
         if (hr < 0)
         {
             return hr;
@@ -404,10 +408,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             var enumerate = (delegate* unmanaged[Stdcall]<nint, uint, uint, Guid*, nint*, int>)Slot(factory, 29);
-            for (var index = 0U;; index++)
+
+            for (var index = 0U; ; index++)
             {
                 var adapter = (nint)0;
+
                 hr = enumerate(factory, index, 2, &adapterId, &adapter);
+
                 if (hr < 0)
                 {
                     return hr;
@@ -416,8 +423,10 @@ public static unsafe partial class ConsoleGraphicsDevice
                 try
                 {
                     var description = default(DXGI_ADAPTER_DESC1);
+
                     hr = ((delegate* unmanaged[Stdcall]<nint, DXGI_ADAPTER_DESC1*, int>)Slot(adapter, 10))(adapter,
                         &description);
+
                     if (hr < 0 || (description.Flags & 2) != 0)
                     {
                         continue;
@@ -425,15 +434,20 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     var id = DeviceId;
                     var device = (nint)0;
+
                     hr = D3D12CreateDevice(adapter, 0xc000, &id, &device);
+
                     if (hr < 0)
                     {
                         continue;
                     }
 
                     _host = (ID3D12Device*)device;
+
                     var name = new string((char*)&description, 0, 128).TrimEnd('\0');
+
                     Console.Error.WriteLine($"[graphics] Host device created: {name} (C#).");
+
                     DetectHostRaytracing();
 
                     return 0;
@@ -473,6 +487,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (_device == 0)
             {
                 var hr = InitializeHost();
+
                 if (hr < 0)
                 {
                     return hr;
@@ -484,8 +499,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 _device = (nint)NativeMemory.AllocZeroed(0x58);
+
                 ((Header*)_device)->Table = _deviceTable;
+
                 *(uint*)(_device + 0x18) = 1;
+
                 LiveObjects[_device] = _deviceTable;
             }
 
@@ -519,10 +537,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var check = (delegate* unmanaged[Stdcall]<nint, uint, void*, uint, int>)Slot((nint)_host, 13);
+
         if (feature == 0 && size == 64)
         {
             var values = stackalloc uint[15];
             var hr = check((nint)_host, feature, values, 60);
+
             if (hr < 0)
             {
                 return hr;
@@ -536,38 +556,48 @@ public static unsafe partial class ConsoleGraphicsDevice
             return 0;
         }
 
-        if (feature == 1 && size == 16)
+        if (feature != 1 || size != 16)
         {
-            var fields = (uint*)data;
-            if (fields[0] != 0)
-            {
-                return InvalidArgument;
-            }
-
-            fields[1] = 0;
-            fields[2] = 1;
-            fields[3] = 1;
-
-            return 0;
+            return (feature == 2 && size == 24) || (feature == 3 && size == 12) || (feature == 4 && size == 16)
+                ? check((nint)_host, feature, data, size)
+                : NotImplemented;
         }
 
-        return (feature == 2 && size == 24) || (feature == 3 && size == 12) || (feature == 4 && size == 16)
-            ? check((nint)_host, feature, data, size)
-            : NotImplemented;
+        var fields = (uint*)data;
+
+        if (fields[0] != 0)
+        {
+            return InvalidArgument;
+        }
+
+        fields[1] = 0;
+
+        fields[2] = 1;
+
+        fields[3] = 1;
+
+        return 0;
+
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static HeapProperties* CustomHeap(HeapProperties* output, nint self, uint nodes, uint kind)
     {
-        if (output != null)
+        if (output == null)
         {
-            var pages = kind == 1 ? 1U : kind is 2 or 3 ? 3U : 0U;
-            *output = new HeapProperties
-            {
-                Kind = 4, CpuPages = pages, Pool = pages == 0 ? 0U : 1U, CreationNodes = Math.Max(1U, nodes),
-                VisibleNodes = Math.Max(1U, nodes)
-            };
+            return output;
         }
+
+        var pages = kind == 1 ? 1U : kind is 2 or 3 ? 3U : 0U;
+
+        *output = new HeapProperties
+        {
+            Kind = 4,
+            CpuPages = pages,
+            Pool = pages == 0 ? 0U : 1U,
+            CreationNodes = Math.Max(1U, nodes),
+            VisibleNodes = Math.Max(1U, nodes)
+        };
 
         return output;
     }
@@ -588,14 +618,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         var host = (nint)0;
         var hr = ((delegate* unmanaged[Stdcall]<nint, QueueDescription*, Guid*, nint*, int>)Slot((nint)_host, 8))(
             (nint)_host, description, &id, &host);
+
         if (hr < 0)
         {
             return hr;
         }
 
         var child = Allocate(_newer ? _queueNew : _queueOld, 0x30, QueueHost, host);
+
         *(uint*)(child + 0x10) = description->Kind;
+
         *(QueueDescription*)(child + 0x14) = *description;
+
         Console.Error.WriteLine($"[graphics] Command queue type {description->Kind} created.");
 
         return FinishChild(child, iid, output);
@@ -646,12 +680,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         var host = (nint)0;
         var hr = ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot((nint)_host, 9))((nint)_host, kind,
             &id, &host);
+
         if (hr < 0)
         {
             return hr;
         }
 
         var child = Allocate(_allocatorTable, 0x20, AllocatorHost, host);
+
         *(uint*)(child + 0x10) = kind;
 
         return FinishChild(child, iid, output);
@@ -677,13 +713,16 @@ public static unsafe partial class ConsoleGraphicsDevice
         var host = (nint)0;
         var hr = ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)Slot((nint)_host, 36))(
             (nint)_host, initial, flags, &id, &host);
+
         if (hr < 0)
         {
             return hr;
         }
 
         var child = Allocate(_fenceTable, 0x28, FenceHost, host);
+
         *(ulong*)(child + 0x10) = initial;
+
         *(uint*)(child + 0x18) = flags;
 
         return FinishChild(child, iid, output);
@@ -693,6 +732,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = Host(self);
         var value = ((delegate* unmanaged[Stdcall]<nint, ulong>)Slot(host, 8))(host);
+
         Volatile.Write(ref *(ulong*)(self + 0x10), value);
 
         return value;
@@ -717,6 +757,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = Host(self);
         var hr = ((delegate* unmanaged[Stdcall]<nint, ulong, int>)Slot(host, 10))(host, value);
+
         if (hr >= 0)
         {
             _ = ReadFence(self);
@@ -772,12 +813,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             *output = 0;
         }
 
-        if (!IsAllocator(allocator) || *(uint*)(allocator + 0x10) != kind)
-        {
-            return InvalidArgument;
-        }
-
-        if (pipeline != 0 && !IsPipeline(pipeline))
+        if (!IsAllocator(allocator)
+            || *(uint*)(allocator + 0x10) != kind 
+            || (pipeline != 0 && !IsPipeline(pipeline)))
         {
             return InvalidArgument;
         }
@@ -786,15 +824,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         var host = (nint)0;
         var hr = ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot((nint)_host, 12))(
             (nint)_host, nodes, kind, Host(allocator), 0, &id, &host);
+
         if (hr < 0)
         {
             return hr;
         }
 
         var child = Allocate(_newer ? _listNew : _listOld, 0x980, ListHost, host);
+
         *(uint*)(child + 0x10) = kind;
+
         *(nint*)(child + ListAllocator) = allocator;
+
         _ = Retain(allocator);
+
         if (pipeline != 0)
         {
             BindPipelineCore(child, pipeline);
@@ -816,19 +859,20 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int CreateListX(nint self, ListDescription* description, nint allocator, nint pipeline, Guid* iid,
         nint* output)
     {
-        if (description == null)
+        if (description != null)
         {
-            if (output != null)
-            {
-                *output = 0;
-            }
-
-            return InvalidArgument;
+            return NewList(0, description->Kind, allocator, pipeline, iid, output);
         }
+
+        if (output != null)
+        {
+            *output = 0;
+        }
+
+        return InvalidArgument;
 
         // The console node selection and barrier batch tune its own command memory.
         // A single-node host uses node mask 0.
-        return NewList(0, description->Kind, allocator, pipeline, iid, output);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -842,6 +886,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = Host(self);
         var hr = ((delegate* unmanaged[Stdcall]<nint, int>)Slot(host, 9))(host);
+
         if (hr >= 0)
         {
             *(int*)(self + ListClosed) = 1;
@@ -852,30 +897,36 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static int ResetListCore(nint self, nint allocator, nint pipeline)
     {
-        if (!IsAllocator(allocator) || *(uint*)(allocator + 0x10) != *(uint*)(self + 0x10))
-        {
-            return InvalidArgument;
-        }
-
-        if (pipeline != 0 && !IsPipeline(pipeline))
+        if (!IsAllocator(allocator) 
+            || *(uint*)(allocator + 0x10) != *(uint*)(self + 0x10) 
+            || (pipeline != 0 && !IsPipeline(pipeline)))
         {
             return InvalidArgument;
         }
 
         var host = Host(self);
         var hr = ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)Slot(host, 10))(host, Host(allocator), 0);
-        if (hr >= 0)
+
+        if (hr < 0)
         {
-            _ = Retain(allocator);
-            var previous = *(nint*)(self + ListAllocator);
-            *(nint*)(self + ListAllocator) = allocator;
-            _ = Drop(previous);
-            *(int*)(self + ListClosed) = 0;
-            ReleaseCommandState(self);
-            if (pipeline != 0)
-            {
-                BindPipelineCore(self, pipeline);
-            }
+            return hr;
+        }
+
+        _ = Retain(allocator);
+
+        var previous = *(nint*)(self + ListAllocator);
+
+        *(nint*)(self + ListAllocator) = allocator;
+
+        _ = Drop(previous);
+
+        *(int*)(self + ListClosed) = 0;
+
+        ReleaseCommandState(self);
+
+        if (pipeline != 0)
+        {
+            BindPipelineCore(self, pipeline);
         }
 
         return hr;
@@ -907,9 +958,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var length = checked((int)count);
         var hosts = length <= 128 ? stackalloc nint[length] : new nint[length];
+
         for (var i = 0; i < length; i++)
         {
             var list = lists[i];
+
             if (!IsList(list) || *(int*)(list + ListClosed) == 0 || *(uint*)(list + 0x10) != *(uint*)(self + 0x10))
             {
                 Environment.FailFast("[graphics] Invalid or open command list submitted.");
@@ -920,6 +973,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var host = Host(self);
         var hasMemory = false;
+
         for (var i = 0; i < length; i++)
         {
             hasMemory |= HasCommandMemory(lists[i]);
@@ -956,6 +1010,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint* NewTable(int size)
     {
         var table = (nint*)NativeMemory.Alloc((nuint)size, (nuint)sizeof(nint));
+
         for (var i = 0; i < size; i++)
         {
             table[i] = MissingAddress(i);
@@ -974,6 +1029,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint* ChildTable(int size)
     {
         var table = NewTable(size);
+
         table[7] = (nint)(delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)&Parent;
 
         return table;
@@ -997,6 +1053,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var device = NewTable(160);
+
         device[7] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&NodeCount;
         device[8] = (nint)(delegate* unmanaged[Stdcall]<nint, QueueDescription*, Guid*, nint*, int>)&CreateQueue;
         device[9] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)&CreateAllocator;
@@ -1005,10 +1062,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         device[15] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint>)&Increment;
         device[26] =
             (nint)(delegate* unmanaged[Stdcall]<HeapProperties*, nint, uint, uint, HeapProperties*>)&CustomHeap;
+
         device[36] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)&CreateFence;
         device[48] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)&CreateQueueX;
+
         device[73] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ListDescription*, nint, nint, Guid*, nint*, int>)&CreateListX;
+
         RegisterFrameMethods(device);
         RegisterResourceMethods(device);
         RegisterDescriptorMethods(device);
@@ -1019,20 +1079,31 @@ public static unsafe partial class ConsoleGraphicsDevice
         RegisterFootprintMethods(device);
         RegisterGraphicsPipelineMethods(device);
         RegisterOptionalDeviceMethods(device);
+
         _queueOld = (nint)BuildQueue(false);
+
         _queueNew = (nint)BuildQueue(true);
+
         var allocator = ChildTable(24);
+
         allocator[8] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&AllocatorReset;
         allocator[9] = AllocationCallbackAddress;
+
         _allocatorTable = (nint)allocator;
+
         var fence = ChildTable(24);
+
         fence[8] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&Completed;
         fence[9] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)&FenceEvent;
         fence[10] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, int>)&FenceSignal;
         fence[11] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&FenceFlags;
+
         _fenceTable = (nint)fence;
+
         _listOld = (nint)BuildList(false);
+
         _listNew = (nint)BuildList(true);
+
         InitializeDisplayObjects();
 
         ValidateTables(AllTables((nint)device));
@@ -1045,6 +1116,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         ValidateCommandMemoryRegistration();
         ValidateBarrierRegistration();
         ValidateKnownListRegistration();
+
         _deviceTable = (nint)device;
     }
 
@@ -1052,11 +1124,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var table = ChildTable(36);
         var shift = newer ? 2 : 0;
+
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)&Execute;
+
         table[14 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)&Signal;
+
         table[15 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)&Wait;
+
         table[16 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong*, int>)&Frequency;
+
         table[26 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, QueueDescription*, void>)&DescribeQueue;
+
         table[33 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, ulong, uint, void>)&ExecuteX;
 
         return table;
@@ -1065,16 +1143,21 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static nint* BuildList(bool newer)
     {
         var table = ChildTable(160);
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&ListType;
         table[9] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&CloseList;
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, int>)&ResetList;
+
         RegisterRasterMethods(table);
         RegisterCommandStateMethods(table);
         RegisterCommandMemoryMethods(table, newer);
         RegisterBarrierMethods(table, newer);
         RegisterCommandOperations(table, newer);
+
         table[newer ? 131 : 129] = PipelineSyncAddress;
+
         table[newer ? 132 : 130] = PipelineSyncAddress;
+
         table[newer ? 139 : 137] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, uint, int>)&ResetListX;
 
         return table;

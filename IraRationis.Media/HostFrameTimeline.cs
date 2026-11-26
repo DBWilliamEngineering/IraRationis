@@ -13,6 +13,7 @@ internal sealed class HostFrameTimeline
     internal HostFrameTimeline(int count)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+
         _count = count;
     }
 
@@ -47,14 +48,18 @@ internal sealed class HostFrameTimeline
         }
 
         Position = Math.Max(Position, audioSeconds);
+
         frame = (int)Math.Min(_count - 1, Math.Floor(Position * 30));
+
         if (frame <= _last)
         {
             return false;
         }
 
         Skipped += frame - _last - 1;
+
         _last = frame;
+
         _pending = true;
 
         return true;
@@ -68,6 +73,7 @@ internal sealed class HostFrameTimeline
         }
 
         _pending = false;
+
         if (accepted)
         {
             Presented++;
@@ -86,6 +92,7 @@ internal sealed class HostFrameTimeline
         }
 
         Skipped += _count - _last - 1;
+
         _finished = true;
     }
 }

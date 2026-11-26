@@ -18,6 +18,7 @@ public sealed record Sgd5Record(int Offset, string? Name, byte Kind, ReadOnlyMem
         {
             using var input = new MemoryStream(Packed.ToArray(), false);
             using var inflater = new DeflateStream(input, CompressionMode.Decompress);
+
             var output = new byte[UnpackedSize];
             var count = 0;
 
@@ -33,12 +34,9 @@ public sealed record Sgd5Record(int Offset, string? Name, byte Kind, ReadOnlyMem
                 count += read;
             }
 
-            if (inflater.ReadByte() != -1)
-            {
-                return null;
-            }
-
-            return output;
+            return inflater.ReadByte() != -1 
+                ? null 
+                : output;
         }
         catch (InvalidDataException)
         {

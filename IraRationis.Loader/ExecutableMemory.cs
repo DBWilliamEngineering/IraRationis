@@ -25,6 +25,7 @@ internal static unsafe class ExecutableMemory
 
         WindowsNative.Check(WindowsNative.VirtualProtect(address, size, WindowsNative.ExecuteRead, &oldProtection),
             "Seal executable memory");
+
         WindowsNative.Check(WindowsNative.FlushInstructionCache(WindowsNative.GetCurrentProcess(), address, size),
             "Flush instruction cache");
     }
@@ -44,6 +45,7 @@ internal static unsafe class ExecutableMemory
         finally
         {
             var ignored = 0U;
+
             WindowsNative.Check(WindowsNative.VirtualProtect(address, (nuint)data.Length, previous, &ignored),
                 "Restore memory protection");
         }

@@ -24,6 +24,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     public static void ConfigurePageMapper(Func<ulong, ulong, ulong, bool> mapper)
     {
         ArgumentNullException.ThrowIfNull(mapper);
+
         Volatile.Write(ref _pageMapper, mapper);
     }
 
@@ -36,12 +37,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var table = (nint*)(newer ? _queueNew : _queueOld);
         var slot = newer ? PageMappingNewSlot : PageMappingOldSlot;
+
         table[slot] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, ulong, uint, uint, int>)&CopyPageMappings;
     }
 
     private static void ValidatePageMappingRegistration()
     {
         var method = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, ulong, uint, uint, int>)&CopyPageMappings;
+
         if (((nint*)_queueOld)[PageMappingOldSlot] != method || ((nint*)_queueNew)[PageMappingNewSlot] != method)
         {
             throw new InvalidOperationException("Queue page mapping registration failed.");
@@ -51,14 +54,18 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryReadMappingRecord<T>(ulong address, out T result) where T : unmanaged
     {
         result = default;
+
         if (address == 0 || address > (ulong)nint.MaxValue - (ulong)sizeof(T))
         {
             return false;
         }
 
         T value = default;
+
         nuint read = 0;
+
         var size = (nuint)sizeof(T);
+
         if (ReadProcessMemory(-1, (void*)(nuint)address, &value, size, &read) == 0 || read != size)
         {
             return false;
@@ -73,7 +80,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         out PageMappingRun run)
     {
         run = default;
+
         var bytes = range.Count * MappingPageBytes;
+
         if (range.Kind > 3 || destination == 0 || (destination & (MappingPageBytes - 1)) != 0 ||
             destination > (ulong)nint.MaxValue || bytes > (ulong)nint.MaxValue - destination)
         {
@@ -81,9 +90,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ulong source = 0;
+
         if (range.Count != 0 && range.Kind is 0 or 1)
         {
             var required = range.Kind == 0 ? range.Count : 1U;
+
             if (pool == 0 || (pool & (MappingPageBytes - 1)) != 0 || pool > (ulong)nint.MaxValue ||
                 poolPages * MappingPageBytes > (ulong)nint.MaxValue - pool ||
                 range.Start > poolPages || required > poolPages - range.Start)
@@ -103,6 +114,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         List<PageMappingRun> plan, out ulong pages)
     {
         pages = 0;
+
         if (count > MaximumMappingBatches || (count != 0 && batches == 0) ||
             batches > (ulong)nint.MaxValue || count * (ulong)sizeof(PageMappingBatch) > (ulong)nint.MaxValue - batches)
         {
@@ -110,6 +122,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var rangeCount = 0;
+
         for (var index = 0U; index < count; index++)
         {
             if (!TryReadMappingRecord(batches + index * (ulong)sizeof(PageMappingBatch), out PageMappingBatch batch) ||
@@ -121,7 +134,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             rangeCount += (int)batch.Count;
+
             var destination = batch.Destination;
+
             for (var rangeIndex = 0U; rangeIndex < batch.Count; rangeIndex++)
             {
                 if (!TryReadMappingRecord(batch.Ranges + rangeIndex * (ulong)sizeof(PageMappingRange),
@@ -132,7 +147,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 pages += range.Count;
+
                 destination += run.Bytes;
+
                 if (run.Bytes != 0 && run.Kind != 3)
                 {
                     plan.Add(run);
@@ -171,6 +188,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var mapper = Volatile.Read(ref _pageMapper);
         var queue = Host(self);
+
         if (mapper == null || queue == 0)
         {
             Console.Error.WriteLine("[graphics] IRX-GFX-PAGES-R15: physical page mapper or host queue unavailable.");
@@ -179,9 +197,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var request = Interlocked.Increment(ref _pageMappingRequests);
+
         try
         {
             var plan = new List<PageMappingRun>();
+
             if (!TryPlanPageMappings(count, (nuint)batches, pool, poolPages, plan, out var pages))
             {
                 Console.Error.WriteLine(
@@ -238,6 +258,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         const ulong pool = 0x100000;
         const ulong destination = 0x200000;
+
         var ranges = stackalloc PageMappingRange[4]
         {
             new() { Kind = 0, Start = 2, Count = 2 },
@@ -247,6 +268,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
         var batch = new PageMappingBatch { Destination = destination, Count = 4, Ranges = (ulong)ranges };
         var plan = new List<PageMappingRun>();
+
         if (!TryPlanPageMappings(1, (ulong)&batch, pool, 4, plan, out var pages) || pages != 8 || plan.Count != 3 ||
             plan[0] != new PageMappingRun(0, destination, pool + 2 * MappingPageBytes, 2 * MappingPageBytes) ||
             plan[1] != new PageMappingRun(1, destination + 2 * MappingPageBytes, pool + MappingPageBytes,
@@ -257,6 +279,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var calls = new List<(ulong Destination, ulong Source, ulong Bytes)>();
+
         foreach (var run in plan)
         {
             if (!ApplyPageMapping(run, (to, from, bytes) =>
@@ -277,7 +300,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ranges[0].Start = 3;
+
         plan.Clear();
+
         if (TryPlanPageMappings(1, (ulong)&batch, pool, 4, plan, out _) ||
             TryMappingRun(destination + 1, pool, 4, ranges[0], out _) ||
             TryReadMappingRecord(0, out PageMappingBatch _))

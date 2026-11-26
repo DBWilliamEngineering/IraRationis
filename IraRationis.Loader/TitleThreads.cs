@@ -23,13 +23,18 @@ public sealed class TitleThreads
                 foreach (var image in dependencies)
                 {
                     Console.WriteLine($"[launch] Attaching {image.Path}");
+
                     Attach(image);
+
                     Console.WriteLine("[launch] Attached.");
                 }
 
                 Console.WriteLine("[launch] Main image TLS callbacks.");
+
                 Attach(main);
+
                 Console.WriteLine("[launch] Calling native entry point.");
+
                 result = main.ExecuteEntry();
             }
             catch (Exception exception)
@@ -42,7 +47,9 @@ public sealed class TitleThreads
         };
 
         thread.Start();
+
         thread.Join();
+
         failure?.Throw();
 
         // Do not unmap: native workers may still hold pointers. The host exits after this call.

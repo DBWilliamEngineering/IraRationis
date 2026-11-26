@@ -2486,13 +2486,15 @@ public static class Rdna2ColorLutCompiler
         }
 
         var programs = NativeProgramReader.Read(ShaderContainer.Parse(shader));
-        if (programs.Count != 1 || programs[0] is not
-            {
-                Stage: NativeShaderStage.Compute, Wave64: true,
-                VectorRegisters: 28, ScalarRegisters: 79, LocalBytes: 0, Threads: [8, 8, 1]
-            } program ||
-            program.Code.Length != 12928 || program.RootLayout.Length != 920 || program.UsedResources.Length != 80 ||
-            Convert.ToHexString(SHA256.HashData(program.Code)) != ProgramHash)
+
+        if (programs is not [{
+                    Stage: NativeShaderStage.Compute, Wave64: true,
+                    VectorRegisters: 28, ScalarRegisters: 79, LocalBytes: 0, Threads: [8, 8, 1]
+                } program ] 
+            || program.Code.Length != 12928 
+            || program.RootLayout.Length != 920 
+            || program.UsedResources.Length != 80 
+            || Convert.ToHexString(SHA256.HashData(program.Code)) != ProgramHash)
         {
             throw new NotSupportedException("Unsupported native compute layout or instruction stream.");
         }

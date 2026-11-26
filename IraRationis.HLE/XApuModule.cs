@@ -73,6 +73,7 @@ public static unsafe partial class XApuModule
         }
 
         var request = *input;
+
         if (request.Streams is < 1 or > 500 || request.CommandsPerStream is < 1 or > 16 ||
             request.Memory is 0 or > MaxMemory)
         {
@@ -88,38 +89,51 @@ public static unsafe partial class XApuModule
         }
 
         nint memory = 0;
+
         EventWaitHandle? resultEvent = null;
+
         Connection? connection = null;
+
         try
         {
             var rounded = ((nuint)request.Memory + 15) & ~(nuint)15;
+
             memory = (nint)NativeMemory.AlignedAlloc(rounded, 16);
+
             if (memory == 0)
             {
                 return OutOfMemory;
             }
 
             NativeMemory.Clear((void*)memory, rounded);
+
             if ((request.Options & ResultEvent) != 0)
             {
                 resultEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
             }
 
             var eventHandle = resultEvent?.SafeWaitHandle.DangerousGetHandle() ?? 0;
+
             Console.Error.WriteLine(
                 $"[audio] IRX-XAPU-R8: managed Opus connection requested; streams={request.Streams}, commandsPerStream={request.CommandsPerStream}, memory={request.Memory}, options=0x{request.Options:X}.");
+
             connection = new Connection(request, memory, resultEvent);
             // Opaque, never-dereferenced connection ID; avoid GCHandle ABA/reuse.
             var token = (nint)Interlocked.Increment(ref _nextHandle);
+
             if (token <= 0 || !Connections.TryAdd(token, connection))
             {
                 return OutOfMemory;
             }
 
             *output = new ConnectOutput { Memory = memory, Event = eventHandle };
+
             *handle = token;
+
             connection = null;
+
             memory = 0;
+
             resultEvent = null;
 
             return 0;
@@ -142,6 +156,7 @@ public static unsafe partial class XApuModule
             else
             {
                 resultEvent?.Dispose();
+
                 NativeMemory.AlignedFree((void*)memory);
             }
         }
@@ -176,12 +191,14 @@ public static unsafe partial class XApuModule
             }
 
             var id = Unsafe.ReadUnaligned<CommandId>(command);
+
             if (id.Stream >= (uint)connection.Voices.Length)
             {
                 return InvalidStream;
             }
 
             var index = (int)id.Stream;
+
             if (connection.Queued[index] == connection.PerStream || connection.Count == connection.Results.Length)
             {
                 return QueueFull;
@@ -189,16 +206,19 @@ public static unsafe partial class XApuModule
 
             var result = new Result { Id = id, Pitch = 1, State = 0, StateData = 0, Microseconds = 0 };
             var voice = connection.Voices[index];
+
             switch (id.Kind)
             {
                 case Activate:
                     var activate = Unsafe.ReadUnaligned<ActivateCommand>(command);
+
                     result.Error = ActivateVoice(connection, index, activate);
 
                     break;
 
                 case Deactivate:
                     voice?.Decoder.Dispose();
+
                     connection.Voices[index] = null;
 
                     break;
@@ -228,15 +248,20 @@ public static unsafe partial class XApuModule
             }
 
             var tail = connection.Head + connection.Count;
+
             if (tail >= connection.Results.Length)
             {
                 tail -= connection.Results.Length;
             }
 
             connection.Results[tail] = result;
+
             connection.Count++;
+
             connection.Queued[index]++;
+
             connection.Submitted = unchecked(connection.Submitted + 1);
+
             if (total != null)
             {
                 *total = connection.Submitted;
@@ -295,8 +320,11 @@ public static unsafe partial class XApuModule
     private static void Decode(Connection connection, Voice voice, ProcessCommand command, ref Result result)
     {
         result.Input = command.Input;
+
         result.InputLength = command.InputLength;
+
         result.Output = command.Output;
+
         if (command.Input == 0 || command.Output == 0 || command.InputLength == 0 ||
             command.InputLength > int.MaxValue || command.OutputLength > int.MaxValue ||
             !connection.Contains(command.Input, command.InputLength)
@@ -317,7 +345,9 @@ public static unsafe partial class XApuModule
 
         var channels = voice.Channels;
         var pcm = connection.Scratch.AsSpan(0, MaxFrames * channels);
+
         int decoded;
+
         try
         {
             decoded = voice.Decoder.Decode(new ReadOnlySpan<byte>((void*)command.Input, (int)command.InputLength), pcm,
@@ -349,11 +379,13 @@ public static unsafe partial class XApuModule
             Math.Min(command.FrameCount, command.OutputLength / (uint)(sizeof(float) * channels)));
         var source = pcm.Slice(first * channels, frames * channels);
         var output = new Span<float>((void*)command.Output, frames * channels);
+
         if ((connection.Options & DeinterleavedOutput) != 0 && channels == 2)
         {
             for (var frame = 0; frame < frames; frame++)
             {
                 output[frame] = source[frame * 2] * (1.0f / 32768.0f);
+
                 output[frames + frame] = source[frame * 2 + 1] * (1.0f / 32768.0f);
             }
         }
@@ -366,6 +398,7 @@ public static unsafe partial class XApuModule
         }
 
         result.Frames = (uint)frames;
+
         result.OutputLength = (uint)(frames * channels * sizeof(float));
 
         ObservePcm(connection, command.Id.Stream, source, channels);
@@ -392,15 +425,20 @@ public static unsafe partial class XApuModule
             }
 
             var result = connection.Results[connection.Head];
+
             connection.Head++;
+
             if (connection.Head == connection.Results.Length)
             {
                 connection.Head = 0;
             }
 
             connection.Count--;
+
             connection.Queued[(int)result.Id.Stream]--;
+
             connection.Dequeued = unchecked(connection.Dequeued + 1);
+
             Unsafe.WriteUnaligned(output, result);
 
             return 0;
@@ -530,12 +568,19 @@ public static unsafe partial class XApuModule
         public Connection(ConnectInput input, nint memory, EventWaitHandle? resultEvent)
         {
             Voices = new Voice?[input.Streams];
+
             Queued = new int[input.Streams];
+
             Results = new Result[checked((int)(input.Streams * input.CommandsPerStream))];
+
             PerStream = (int)input.CommandsPerStream;
+
             Options = input.Options;
+
             MemorySize = input.Memory;
+
             Memory = memory;
+
             Event = resultEvent;
         }
 
@@ -549,6 +594,7 @@ public static unsafe partial class XApuModule
                 }
 
                 Closed = true;
+
                 PcmSink = null;
 
                 foreach (var voice in Voices)
@@ -557,6 +603,7 @@ public static unsafe partial class XApuModule
                 }
 
                 Event?.Dispose();
+
                 NativeMemory.AlignedFree((void*)Memory);
             }
         }

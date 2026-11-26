@@ -77,3 +77,6 @@ dotnet_diagnostic.IDE0061.severity = error
 dotnet_diagnostic.IDE0161.severity = error
 resharper_csharp_place_simple_embedded_statement_on_same_line = false
 resharper_csharp_blank_lines_around_multiline_case_section = 1
+
+
+csharp_style_prefer_primary_constructors = false

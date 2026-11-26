@@ -30,7 +30,9 @@ return 0;
 static void VerifyPrimitives()
 {
     var output = new byte[16];
+
     Nv12Converter.Convert([16, 235, 16, 235], 2, [128, 128], 2, 2, 2, output, 8);
+
     if (!output.AsSpan()
             .SequenceEqual(new byte[] { 0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255 }))
     {
@@ -38,13 +40,16 @@ static void VerifyPrimitives()
     }
 
     var mixed = new float[4];
+
     PcmMixer.Mix([0.5f, -0.75f, float.NaN, 0.25f], [0.75f, -0.75f, 0.5f, -0.25f], 1, 1, mixed);
+
     if (!mixed.AsSpan().SequenceEqual(new[] { 1, -1, 0.5f, 0 }))
     {
         throw new InvalidDataException("PCM mixer regression.");
     }
 
     var wave = PcmMixer.ToWave([short.MinValue, short.MaxValue], 48000, 2);
+
     if (wave.Length != 48 || BinaryPrimitives.ReadInt32LittleEndian(wave.AsSpan(40)) != 4 ||
         BinaryPrimitives.ReadInt16LittleEndian(wave.AsSpan(44)) != short.MinValue)
     {

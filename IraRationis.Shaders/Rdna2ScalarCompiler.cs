@@ -40,29 +40,31 @@ public static class Rdna2ScalarCompiler
 
         var result = new List<ScalarInstruction>();
         var at = 0;
+
         while (at < code.Length)
         {
             var offset = at;
             var word = Next(code, ref at);
             var destination = (int)((word >> 16) & 0x7f);
+
             if ((word & 0xff800000) == 0xbf800000)
             {
                 var op = (word >> 16) & 0x7f;
-                if (op == 1)
+
+                switch (op)
                 {
-                    result.Add(new ScalarInstruction(offset, ScalarOperation.End, 0, default, default));
+                    case 1:
+                        result.Add(new ScalarInstruction(offset, ScalarOperation.End, 0, default, default));
 
-                    return result; // unreachable trailing words are not decoded.
+                        return result; // unreachable trailing words are not decoded.
+                    case 0:
+                        result.Add(new ScalarInstruction(offset, ScalarOperation.Nop, 0, default, default));
+
+                        continue;
+
+                    default:
+                        throw Unsupported(offset, word);
                 }
-
-                if (op == 0)
-                {
-                    result.Add(new ScalarInstruction(offset, ScalarOperation.Nop, 0, default, default));
-
-                    continue;
-                }
-
-                throw Unsupported(offset, word);
             }
 
             if (destination > 101)
@@ -74,6 +76,7 @@ public static class Rdna2ScalarCompiler
             {
                 var source = word & 0xff;
                 var literal = source == 255 ? Next(code, ref at) : 0;
+
                 result.Add(new ScalarInstruction(offset, ScalarOperation.Move, destination,
                     Operand(source, literal, offset), default));
             }
@@ -93,9 +96,11 @@ public static class Rdna2ScalarCompiler
                     0x12 => ScalarOperation.Xor,
                     _ => throw Unsupported(offset, word)
                 };
+
                 var left = word & 0xff;
                 var right = (word >> 8) & 0xff;
                 var literal = left == 255 || right == 255 ? Next(code, ref at) : 0;
+
                 result.Add(new ScalarInstruction(offset, op, destination, Operand(left, literal, offset),
                     Operand(right, literal, offset)));
             }
@@ -116,6 +121,7 @@ public static class Rdna2ScalarCompiler
         }
 
         var word = BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(at, 4));
+
         at += 4;
 
         return word;
@@ -149,7 +155,16 @@ public static class Rdna2ScalarCompiler
     {
         var instructions = Decode(code);
         var source = new StringBuilder(
-            "StructuredBuffer<uint> Input : register(t0);\nRWStructuredBuffer<uint> Output : register(u0);\n[numthreads(1,1,1)]\nvoid main()\n{\n    uint s[102];\n    [unroll] for (uint i = 0; i < 102; ++i) { s[i] = Input[i]; }\n    uint scc = Input[102];\n");
+            $"StructuredBuffer<uint> Input : register(t0);\n"
+            + $"RWStructuredBuffer<uint> Output : register(u0);\n"
+            + $"[numthreads(1,1,1)]\n"
+            + $"void main()\n"
+            + $"{{"
+            + $"\n    "
+            + $"uint s[102];\n    "
+            + $"[unroll] for (uint i = 0; i < 102; ++i) {{ s[i] = Input[i]; }}\n    "
+            + $"uint scc = Input[102];\n");
+
         foreach (var instruction in instructions)
         {
             if (instruction.Operation is ScalarOperation.Nop or ScalarOperation.End)
@@ -160,6 +175,7 @@ public static class Rdna2ScalarCompiler
             var a = Expression(instruction.Left);
             var b = Expression(instruction.Right);
             var d = instruction.Destination;
+
             if (instruction.Operation == ScalarOperation.Move)
             {
                 source.AppendLine($"    s[{d}] = {a};");
@@ -169,15 +185,26 @@ public static class Rdna2ScalarCompiler
 
             var op = instruction.Operation switch
             {
-                ScalarOperation.Add => "+", ScalarOperation.Subtract => "-",
-                ScalarOperation.And => "&", ScalarOperation.Or => "|", ScalarOperation.Xor => "^",
+                ScalarOperation.Add => "+",
+                ScalarOperation.Subtract => "-",
+                ScalarOperation.And => "&",
+                ScalarOperation.Or => "|",
+                ScalarOperation.Xor => "^",
+                ScalarOperation.Nop => "nop",      // Or ";" / "" (empty string) if you omit no-ops in output
+                ScalarOperation.End => "return",   // Or "exit" / "end" to represent shader termination
+                ScalarOperation.Move => "=",
                 _ => throw new InvalidOperationException("Unsupported scalar IR.")
             };
+
             source.AppendLine($"    {{ uint a = {a}; uint b = {b}; uint r = a {op} b;");
+
             var condition = instruction.Operation switch
             {
-                ScalarOperation.Add => "r < a", ScalarOperation.Subtract => "a < b", _ => "r != 0"
+                ScalarOperation.Add => "r < a",
+                ScalarOperation.Subtract => "a < b",
+                _ => "r != 0"
             };
+
             source.AppendLine($"      scc = ({condition}) ? 1u : 0u; s[{d}] = r; }}");
         }
 

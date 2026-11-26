@@ -45,7 +45,9 @@ public static unsafe partial class KernelThreadModule
             if (result == 0)
             {
                 var error = Marshal.GetLastPInvokeError();
+
                 state.Free();
+
                 SetLastError((uint)error);
             }
 
@@ -66,7 +68,9 @@ public static unsafe partial class KernelThreadModule
         {
             var handle = GCHandle.FromIntPtr(parameter);
             var state = (ThreadStart)handle.Target!;
+
             handle.Free();
+
             _threads!.NotifyThread(true);
 
             try

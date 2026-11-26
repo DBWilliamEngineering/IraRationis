@@ -12,6 +12,7 @@ public static class MediaPlaybackSession
     public static PlaybackResult Play(DecodedClip clip)
     {
         ArgumentNullException.ThrowIfNull(clip);
+
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException();
@@ -28,6 +29,7 @@ public static class MediaPlaybackSession
         }
 
         var duration = clip.Pcm.Length / (double)(clip.SampleRate * clip.Channels);
+
         if (Math.Abs(duration - clip.FrameCount / 30.0) > 1.0 / 30.0)
         {
             throw new InvalidDataException("Video and PCM durations disagree by more than one frame.");
@@ -35,6 +37,7 @@ public static class MediaPlaybackSession
 
         using var window = new WindowsVideoWindow(clip.Width, clip.Height);
         using var audio = new WindowsPcmClock(clip);
+
         var pixels = new byte[checked(clip.Width * clip.Height * 4)];
         var ySize = clip.Width * clip.Height;
         var last = -1;
@@ -42,7 +45,9 @@ public static class MediaPlaybackSession
         var skipped = 0;
         var position = 0.0;
         var timer = Stopwatch.StartNew();
+
         audio.Start();
+
         while (window.Pump())
         {
             if (timer.Elapsed.TotalSeconds > duration + 5)
@@ -51,15 +56,22 @@ public static class MediaPlaybackSession
             }
 
             var done = audio.Done;
+
             position = Math.Max(position, audio.Seconds);
+
             var index = Math.Min(clip.FrameCount - 1, (int)(position * 30));
+
             if (index != last)
             {
                 var frame = clip.GetFrame(index);
+
                 Nv12Converter.Convert(frame[..ySize], clip.Width, frame[ySize..], clip.Width,
                     clip.Width, clip.Height, pixels, clip.Width * 4);
+
                 skipped += index - last - 1;
+
                 last = index;
+
                 if (window.Draw(pixels))
                 {
                     presented++;

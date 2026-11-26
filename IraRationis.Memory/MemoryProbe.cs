@@ -31,6 +31,7 @@ public static unsafe partial class MemoryProbe
         if (args is ["--self-test"])
         {
             SelfTest();
+
             writer.WriteLine("Memory page-table tests passed.");
 
             return 0;
@@ -80,7 +81,9 @@ public static unsafe partial class MemoryProbe
         SelfTest();
 
         var name = new char[128];
+
         int status;
+
         ulong vram;
 
         fixed (char* description = name)
@@ -95,10 +98,13 @@ public static unsafe partial class MemoryProbe
 
         writer.WriteLine(
             $"Adapter {adapter}: {new string(name.AsSpan(0, Array.IndexOf(name, '\0')))}; dedicated memory {vram / (1024 * 1024)} MiB");
+
         writer.WriteLine(
             "Each mode uses identical full-buffer writes and GPU checksum dispatches; one warmup is excluded.");
+
         writer.WriteLine(
             "CPU read latency is a separate sampled random-read test. GPU copy/compute use GPU timestamps.");
+
         writer.WriteLine(
             "mode,mib,iteration,cpu_write_ms,staging_ms,gpu_copy_ms,gpu_compute_ms,submit_wait_ms,cycle_ms,random_read_ns,checksum_errors");
 
@@ -127,6 +133,7 @@ public static unsafe partial class MemoryProbe
         {
             var optional = mode == MemoryResidency.ExistingSystemHeap
                            || (mode == MemoryResidency.GpuUpload && status == Unsupported);
+
             writer.WriteLine($"# {mode} {mib} MiB: {(optional ? "SKIPPED" : "FAILED")} HRESULT 0x{status:X8}");
 
             return optional;
@@ -137,6 +144,7 @@ public static unsafe partial class MemoryProbe
         try
         {
             table.Map(GuestBase, cpu, gpu, bytes, mode);
+
             writer.WriteLine($"# {mode}: guest=0x{GuestBase:X}, CPU=0x{cpu:X}, GPU=0x{gpu:X}");
 
             for (var iteration = 0; iteration <= iterations; iteration++)
@@ -153,12 +161,16 @@ public static unsafe partial class MemoryProbe
                     }
 
                     var words = new Span<uint>((void*)page.CpuAddress, PageWords);
+
                     words.Fill(seed + (uint)(offset / VirtualPageTable.PageSize));
                 }
 
                 Thread.MemoryBarrier();
+
                 var writeMs = Stopwatch.GetElapsedTime(writeStart).TotalMilliseconds;
+
                 status = Run(session, seed, out var sample);
+
                 var cycleMs = Stopwatch.GetElapsedTime(cycleStart).TotalMilliseconds;
 
                 if (status < 0)
@@ -182,6 +194,7 @@ public static unsafe partial class MemoryProbe
 
                 // Do not include these reads in the upload or GPU timing.
                 var randomNs = ReadLatency(cpu, bytes, seed);
+
                 writer.WriteLine(FormattableString.Invariant(
                     $"{mode},{mib},{iteration},{writeMs:F4},{sample.StagingMs:F4},{sample.CopyMs:F4},{sample.ComputeMs:F4},{sample.SubmitMs:F4},{cycleMs:F4},{randomNs:F2},{sample.Mismatches}"));
             }
@@ -208,17 +221,22 @@ public static unsafe partial class MemoryProbe
         for (var i = 0; i < RandomReads; i++)
         {
             state = unchecked(state * 1664525 + 1013904223);
+
             var index = state % count;
+
             sum += Volatile.Read(ref pointer[index]);
         }
 
         var elapsed = Stopwatch.GetElapsedTime(start).TotalNanoseconds / RandomReads;
+
         state = 0x12345678U;
 
         for (var i = 0; i < RandomReads; i++)
         {
             state = unchecked(state * 1664525 + 1013904223);
+
             var index = state % count;
+
             expected += seed + index / PageWords;
         }
 
@@ -234,6 +252,7 @@ public static unsafe partial class MemoryProbe
     {
         var table = new VirtualPageTable();
         var size = VirtualPageTable.PageSize;
+
         table.Map(GuestBase, 0x200000, 0x300000, size * 2, MemoryResidency.GpuUpload);
 
         if (!table.TryTranslate(GuestBase + size + 7, out var page) || page.CpuAddress != 0x210007

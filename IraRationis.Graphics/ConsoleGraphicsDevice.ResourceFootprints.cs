@@ -19,6 +19,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         device[38] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ResourceDescription*, uint, uint, ulong, CopyFootprint*, uint*,
                 ulong*, ulong*, void>)&GetCopyableFootprints;
+
         device[108] =
             (nint)(delegate* unmanaged[Stdcall]<AllocationInfo*, nint, uint, uint, ResourceDescription1*,
                 AllocationInfo1*, AllocationInfo*>)&GetResourceAllocationInfo2;
@@ -32,6 +33,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryCopyFormat(uint format, out uint element, out uint block)
     {
         block = 1;
+
         element = format switch
         {
             >= 1 and <= 4 => 16,
@@ -45,6 +47,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             >= 73 and <= 78 or >= 82 and <= 84 or >= 94 and <= 99 => 16,
             _ => 0
         };
+
         if (format is >= 70 and <= 84 or >= 94 and <= 99)
         {
             block = 4;
@@ -57,8 +60,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         out uint rows, out ulong rowSize)
     {
         footprint = default;
+
         rows = 0;
+
         rowSize = 0;
+
         if (desc.Width == 0 || desc.SampleCount > 1)
         {
             return false;
@@ -72,8 +78,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             footprint = new CopyFootprint
-                { Width = (uint)desc.Width, Height = 1, Depth = 1, RowPitch = (uint)AlignFootprint(desc.Width, 256) };
+            {
+                Width = (uint)desc.Width,
+                Height = 1,
+                Depth = 1,
+                RowPitch = (uint)AlignFootprint(desc.Width, 256)
+            };
+
             rows = 1;
+
             rowSize = desc.Width;
 
             return true;
@@ -88,6 +101,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var extent = Math.Max(desc.Width, Math.Max(desc.Height, desc.Dimension == 4 ? desc.DepthOrArraySize : 1UL));
         var mips = desc.MipLevels == 0 ? (uint)(BitOperations.Log2(extent) + 1) : desc.MipLevels;
         var slices = desc.Dimension == 4 ? 1U : desc.DepthOrArraySize;
+
         if (mips > 32 || index / mips >= slices)
         {
             return false;
@@ -97,16 +111,26 @@ public static unsafe partial class ConsoleGraphicsDevice
         var width = AlignFootprint(Math.Max(1UL, desc.Width >> mip), block);
         var height = AlignFootprint(Math.Max(1UL, (ulong)desc.Height >> mip), block);
         var depth = desc.Dimension == 4 ? Math.Max(1U, (uint)desc.DepthOrArraySize >> mip) : 1U;
+
         rowSize = checked(width / block * element);
+
         var pitch = AlignFootprint(rowSize, 256);
+
         if (width > uint.MaxValue || height > uint.MaxValue || pitch > uint.MaxValue)
         {
             return false;
         }
 
         rows = (uint)(height / block);
+
         footprint = new CopyFootprint
-            { Format = desc.Format, Width = (uint)width, Height = (uint)height, Depth = depth, RowPitch = (uint)pitch };
+        {
+            Format = desc.Format,
+            Width = (uint)width,
+            Height = (uint)height,
+            Depth = depth,
+            RowPitch = (uint)pitch
+        };
 
         return true;
     }
@@ -127,21 +151,27 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var end = baseOffset;
         var valid = description != null;
+
         for (var index = 0U; index < count; index++)
         {
             var footprint = new CopyFootprint { Offset = ulong.MaxValue };
             var rowCount = uint.MaxValue;
             var rowSize = ulong.MaxValue;
+
             try
             {
                 if (valid && TryCopyFootprint(*description, checked(first + index), out var candidate,
                         out var candidateRows, out var candidateRowSize))
                 {
                     candidate.Offset = AlignFootprint(end, 512);
+
                     end = checked(candidate.Offset + candidate.RowPitch * ((ulong)candidateRows * candidate.Depth - 1)
                                                    + candidateRowSize);
+
                     footprint = candidate;
+
                     rowCount = candidateRows;
+
                     rowSize = candidateRowSize;
                 }
                 else
@@ -191,6 +221,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = new AllocationInfo { Size = ulong.MaxValue };
+
         if (count > 65536 || (count != 0 && descriptions == null))
         {
             return output;
@@ -206,11 +237,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var size = 0UL;
         var alignment = ResourcePage;
+
         try
         {
             for (var index = 0U; index < count; index++)
             {
                 var description = descriptions[index].Description;
+
                 if (!ResourceFootprint(description, out var info))
                 {
                     ReportResourceAllocation(index, count, description, "unsupported allocation info2 footprint");
@@ -219,8 +252,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 var offset = AlignFootprint(size, info.Alignment);
+
                 size = checked(offset + info.Size);
+
                 alignment = Math.Max(alignment, info.Alignment);
+
                 if (each != null)
                 {
                     each[index] = new AllocationInfo1 { Offset = offset, Alignment = info.Alignment, Size = info.Size };

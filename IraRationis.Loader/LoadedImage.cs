@@ -19,7 +19,9 @@ public sealed unsafe class LoadedImage
     private LoadedImage(nint module, string path, PeImage info)
     {
         _module = module;
+
         Path = path;
+
         Info = info;
     }
 
@@ -49,7 +51,9 @@ public sealed unsafe class LoadedImage
         }
 
         var folder = AssetPolicy.EnsureOutsideRepository(directory);
+
         Directory.CreateDirectory(folder);
+
         var path = System.IO.Path.Combine(folder, prepared.FileName);
 
         if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(prepared.Bytes))
@@ -59,6 +63,7 @@ public sealed unsafe class LoadedImage
             try
             {
                 File.WriteAllBytes(temporary, prepared.Bytes);
+
                 File.Move(temporary, path, true);
             }
             finally
@@ -81,6 +86,7 @@ public sealed unsafe class LoadedImage
             if (!image.Info.IsDll)
             {
                 var count = TlsRedirector.Redirect(image.BaseAddress, image.Info);
+
                 Console.WriteLine($"TLS loads redirected: {count}");
             }
         }
@@ -175,7 +181,9 @@ public sealed unsafe class LoadedImage
         foreach (var (rva, address) in slots)
         {
             var slot = AddressAt(rva, 8);
+
             BinaryPrimitives.WriteUInt64LittleEndian(bytes, address);
+
             ExecutableMemory.Write((nint)slot, bytes, false);
         }
 
@@ -193,6 +201,7 @@ public sealed unsafe class LoadedImage
             foreach (var rva in tls.CallbackRvas)
             {
                 var callback = (delegate* unmanaged[Stdcall]<nint, uint, nint, void>)ExecutableAddressAt(rva);
+
                 callback(_module, reason, 0);
             }
         }

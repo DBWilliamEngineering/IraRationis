@@ -27,6 +27,7 @@ public static partial class XApuModule
             }
 
             connection.PcmStream = stream;
+
             connection.PcmSink = sink;
 
             return true;
@@ -41,6 +42,7 @@ public static partial class XApuModule
     public static IDisposable BeginPcmObservation(uint stream, IPcmPacketSink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
+
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(stream, 500U);
 
         var observation = new PcmObservation(stream, sink);
@@ -96,6 +98,7 @@ public static partial class XApuModule
             lock (_gate)
             {
                 _closed = true;
+
                 _selected = null;
             }
 
@@ -131,6 +134,7 @@ public static partial class XApuModule
                 {
                     // A failing diagnostic sink cannot change the guest ABI contract.
                     _closed = true;
+
                     _selected = null;
                 }
             }

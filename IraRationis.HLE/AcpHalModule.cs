@@ -85,6 +85,7 @@ public static unsafe partial class AcpHalModule
         while (low < high)
         {
             var middle = low + ((high - low) >> 1);
+
             if (index.GetKeyAtIndex(middle).CompareTo(address) <= 0)
             {
                 low = middle + 1;
@@ -113,6 +114,7 @@ public static unsafe partial class AcpHalModule
         for (var i = 0; i < ByDevice.Count; i++)
         {
             var block = ByDevice.GetValueAtIndex(i);
+
             if (candidate + size <= block.Device)
             {
                 address = (uint)candidate;
@@ -144,6 +146,7 @@ public static unsafe partial class AcpHalModule
         }
 
         *output = null;
+
         if (deviceAddress != null)
         {
             *deviceAddress = 0;
@@ -156,17 +159,20 @@ public static unsafe partial class AcpHalModule
 
         var effectiveAlignment = Math.Max(16U, alignment);
         var roundedSize = AlignUp(size, effectiveAlignment);
+
         if (roundedSize > DeviceEnd - DeviceBase)
         {
             return OutOfMemory;
         }
 
         var memory = (void*)null;
+
         try
         {
             // Allocate and clear outside the index lock. No global lock is
             // held during potentially large host memory operations.
             memory = NativeMemory.AlignedAlloc((nuint)roundedSize, effectiveAlignment);
+
             if (memory == null)
             {
                 return OutOfMemory;
@@ -184,13 +190,19 @@ public static unsafe partial class AcpHalModule
                 // Reserve both metadata arrays before publishing either
                 // index entry, so allocation failure cannot split the maps.
                 EnsureCapacity(ByHost);
+
                 EnsureCapacity(ByDevice);
+
                 var block = new Block((nuint)memory, address, size, contextOwned);
+
                 ByHost.Add(block.Host, block);
+
                 ByDevice.Add(block.Device, block);
+
                 _heapCreated = true;
 
                 *output = memory;
+
                 if (deviceAddress != null)
                 {
                     *deviceAddress = address;
@@ -242,6 +254,7 @@ public static unsafe partial class AcpHalModule
             }
 
             _ = ByHost.Remove(block.Host);
+
             _ = ByDevice.Remove(block.Device);
         }
 
@@ -251,9 +264,11 @@ public static unsafe partial class AcpHalModule
     private static uint MapVirtualAddressCore(void* memory)
     {
         var address = (nuint)memory;
+
         lock (HeapGate)
         {
             var index = FloorIndex(ByHost, address);
+
             if (index < 0)
             {
                 return 0;
@@ -271,6 +286,7 @@ public static unsafe partial class AcpHalModule
         lock (HeapGate)
         {
             var index = FloorIndex(ByDevice, address);
+
             if (index < 0)
             {
                 return null;
@@ -336,9 +352,13 @@ public static unsafe partial class AcpHalModule
             // addresses. The EQ/filter/PCM strides are provisional upstream
             // estimates, not verified hardware layouts. No DSP is executed.
             ReadOnlySpan<uint> strides = [32, 256, 256, 16, 64, 256];
+
             Span<nuint> hosts = stackalloc nuint[ContextCount];
+
             Span<uint> devices = stackalloc uint[ContextCount];
+
             hosts.Clear();
+
             devices.Clear();
 
             // Zero only the output area, keeping input counts intact.
@@ -347,12 +367,14 @@ public static unsafe partial class AcpHalModule
             for (var i = 0; i < ContextCount; i++)
             {
                 var count = Unsafe.ReadUnaligned<uint>(description + i * sizeof(uint));
+
                 if (count == 0)
                 {
                     continue;
                 }
 
                 var bytes = (ulong)count * strides[i];
+
                 if (bytes > uint.MaxValue)
                 {
                     FreeContexts(hosts);
@@ -363,6 +385,7 @@ public static unsafe partial class AcpHalModule
                 var memory = (void*)null;
                 var device = 0U;
                 var result = AllocateCore(&memory, &device, (uint)bytes, 256, true);
+
                 if (result < 0)
                 {
                     FreeContexts(hosts);
@@ -371,16 +394,19 @@ public static unsafe partial class AcpHalModule
                 }
 
                 hosts[i] = (nuint)memory;
+
                 devices[i] = device;
             }
 
             for (var i = 0; i < ContextCount; i++)
             {
                 Unsafe.WriteUnaligned(description + ContextHostOffset + i * sizeof(ulong), (ulong)hosts[i]);
+
                 Unsafe.WriteUnaligned(description + ContextDeviceOffset + i * sizeof(uint), devices[i]);
             }
 
             hosts.CopyTo(ContextHosts);
+
             _contextsAllocated = true;
         }
 
@@ -409,7 +435,9 @@ public static unsafe partial class AcpHalModule
             }
 
             FreeContexts(ContextHosts);
+
             Array.Clear(ContextHosts);
+
             _contextsAllocated = false;
         }
 

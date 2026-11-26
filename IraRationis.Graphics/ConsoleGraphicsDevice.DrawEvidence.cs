@@ -25,40 +25,54 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             using var report = new StringWriter(CultureInfo.InvariantCulture);
+
             var state = StateFor(self);
+
             report.WriteLine("[graphics] IRX-GFX-DRAW-R9: first blocked draw (not executed).");
+
             report.WriteLine($"draw indexed={indexed} count={count} instances={instances} first={first} " +
                              $"baseVertex={baseVertex} firstInstance={firstInstance}");
+
             report.WriteLine($"list=0x{(nuint)self:X} type={*(uint*)(self + 0x10)} hostAllocated={Host(self) != 0}");
 
             string? directory = null;
+
             var requestedDirectory = Environment.GetEnvironmentVariable("IRX_DRAW_CAPTURE_DIR");
+
             if (!string.IsNullOrWhiteSpace(requestedDirectory))
             {
                 try
                 {
                     directory = Path.Combine(Path.GetFullPath(requestedDirectory), $"draw-{Guid.NewGuid():N}");
+
                     Directory.CreateDirectory(directory);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                                                       ArgumentException or NotSupportedException)
                 {
                     directory = null;
+
                     report.WriteLine($"capture directory unavailable: {exception.Message}");
                 }
             }
 
             WriteDrawEvidence(report, state, directory, new VertexFetchDrawRange(indexed, count, instances, first,
                 baseVertex, firstInstance));
+
             var evidence = report.ToString();
+
             Console.Error.Write(evidence);
+
             Console.Error.Flush();
 
-            if (directory != null)
+            if (directory == null)
             {
-                File.WriteAllText(Path.Combine(directory, "draw.txt"), evidence);
-                Console.Error.WriteLine($"[graphics] R9 local capture: {directory}");
+                return;
             }
+
+            File.WriteAllText(Path.Combine(directory, "draw.txt"), evidence);
+
+            Console.Error.WriteLine($"[graphics] R9 local capture: {directory}");
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or
                                               UnauthorizedAccessException or ArgumentException or
@@ -75,6 +89,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         report.WriteLine($"pipeline=0x{(nuint)state.Pipeline:X} topology={state.Topology} " +
                          $"viewports={state.Viewports?.Length ?? 0} scissors={state.Scissors?.Length ?? 0} " +
                          $"targets={state.Targets.Length} depth={state.Depth.HasValue}");
+
         report.WriteLine($"root=0x{(nuint)state.Graphics.Signature:X} tables={state.Graphics.Tables.Count} " +
                          $"constants={state.Graphics.Constants.Count} views={state.Graphics.Views.Count} " +
                          $"heaps={state.Heaps.Length} vertexViews={state.Vertices.Count} index={state.Index.HasValue}");
@@ -113,6 +128,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         GraphicsPipelineMetadata? pipeline;
+
         lock (PipelineGate)
         {
             _ = GraphicsPipelines.TryGetValue(state.Pipeline, out pipeline);
@@ -130,6 +146,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         report.WriteLine($"PSO stream={pipeline.IsStream} complete={pipeline.CompleteStream} " +
                          $"stages={pipeline.Shaders.Count} stateRecords={pipeline.State.Count} " +
                          $"rootMatchesBound={pipeline.Root == state.Graphics.Signature}");
+
         if (!pipeline.CompleteStream)
         {
             report.WriteLine(
@@ -137,6 +154,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         WriteRootEvidence(report, pipeline.Root, "pipeline", directory);
+
         if (pipeline.Root != state.Graphics.Signature)
         {
             WriteRootEvidence(report, state.Graphics.Signature, "bound", directory);
@@ -145,7 +163,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         foreach (var record in pipeline.State)
         {
             var hash = Convert.ToHexString(SHA256.HashData(record.Bytes));
+
             report.WriteLine($"PSO record kind={record.Kind} bytes={record.Bytes.Length} sha256={hash}");
+
             if (directory != null)
             {
                 File.WriteAllBytes(Path.Combine(directory, $"pso-{record.Kind}-{hash}.bin"), record.Bytes);
@@ -185,7 +205,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         uint kind, string label)
     {
         var token = default(DescriptorToken);
+
         nuint transferred = 0;
+
         if (handle == 0 || ReadProcessMemory(-1, (void*)(nuint)handle, &token,
                 (nuint)sizeof(DescriptorToken), &transferred) == 0 || transferred != (nuint)sizeof(DescriptorToken) ||
             token.Tag != DescriptorTag || token.Kind != kind)
@@ -196,6 +218,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         DescriptorMetadata? metadata;
+
         lock (DescriptorGate)
         {
             _ = DescriptorRecords.TryGetValue(token.Id, out metadata);
@@ -209,6 +232,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var resource = (ResourceObject*)metadata.Resource;
+
         if (resource->Generation != metadata.ResourceGeneration)
         {
             report.WriteLine($"{label}: handle=0x{handle:X} stale resource generation");
@@ -220,6 +244,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var viewFormat = metadata.Description is { Length: >= 4 } bytes
             ? BinaryPrimitives.ReadUInt32LittleEndian(bytes)
             : desc.Format;
+
         report.WriteLine($"{label}: handle=0x{handle:X} descriptor={token.Id} resource=0x{(nuint)metadata.Resource:X} "
                          +
                          $"dimension={desc.Dimension} size={desc.Width}x{desc.Height}x{desc.DepthOrArraySize} " +
@@ -239,7 +264,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var blob = RootSignatureBlob(root);
         var hash = Convert.ToHexString(SHA256.HashData(blob));
+
         report.WriteLine($"{label} root: bytes={blob.Length} sha256={hash} DXBC={blob.StartsWith("DXBC"u8)}");
+
         if (directory != null)
         {
             File.WriteAllBytes(Path.Combine(directory, $"root-{hash}.bin"), blob.ToArray());
@@ -249,7 +276,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void WriteShaderEvidence(TextWriter report, PipelineShader shader, string? directory)
     {
         var bytes = shader.Container.Bytes;
+
         report.WriteLine($"shader stage={shader.Stage} bytes={bytes.Length} sha256={shader.Hash}");
+
         if (directory != null)
         {
             File.WriteAllBytes(Path.Combine(directory, $"shader-{shader.Hash}.cdxil"), bytes);
@@ -258,13 +287,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             var container = Shaders.ShaderContainer.Parse(bytes);
+
             report.WriteLine($"  parts={string.Join(",", container.Parts.Select(static part => part.FourCC))}");
+
             var dxil = container.Part("DXIL");
+
             if (dxil != null)
             {
                 try
                 {
                     var program = DxilProgram.Parse(dxil.Data);
+
                     report.WriteLine($"  DXIL kind={program.Kind} model={program.Major}.{program.Minor} " +
                                      $"bitcode={program.Bitcode.Length} standardLayout={program.IsStandardLayout} " +
                                      $"XDAT={program.HasXdat} XBOP={program.HasXbop} (not host-validated)");
@@ -279,16 +312,20 @@ public static unsafe partial class ConsoleGraphicsDevice
             // Decode only the bound shaders, outside PipelineGate. Native program
             // extraction is budgeted by NativeProgramReader; no GPU calls occur.
             var programs = NativeProgramReader.Read(container);
+
             report.WriteLine($"  native programs={programs.Count}");
+
             foreach (var program in programs)
             {
                 report.WriteLine($"  native stage={program.Stage} wave={(program.Wave64 ? 64 : 32)} " +
                                  $"VGPR={program.VectorRegisters} SGPR={program.ScalarRegisters} " +
                                  $"local={program.LocalBytes} rootLayout={program.RootLayout.Length} " +
                                  $"usedResources={program.UsedResources.Length} code={program.Code.Length}");
+
                 try
                 {
                     var instructions = Rdna2ScalarCompiler.Decode(program.Code);
+
                     report.WriteLine(
                         $"    scalar diagnostic subset accepted {instructions.Count} instructions; not a host shader");
                 }
@@ -308,9 +345,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyDrawEvidence()
     {
         using var report = new StringWriter(CultureInfo.InvariantCulture);
+
         var state = new RecordedCommandState { Topology = 4 };
+
         WriteDrawEvidence(report, state, null);
+
         var output = report.ToString();
+
         if (!output.Contains("topology=4", StringComparison.Ordinal) ||
             !output.Contains("no retained graphics pipeline", StringComparison.Ordinal))
         {
@@ -320,18 +361,26 @@ public static unsafe partial class ConsoleGraphicsDevice
         report.GetStringBuilder().Clear();
         // Minimal valid, empty DXBC container. It must not be treated as executable.
         var bytes = new byte[32];
+
         "DXBC"u8.CopyTo(bytes);
+
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(24), 32);
+
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
+
         WriteShaderEvidence(report, new PipelineShader(1, hash, new ShaderContainer(bytes)), null);
+
         if (!report.ToString().Contains("native programs=0", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("First-draw shader evidence regression failed.");
         }
 
         Console.WriteLine("[graphics-probe] R9 blocked-draw metadata and shader classification passed (CPU only).");
+
         VerifyR10VertexFetchExtent();
+
         VerifyR12SourcePlanning();
+
         VerifyR14InputLayout();
     }
 }

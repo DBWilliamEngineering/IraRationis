@@ -14,6 +14,7 @@ public sealed class ConversionCache
     public ConversionCache(string root)
     {
         _root = AssetPolicy.EnsureOutsideRepository(root);
+
         Directory.CreateDirectory(_root);
     }
 
@@ -34,7 +35,9 @@ public sealed class ConversionCache
 
         var output = converter.Convert(input);
         var directory = Path.GetDirectoryName(path)!;
+
         AssetPolicy.EnsureOutsideRepository(directory);
+
         Directory.CreateDirectory(directory);
 
         var sequence = Interlocked.Increment(ref _sequence);
@@ -45,6 +48,7 @@ public sealed class ConversionCache
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 stream.Write(output);
+
                 stream.Flush(true);
             }
 

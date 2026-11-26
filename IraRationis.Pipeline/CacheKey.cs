@@ -24,11 +24,14 @@ public sealed record CacheKey
         ArgumentNullException.ThrowIfNull(converter);
 
         using var hasher = Hasher.New();
+
         hasher.Update(Encoding.UTF8.GetBytes(converter.Id));
         hasher.Update(new byte[1]);
 
         Span<byte> version = stackalloc byte[4];
+
         BinaryPrimitives.WriteUInt32LittleEndian(version, converter.Version);
+
         hasher.Update(version);
         hasher.Update(input);
 

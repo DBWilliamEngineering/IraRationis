@@ -58,6 +58,7 @@ public sealed record DxilProgram(
         }
 
         memory = memory[..(int)size];
+
         data = memory.Span;
 
         if (!data.Slice(8, 4).SequenceEqual("DXIL"u8))

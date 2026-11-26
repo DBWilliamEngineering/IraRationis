@@ -25,11 +25,13 @@ public static partial class ConsoleGraphicsDevice
 
         var entry = (R47ShaderEntry?)null;
         var hit = false;
+
         lock (R47ShaderGate)
         {
             if (R47Shaders.TryGetValue(source, out entry))
             {
                 hit = true;
+
                 entry.LastUse = ++_r47ShaderUse;
             }
             else
@@ -43,6 +45,7 @@ public static partial class ConsoleGraphicsDevice
                 if (R47Shaders.Count < R47MaximumShaderEntries)
                 {
                     entry = new R47ShaderEntry(source, report, ++_r47ShaderUse);
+
                     R47Shaders.Add(source, entry);
                 }
             }
@@ -56,6 +59,7 @@ public static partial class ConsoleGraphicsDevice
         // Lazy provides single-flight compilation for identical source. The cache
         // lock is deliberately not held during compilation, reporting or waiting.
         byte[] bytes;
+
         try
         {
             bytes = entry.Bytecode.Value;
@@ -78,6 +82,7 @@ public static partial class ConsoleGraphicsDevice
             if (R47Shaders.TryGetValue(source, out var current) && ReferenceEquals(current, entry))
             {
                 entry.LastUse = ++_r47ShaderUse;
+
                 if (!entry.Accounted)
                 {
                     // Account exactly once even if multiple waiters observed the result.
@@ -96,7 +101,9 @@ public static partial class ConsoleGraphicsDevice
                     else
                     {
                         entry.Accounted = true;
+
                         entry.Size = bytes.Length;
+
                         _r47ShaderBytes += entry.Size;
                     }
                 }
@@ -118,12 +125,15 @@ public static partial class ConsoleGraphicsDevice
     {
         var oldestKey = (string?)null;
         var oldestUse = long.MaxValue;
+
         foreach (var pair in R47Shaders)
         {
             var candidate = pair.Value;
+
             if (candidate.Accounted && !ReferenceEquals(candidate, excluded) && candidate.LastUse < oldestUse)
             {
                 oldestKey = pair.Key;
+
                 oldestUse = candidate.LastUse;
             }
         }
@@ -134,7 +144,9 @@ public static partial class ConsoleGraphicsDevice
         }
 
         var entry = R47Shaders[oldestKey];
+
         R47Shaders.Remove(oldestKey);
+
         _r47ShaderBytes -= entry.Size;
 
         return true;

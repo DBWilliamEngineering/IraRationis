@@ -20,8 +20,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         return new ResourceDescription
         {
-            Dimension = 1, Width = bytes, Height = 1, DepthOrArraySize = 1,
-            MipLevels = 1, SampleCount = 1, Layout = 1
+            Dimension = 1,
+            Width = bytes,
+            Height = 1,
+            DepthOrArraySize = 1,
+            MipLevels = 1,
+            SampleCount = 1,
+            Layout = 1
         };
     }
 
@@ -31,6 +36,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var properties = new HeapProperties { Kind = heapKind, CreationNodes = 1, VisibleNodes = 1 };
         var iid = ResourceId;
         var device = (nint)_host;
+
         *output = 0;
 
         return ((delegate* unmanaged[Stdcall]<nint, HeapProperties*, uint, ResourceDescription*, uint, void*, Guid*,
@@ -43,6 +49,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int MaterializeHostResource(nint value, out nint host)
     {
         host = 0;
+
         lock (HostResourceGate)
         {
             if (_host == null || !IsResource(value))
@@ -51,6 +58,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var resource = (ResourceObject*)value;
+
             if (resource->HostResource != 0)
             {
                 host = resource->HostResource;
@@ -59,6 +67,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var description = resource->Description;
+
             if (!ResourceFootprint(description, out var footprint) || footprint.Size == 0 ||
                 footprint.Size > MaximumHostResourceBytes || footprint.Size > HostResourceBudget - _hostResourceBytes)
             {
@@ -79,20 +88,26 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
 
                 description.Alignment = 0;
+
                 description.Layout = 0; // Host-optimal layout, not console swizzle.
                 description.Flags &= 0xFU; // RT, DS, UAV, deny SRV; never pass console-only flags.
             }
 
             nint created = 0;
+
             var hr = CreateHostResource(description, 1, 0, &created);
+
             if (hr < 0 || created == 0)
             {
                 return hr < 0 ? hr : NotImplemented;
             }
 
             resource->HostResource = created;
+
             resource->HostCharge = footprint.Size;
+
             _hostResourceBytes += footprint.Size;
+
             host = created;
 
             return 0;
@@ -108,7 +123,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         DescriptorToken token = default;
+
         nuint transferred = 0;
+
         if (ReadProcessMemory(-1, (void*)(nuint)handle, &token, (nuint)sizeof(DescriptorToken), &transferred) == 0 ||
             transferred != (nuint)sizeof(DescriptorToken) || token.Tag != DescriptorTag || token.Kind != kind)
         {
@@ -116,6 +133,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         DescriptorMetadata? record;
+
         lock (DescriptorGate)
         {
             _ = DescriptorRecords.TryGetValue(token.Id, out record);
@@ -128,8 +146,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         state.RetainObject(record.Resource);
+
         var hr = MaterializeHostResource(record.Resource, out _);
         var reported = Interlocked.Increment(ref _hostTargetsReported);
+
         if (reported <= 4 || (reported & (reported - 1)) == 0)
         {
             Console.Error.WriteLine(
@@ -144,8 +164,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (resource->HostResource != 0)
             {
                 _ = HostRelease(resource->HostResource);
+
                 _hostResourceBytes -= resource->HostCharge;
+
                 resource->HostResource = 0;
+
                 resource->HostCharge = 0;
             }
         }
@@ -162,7 +185,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void TransitionHostResource(nint list, nint resource, uint before, uint after)
     {
         var barrier = new HostTransition
-            { Resource = resource, Subresource = uint.MaxValue, Before = before, After = after };
+        {
+            Resource = resource,
+            Subresource = uint.MaxValue,
+            Before = before,
+            After = after
+        };
+
         ((delegate* unmanaged[Stdcall]<nint, uint, HostTransition*, void>)Slot(list, 26))(list, 1, &barrier);
     }
 
@@ -171,13 +200,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     internal static void VerifyHostResourceAbi(nint device, nint queue, nint allocator)
     {
         const int bytes = 4096;
+
         var data = NativeMemory.AlignedAlloc((nuint)ResourcePage, (nuint)ResourcePage);
+
         nint guest = 0, texture = 0, upload = 0, readback = 0, list = 0;
+
         var description = HostBufferDescription(bytes);
         var iid = ResourceId;
         var listId = HostListId;
         var hostDevice = (nint)_host;
         var hostQueue = Host(queue);
+
         try
         {
             for (var i = 0; i < bytes; i++)
@@ -188,9 +221,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             var create =
                 (delegate* unmanaged[Stdcall]<nint, ulong, ResourceDescription*, uint, nint, Guid*, nint*, int>)Slot(
                     device, 133);
+
             CheckHostResult(create(device, (ulong)data, &description, 0, 0, &iid, &guest), "Guest buffer");
+
             CheckHostResult(MaterializeHostResource(guest, out var local), "DEFAULT resource");
+
             CheckHostResult(MaterializeHostResource(guest, out var again), "Repeated materialization");
+
             if (local == 0 || local != again || ((ResourceObject*)guest)->Address != (ulong)data)
             {
                 throw new InvalidOperationException("Host resource identity or guest address changed.");
@@ -198,51 +235,92 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var textureDescription = new ResourceDescription
             {
-                Dimension = 3, Width = 64, Height = 64, DepthOrArraySize = 1,
-                MipLevels = 1, Format = 28, SampleCount = 1, Flags = 1
+                Dimension = 3,
+                Width = 64,
+                Height = 64,
+                DepthOrArraySize = 1,
+                MipLevels = 1,
+                Format = 28,
+                SampleCount = 1,
+                Flags = 1
             };
+
             CheckHostResult(create(device, (ulong)data, &textureDescription, 0, 0, &iid, &texture), "Guest texture");
+
             CheckHostResult(MaterializeHostResource(texture, out var hostTexture), "DEFAULT texture allocation");
+
             if (hostTexture == 0)
             {
                 throw new InvalidOperationException("Host texture is null.");
             }
 
             CheckHostResult(CreateHostResource(description, 2, GenericRead, &upload), "UPLOAD resource");
+
             CheckHostResult(CreateHostResource(description, 3, CopyDestination, &readback), "READBACK resource");
+
             var noRead = default(HostRange);
+
             void* mapped = null;
+
             CheckHostResult(
                 ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload, 8))(upload, 0, &noRead,
                     &mapped), "Map upload");
+
             new ReadOnlySpan<byte>(data, bytes).CopyTo(new Span<byte>(mapped, bytes));
+
             var written = new HostRange { End = bytes };
+
             ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(upload, 9))(upload, 0, &written);
+
             CheckHostResult(
                 ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(hostDevice, 12))
                 (hostDevice, 0, 0, Host(allocator), 0, &listId, &list), "Host copy list");
+
             var copy = (delegate* unmanaged[Stdcall]<nint, nint, ulong, nint, ulong, ulong, void>)Slot(list, 15);
+
             TransitionHostResource(list, local, 0, CopyDestination);
+
             copy(list, local, 0, upload, 0, bytes);
+
             TransitionHostResource(list, local, CopyDestination, CopySource);
+
             copy(list, readback, 0, local, 0, bytes);
+
             TransitionHostResource(list, local, CopySource, 0);
+
             CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(list, 9))(list), "Close host copy list");
+
             ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(hostQueue, 10))(hostQueue, 1, &list);
+
             WaitForHostCompletion(hostQueue);
+
             mapped = null;
+
             var read = new HostRange { End = bytes };
+
             CheckHostResult(
                 ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(readback, 8))(readback, 0,
                     &read, &mapped), "Map readback");
+
             var same = new ReadOnlySpan<byte>(mapped, bytes).SequenceEqual(new ReadOnlySpan<byte>(data, bytes));
+
             ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9))(readback, 0, &noRead);
+
             if (!same)
             {
                 throw new InvalidOperationException("GPU resource round-trip bytes differ.");
             }
 
             Console.WriteLine("[graphics-probe] DEFAULT/UPLOAD/READBACK GPU resource round trip passed (4096 bytes).");
+
+            VerifyVersionedUpload(
+                hostDevice,
+                hostQueue,
+                Host(allocator),
+                local,
+                upload,
+                readback,
+                new ReadOnlySpan<byte>(data, bytes));
         }
         finally
         {

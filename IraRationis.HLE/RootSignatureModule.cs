@@ -35,8 +35,11 @@ public static unsafe partial class RootSignatureModule
         }
 
         var information = new SystemInformation();
+
         GetSystemInfo(&information);
+
         configuration->Lowest = information.MinimumApplicationAddress;
+
         configuration->Highest = information.MaximumApplicationAddress;
 
         return 0;
@@ -55,6 +58,7 @@ public static unsafe partial class RootSignatureModule
         }
 
         var host = *description;
+
         host.Flags &= 0x00FFFFFF;
 
         try
@@ -80,6 +84,7 @@ public static unsafe partial class RootSignatureModule
         }
 
         var host = *description;
+
         host.Description.Flags &= 0x00FFFFFF;
 
         try

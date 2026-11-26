@@ -19,6 +19,7 @@ public static class MediaClipInspector
     public static MediaInspection Inspect(DecodedClip clip, string outputDirectory)
     {
         ArgumentNullException.ThrowIfNull(clip);
+
         if (clip.Width is < 2 or > 1920 || clip.Height is < 2 or > 1080 ||
             (clip.Width & 1) != 0 || (clip.Height & 1) != 0 ||
             clip.Nv12.Length == 0 || clip.Nv12.Length % clip.FrameBytes != 0 ||
@@ -30,7 +31,9 @@ public static class MediaClipInspector
 
         var wave = PcmMixer.ToWave(clip.Pcm, clip.SampleRate, clip.Channels);
         var directory = Path.GetFullPath(outputDirectory);
+
         Directory.CreateDirectory(directory);
+
         var pixels = new byte[checked(clip.Width * clip.Height * 4)];
         var hashes = new HashSet<string>(StringComparer.Ordinal);
         var yBytes = clip.Width * clip.Height;
@@ -38,8 +41,10 @@ public static class MediaClipInspector
         for (var i = 0; i < clip.FrameCount; i++)
         {
             var frame = clip.GetFrame(i);
+
             Nv12Converter.Convert(frame[..yBytes], clip.Width, frame[yBytes..], clip.Width,
                 clip.Width, clip.Height, pixels, clip.Width * 4);
+
             hashes.Add(Convert.ToHexString(SHA256.HashData(pixels)));
 
             if (i == 0 || i == clip.FrameCount / 2 || i == clip.FrameCount - 1)
@@ -54,6 +59,7 @@ public static class MediaClipInspector
         }
 
         var peak = 0;
+
         foreach (var sample in clip.Pcm)
         {
             peak = Math.Max(peak, Math.Abs((int)sample));
@@ -67,21 +73,37 @@ public static class MediaClipInspector
     {
         using var stream = new FileStream(path, FileMode.CreateNew);
         using var writer = new BinaryWriter(stream);
+
         writer.Write((ushort)0x4D42);
+
         writer.Write(checked(54 + pixels.Length));
+
         writer.Write(0);
+
         writer.Write(54);
+
         writer.Write(40);
+
         writer.Write(width);
+
         writer.Write(-height);
+
         writer.Write((ushort)1);
+
         writer.Write((ushort)32);
+
         writer.Write(0);
+
         writer.Write(pixels.Length);
+
         writer.Write(0);
+
         writer.Write(0);
+
         writer.Write(0);
+
         writer.Write(0);
+
         writer.Write(pixels);
     }
 }

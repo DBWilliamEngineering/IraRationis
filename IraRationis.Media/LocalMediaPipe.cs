@@ -12,6 +12,7 @@ internal static class LocalMediaPipe
     {
         var executable = Path.GetFullPath(ffmpeg);
         var path = Path.GetFullPath(input);
+
         if (!File.Exists(executable) || !File.Exists(path))
         {
             throw new FileNotFoundException("FFmpeg executable or local media file not found.");
@@ -24,6 +25,7 @@ internal static class LocalMediaPipe
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+
         foreach (var argument in new[]
                  {
                      "-hide_banner", "-nostdin", "-loglevel", "error",
@@ -41,12 +43,17 @@ internal static class LocalMediaPipe
         start.ArgumentList.Add("pipe:1");
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Decoder did not start.");
+
         var errors = process.StandardError.ReadToEndAsync();
+
         try
         {
             await consume(process.StandardOutput.BaseStream, cancellationToken).ConfigureAwait(false);
+
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
             var message = await errors.ConfigureAwait(false);
+
             if (process.ExitCode != 0)
             {
                 throw new InvalidDataException($"FFmpeg exit {process.ExitCode}: {message}");
@@ -67,6 +74,7 @@ internal static class LocalMediaPipe
             }
 
             await process.WaitForExitAsync().ConfigureAwait(false);
+
             _ = await errors.ConfigureAwait(false);
         }
     }
@@ -75,9 +83,11 @@ internal static class LocalMediaPipe
         CancellationToken cancellationToken)
     {
         var count = 0;
+
         while (count < destination.Length)
         {
             var read = await stream.ReadAsync(destination[count..], cancellationToken).ConfigureAwait(false);
+
             if (read == 0)
             {
                 break;

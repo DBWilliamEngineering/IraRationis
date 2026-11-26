@@ -66,8 +66,11 @@ public sealed class TitleImages(
             }
 
             var image = LoadedImage.Load(prepared, cacheDirectory);
+
             _images.Add(name, image);
+
             MapDependencies(image.Info);
+
             _ordered.Add(image);
         }
     }

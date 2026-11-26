@@ -30,8 +30,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ulong raw = 0;
+
         nuint transferred = 0;
+
         var ok = ReadProcessMemory(-1, (void*)(nuint)address, &raw, (nuint)bytes, &transferred);
+
         value = raw;
 
         return ok != 0 && transferred == (nuint)bytes;
@@ -45,6 +48,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nuint transferred = 0;
+
         if (WriteProcessMemory(-1, (void*)(nuint)address, &value, (nuint)bytes, &transferred) == 0 ||
             transferred != (nuint)bytes)
         {
@@ -55,6 +59,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RecordMemoryWrite(nint self, ulong address, ulong value, int bytes, uint flags)
     {
         var state = StateFor(self);
+
         if (address == 0 || address % (ulong)bytes != 0 || state.MemoryBoundaries.Count >= MaximumMemoryOperations)
         {
             Environment.FailFast("[graphics] Invalid command memory write address or count.");
@@ -66,6 +71,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RecordMemoryWait(nint self, ulong address, uint comparison, ulong reference, int bytes)
     {
         var state = StateFor(self);
+
         if (address == 0 || address % (ulong)bytes != 0 || comparison is < 1 or > 8 ||
             state.MemoryBoundaries.Count >= MaximumMemoryOperations)
         {
@@ -82,7 +88,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         R16DrawBoundary? textured = null, R17ComputeBoundary? compute = null)
     {
         using var r25Timing = BeginR25Timing(R25Stage.SealBoundary);
+
         var current = Host(self);
+
         if (current == 0) // Synthetic ABI probe only.
         {
             state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute));
@@ -91,7 +99,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         ReportR3BoundaryOnce();
+
         var hr = ((ID3D12GraphicsCommandList*)current)->Close();
+
         if (hr < 0)
         {
             var boundary = compute != null ? "compute" :
@@ -100,32 +110,43 @@ public static unsafe partial class ConsoleGraphicsDevice
                 draw.HasValue ? "vertex-fetch" :
                 write.HasValue ? "write" :
                 wait.HasValue ? "wait" : "copy";
+
             ReportHostCloseFailure(self, hr, boundary);
+
             Environment.FailFast($"[graphics] IRX-GFX-CLOSE-R3: closing memory segment failed: 0x{hr:X8}.");
         }
 
         var device = (nint)_host;
         var allocator = Host(*(nint*)(self + ListAllocator));
         var id = HostListId;
+
         nint next = 0;
+
         hr = ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12))
             (device, 0, *(uint*)(self + 0x10), allocator, 0, &id, &next);
+
         if (hr < 0 || next == 0)
         {
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{hr:X8}.");
         }
 
         state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute));
+
         var enhanced = *(nint*)(self + ListEnhancedHost);
+
         if (enhanced != 0)
         {
             _ = HostRelease(enhanced);
+
             *(nint*)(self + ListEnhancedHost) = 0;
         }
 
         *(nint*)(self + ListHost) = next;
+
         state.LastHostCommand = null;
+
         state.HostCommandCount = 0;
+
         ReplayRasterState(self, state);
     }
 
@@ -134,6 +155,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (bytes == 4)
         {
             value = (uint)value;
+
             reference = (uint)reference;
         }
 
@@ -178,9 +200,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void RegisterCommandMemoryMethods(nint* table, bool newer)
     {
         var shift = newer ? 2 : 0;
+
         table[69 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, uint, uint, void>)&Write32;
+
         table[70 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)&Write64;
+
         table[71 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)&WaitValue32;
+
         table[72 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)&WaitValue64;
 
         // InitializeTables constructs both queue tables before building either list.
@@ -194,6 +220,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         for (var slot = 69; slot <= 72; slot++)
         {
             var old = ((nint*)_listOld)[slot];
+
             if (old == MissingAddress(slot) || ((nint*)_listNew)[slot + 2] != old)
             {
                 throw new InvalidOperationException($"Command memory ABI registration failed at slot {slot}.");
@@ -218,7 +245,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void AwaitCommandMemory(MemoryWait wait)
     {
         using var r25Timing = BeginR25Timing(R25Stage.GuestWait);
+
         var started = Stopwatch.GetTimestamp();
+
         while (true)
         {
             if (!TryReadMemory(wait.Address, wait.Bytes, out var value))
@@ -246,20 +275,26 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void WaitForHostCompletion(nint queue)
     {
         using var completion = new HostCompletionFence();
+
         completion.Wait(queue);
     }
 
     private static void SubmitWithCommandMemory(nint queue, nint list, nint hostList)
     {
         using var r25Timing = BeginR25Timing(R25Stage.SegmentedSubmit);
+
         if (CommandStates.TryGetValue(list, out var state) && state.MemoryBoundaries.Count != 0)
         {
             using var completion = new HostCompletionFence();
+
             foreach (var boundary in state.MemoryBoundaries)
             {
                 var segment = boundary.Host;
+
                 ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &segment);
+
                 completion.Wait(queue);
+
                 if (boundary.Write is { } write)
                 {
                     PublishCommandWrite(queue, write);
@@ -298,7 +333,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
                 }
 
-                if (boundary.Textured is { } textured)
+                if (boundary.Textured is not { } textured)
+                {
+                    continue;
+                }
+
+                // Anon scope mem perf
                 {
                     try
                     {
@@ -319,23 +359,32 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void PublishCommandWrite(nint queue, MemoryWrite write)
     {
         using var r25Timing = BeginR25Timing(R25Stage.PublishWrite);
-        var value = write.Value;
-        if (write.Bytes == 8 && write.Flags == 1)
-        {
-            using var calibrationTiming = BeginR25Timing(R25Stage.ClockCalibration);
-            ulong gpu = 0, cpu = 0;
-            // ID3D12CommandQueue::GetClockCalibration is slot 17.
-            var hr = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
-            if (hr < 0)
-            {
-                Environment.FailFast($"[graphics] GPU clock calibration failed: 0x{hr:X8}.");
-            }
 
-            value = gpu;
-        }
-        else if (write.Bytes == 8 && write.Flags == 2)
+        var value = write.Value;
+
+        switch (write.Bytes)
         {
-            value = (ulong)Stopwatch.GetTimestamp();
+            case 8 when write.Flags == 1:
+            {
+                using var calibrationTiming = BeginR25Timing(R25Stage.ClockCalibration);
+
+                ulong gpu = 0, cpu = 0;
+                // ID3D12CommandQueue::GetClockCalibration is slot 17.
+                var hr = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
+
+                if (hr < 0)
+                {
+                    Environment.FailFast($"[graphics] GPU clock calibration failed: 0x{hr:X8}.");
+                }
+
+                value = gpu;
+
+                break;
+            }
+            case 8 when write.Flags == 2:
+                value = (ulong)Stopwatch.GetTimestamp();
+
+                break;
         }
 
         using (BeginR25Timing(R25Stage.MemoryPublication))
@@ -347,41 +396,61 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyCommandMemoryAbi()
     {
         ValidateCommandMemoryRegistration();
+
         VerifyPageMappingPlan();
+
         VerifyR16TexturePlan();
+
         var list = (nint)NativeMemory.AllocZeroed(0x980);
+
         try
         {
             ((Header*)list)->Table = _listNew;
+
             LiveObjects[list] = _listNew;
+
             var table = (nint*)_listNew;
             var target = 0xAABBCCDDEEFF0011;
             var address = (ulong)&target;
             var wait = (delegate* unmanaged[Stdcall]<nint, ulong, uint, ulong, void>)table[73];
+
             wait(list, address, 3, 0xEEFF0011);
+
             var write = (delegate* unmanaged[Stdcall]<nint, ulong, uint, uint, uint, void>)table[71];
+
             write(list, address, 0x12345678, 0, 0);
+
             var wide = (delegate* unmanaged[Stdcall]<nint, ulong, ulong, uint, uint, void>)table[72];
+
             wide(list, address, 42, 0, 0);
+
             wait(list, address, 3, 42);
+
             var state = StateFor(list);
-            if (target != 0xAABBCCDDEEFF0011 || state.MemoryBoundaries.Count != 4 ||
-                state.MemoryBoundaries[0].Wait == null || state.MemoryBoundaries[1].Write?.Bytes != 4 ||
-                state.MemoryBoundaries[2].Write?.Value != 42 || state.MemoryBoundaries[3].Wait?.Reference != 42 ||
-                !CompareMemory(target, 0xEEFF0011, 3, 4) || CompareMemory(target, 0xEEFF0011, 3, 8) ||
-                !TryReadMemory(address, 8, out var read) || read != target)
+
+            if (target != 0xAABBCCDDEEFF0011 || state.MemoryBoundaries.Count != 4 
+                                             || state.MemoryBoundaries[0].Wait == null 
+                                             || state.MemoryBoundaries[1].Write?.Bytes != 4 
+                                             || state.MemoryBoundaries[2].Write?.Value != 42 
+                                             || state.MemoryBoundaries[3].Wait?.Reference != 42 
+                                             || !CompareMemory(target, 0xEEFF0011, 3, 4) 
+                                             || CompareMemory(target, 0xEEFF0011, 3, 8) 
+                                             || !TryReadMemory(address, 8, out var read) || read != target)
             {
                 throw new InvalidOperationException("Command memory recording ABI failed.");
             }
 
             PublishMemory(address, 0x12345678, 4);
+
             if (target != 0xAABBCCDD12345678)
             {
                 throw new InvalidOperationException("Command memory write width failed.");
             }
 
             VerifyR13BoundaryRecording(list, state);
+
             ReleaseCommandState(list);
+
             if (HasCommandMemory(list))
             {
                 throw new InvalidOperationException("Command memory reset cleanup failed.");
@@ -390,7 +459,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         finally
         {
             ReleaseCommandState(list);
+
             _ = LiveObjects.TryRemove(list, out _);
+
             NativeMemory.Free((void*)list);
         }
 

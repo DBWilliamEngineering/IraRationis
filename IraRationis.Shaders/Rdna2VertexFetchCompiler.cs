@@ -63,14 +63,25 @@ public static class Rdna2VertexFetchCompiler
     {
         var vs = ShaderContainer.Parse(vertex);
         var ps = ShaderContainer.Parse(pixel);
-        ValidateSignature(vs, "ISG1", [("SV_VertexID", 0U, 6U, 1U, 0U, 1U)]);
-        ValidateSignature(vs, "OSG1", [("SV_Position", 0U, 1U, 3U, 0U, 15U), ("TEXCOORD", 0U, 0U, 3U, 1U, 15U)]);
-        ValidateSignature(ps, "ISG1", [("SV_Position", 0U, 1U, 3U, 0U, 15U), ("TEXCOORD", 0U, 0U, 3U, 1U, 15U)]);
-        ValidateSignature(ps, "OSG1", [("SV_Target", 0U, 64U, 3U, 0U, 15U)]);
+
+        ValidateSignature(vs, "ISG1", 
+            [("SV_VertexID", 0U, 6U, 1U, 0U, 1U)]);
+
+        ValidateSignature(vs, "OSG1", 
+            [("SV_Position", 0U, 1U, 3U, 0U, 15U), ("TEXCOORD", 0U, 0U, 3U, 1U, 15U)]);
+
+        ValidateSignature(ps, "ISG1", 
+            [("SV_Position", 0U, 1U, 3U, 0U, 15U), ("TEXCOORD", 0U, 0U, 3U, 1U, 15U)]);
+
+        ValidateSignature(ps, "OSG1", 
+            [("SV_Target", 0U, 64U, 3U, 0U, 15U)]);
+
         var (register, space) = ReadRoot(root);
+
         var vertexProgram = Single(vs, NativeShaderStage.Vertex);
         var pixelProgram = Single(ps, NativeShaderStage.Pixel);
         var fields = RecognizeVertex(vertexProgram);
+
         RecognizePixel(pixelProgram);
 
         return new VertexFetchShaderPair(EmitVertex(register, space, fields.Position, fields.Attribute),
@@ -80,6 +91,7 @@ public static class Rdna2VertexFetchCompiler
     private static NativeProgram Single(ShaderContainer container, NativeShaderStage stage)
     {
         var programs = NativeProgramReader.Read(container);
+
         if (programs.Count != 1 || programs[0].Stage != stage)
         {
             throw new NotSupportedException($"Expected one native {stage} program.");
@@ -93,6 +105,7 @@ public static class Rdna2VertexFetchCompiler
     {
         var part = container.Part(tag) ?? throw new NotSupportedException($"Missing {tag} signature.");
         var data = part.Data.Span;
+
         if (Word(data, 0) != (uint)expected.Length || Word(data, 4) != 8 || data.Length < 8 + 32 * expected.Length)
         {
             throw new NotSupportedException($"Unsupported {tag} shape.");
@@ -103,6 +116,7 @@ public static class Rdna2VertexFetchCompiler
             var at = 8 + 32 * i;
             var e = expected[i];
             var nameOffset = Word(data, at + 4);
+
             if (nameOffset < 8 + 32 * expected.Length || nameOffset >= data.Length)
             {
                 throw new InvalidDataException($"Invalid {tag} semantic offset.");
@@ -110,6 +124,7 @@ public static class Rdna2VertexFetchCompiler
 
             var name = data[(int)nameOffset..];
             var end = name.IndexOf((byte)0);
+
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(e.Name)) ||
                 Word(data, at) != 0 || Word(data, at + 8) != e.Index || Word(data, at + 12) != e.System ||
                 Word(data, at + 16) != e.Component || Word(data, at + 20) != e.Register ||
@@ -124,7 +139,9 @@ public static class Rdna2VertexFetchCompiler
     {
         var part = ShaderContainer.Parse(root).Part("RTS0") ??
                    throw new NotSupportedException("Missing serialized root signature.");
+
         var data = part.Data.Span;
+
         // Version 1.1, one root SRV, all-stage visibility, no static samplers,
         // flags zero. Reject every other root layout until explicitly translated.
         if (data.Length != 48 || Word(data, 0) != 2 || Word(data, 4) != 1 || Word(data, 8) != 24 ||
@@ -141,6 +158,7 @@ public static class Rdna2VertexFetchCompiler
     {
         var layout = program.RootLayout.AsSpan();
         var used = program.UsedResources.AsSpan();
+
         // One two-DWORD descriptor root at slot zero, user SGPR 8, table offset 0.
         if (!program.Wave64 || program.LocalBytes != 0 || layout.Length != 20 ||
             Word(layout, 0) != 1 || Word(layout, 4) != 0 || Word(layout, 8) != 2 ||
@@ -189,6 +207,7 @@ public static class Rdna2VertexFetchCompiler
         }
 
         reader.Expect("load packed vertex-fetch header", [0xf4200100]);
+
         var operand = reader.Read();
         // Immediate byte offset, no scalar offset register. The two possible
         // headers are read from the same raw root view; allow differing offsets.
@@ -198,6 +217,7 @@ public static class Rdna2VertexFetchCompiler
         }
 
         var offset = operand & 0x1fffffU;
+
         if (attribute)
         {
             reader.Expect("initialize attribute", [0x7e080280, 0x7e0a0280, 0x7e0c0280, 0x7e0e0280]);
@@ -216,6 +236,7 @@ public static class Rdna2VertexFetchCompiler
             0x90058304, 0x90048704, 0x8705bc05,
             0x8704ff04, 0x01fffffc
         ]);
+
         if (attribute)
         {
             reader.Expect("vertex ID * stride + base / load four DWORDs", [
@@ -237,17 +258,23 @@ public static class Rdna2VertexFetchCompiler
     private static void RecognizePixel(NativeProgram program)
     {
         ValidateLayout(program, false);
+
         var reader = new InstructionReader(program.Code);
+
         reader.SkipPrologue();
+
         reader.Expect("interpolation setup / P0 attribute 0 xyzw", [
             0xbefc030a, 0xc80a0002, 0xc80e0102,
             0xc8120202, 0xc8160302
         ]);
+
         reader.Expect("interpolation wait", [0xbf800000, 0xbf800000]);
+
         reader.Expect("pack RTZ half pairs / compressed MRT0 export", [
             0x5e000702, 0x5e020b04,
             0xf8001c0f, 0x00000100
         ]);
+
         reader.End();
     }
 
@@ -293,12 +320,14 @@ public static class Rdna2VertexFetchCompiler
         uint firstVertex, uint vertexCount, ulong maximumBytes, out ulong bytes)
     {
         bytes = 0;
+
         if (vertexCount == 0 || (ulong)firstVertex + vertexCount - 1 > uint.MaxValue)
         {
             return false;
         }
 
         var last = (ulong)firstVertex + vertexCount - 1;
+
         foreach (var field in new[] { pair.Position, pair.Attribute })
         {
             if ((ulong)field.HeaderOffset + 4 > (ulong)header.Length)
@@ -307,13 +336,16 @@ public static class Rdna2VertexFetchCompiler
             }
 
             bytes = Math.Max(bytes, (ulong)field.HeaderOffset + 4);
+
             var packed = Word(header, (int)field.HeaderOffset);
+
             if ((packed & 15U) != field.Components)
             {
                 continue;
             }
 
             var address = ((packed >> 7) & 0x01fffffcU) + last * ((packed >> 3) & 60U);
+
             if (address > uint.MaxValue || address + 4UL * field.Components > 1UL << 32)
             {
                 return false;
@@ -331,6 +363,7 @@ public static class Rdna2VertexFetchCompiler
     {
         var layout = Words([1, 0, 2, 0, 8]);
         var used = Words([0x100, 0, 0, 1, 0x804]);
+
         var vertexCode = Words([
             0xd5800000, 0x03fc0000, 0, 0xbfa00000,
             0xbe8303ff, 0x11014fac, 0xbe8203c1, 0xbe800308, 0x8801ff09, 0x00010000,
@@ -344,14 +377,18 @@ public static class Rdna2VertexFetchCompiler
             0xe0381000, 0x80000400, 0x7e0002f2, 0xbf8c3f70, 0xf80008cf, 0x00030201,
             0xf800020f, 0x07060504, 0xbf810000, 0xbf9f0000
         ]);
+
         var pixelCode = Words([
             0xbefc030a, 0xc80a0002, 0xc80e0102, 0xc8120202, 0xc8160302,
             0xbf800000, 0xbf800000, 0x5e000702, 0x5e020b04, 0xf8001c0f, 0x00000100, 0xbf810000
         ]);
+
         var vertex = new NativeProgram(NativeShaderStage.Vertex, true, 8, 12, 0, layout, used, null, vertexCode);
         var pixel = new NativeProgram(NativeShaderStage.Pixel, true, 6, 13, 0, layout, [], null, pixelCode);
         var fields = RecognizeVertex(vertex);
+
         RecognizePixel(pixel);
+
         if (fields.Position != new VertexFetchField(32, 3) || fields.Attribute != new VertexFetchField(36, 4))
         {
             throw new InvalidOperationException("Synthetic vertex fetch recognition failed.");
@@ -359,10 +396,15 @@ public static class Rdna2VertexFetchCompiler
 
         var rejected = false;
         var bad = (byte[])pixelCode.Clone();
+
         bad[4] ^= 1; // modify one interpolation operand, not a container hash
+
         try
         {
-            RecognizePixel(pixel with { Code = bad });
+            RecognizePixel(pixel with
+            {
+                Code = bad
+            });
         }
         catch (NotSupportedException)
         {
@@ -381,6 +423,7 @@ public static class Rdna2VertexFetchCompiler
     private static byte[] Words(ReadOnlySpan<uint> words)
     {
         var bytes = new byte[checked(words.Length * 4)];
+
         for (var i = 0; i < words.Length; i++)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(i * 4), words[i]);
@@ -407,6 +450,7 @@ public static class Rdna2VertexFetchCompiler
         public uint Read()
         {
             var result = Word(_code, _offset);
+
             _offset += 4;
 
             return result;
@@ -418,6 +462,7 @@ public static class Rdna2VertexFetchCompiler
             {
                 var offset = _offset;
                 var actual = Read();
+
                 if (actual != expected)
                 {
                     throw new NotSupportedException($"{operation}: unexpected word 0x{actual:X8} at 0x{offset:X}.");
@@ -432,7 +477,9 @@ public static class Rdna2VertexFetchCompiler
             while (_offset <= _code.Length - 8 && (Word(_code, _offset) & 0xffff0000U) == 0xd5800000U)
             {
                 _ = Read();
+
                 var operands = Read();
+
                 if ((operands & 511U) == 255 || ((operands >> 9) & 511U) == 255 ||
                     ((operands >> 18) & 511U) == 255)
                 {
@@ -449,6 +496,7 @@ public static class Rdna2VertexFetchCompiler
         public void End()
         {
             Expect("endpgm", [0xbf810000]);
+
             while (_offset < _code.Length)
             {
                 Expect("post-termination padding", [0xbf9f0000]);

@@ -22,6 +22,7 @@ internal sealed unsafe partial class WindowsPcmClock : IDisposable
     internal WindowsPcmClock(short[] pcm, int sampleRate, int channels)
     {
         ArgumentNullException.ThrowIfNull(pcm);
+
         if (sampleRate != 48000 || channels != 2 || pcm.Length == 0 ||
             pcm.Length % channels != 0 || pcm.Length > sampleRate * channels * 30)
         {
@@ -29,24 +30,39 @@ internal sealed unsafe partial class WindowsPcmClock : IDisposable
         }
 
         _rate = sampleRate;
+
         _channels = channels;
+
         _frames = pcm.Length / _channels;
+
         var format = new WaveFormat
         {
-            Tag = 1, Channels = (ushort)_channels, SamplesPerSecond = (uint)_rate,
-            BlockAlign = (ushort)(_channels * 2), BitsPerSample = 16,
+            Tag = 1,
+            Channels = (ushort)_channels,
+            SamplesPerSecond = (uint)_rate,
+            BlockAlign = (ushort)(_channels * 2),
+            BitsPerSample = 16,
             AverageBytesPerSecond = (uint)(_rate * _channels * 2)
         };
+
         try
         {
             var result = WaveOutOpen(out _device, uint.MaxValue, &format, 0, 0, 0);
+
             Check(result, "waveOutOpen");
+
             _samples = (short*)NativeMemory.Alloc((nuint)pcm.Length, 2);
+
             _header = (WaveHeader*)NativeMemory.AllocZeroed((nuint)sizeof(WaveHeader));
+
             pcm.AsSpan().CopyTo(new Span<short>(_samples, pcm.Length));
+
             _header->Data = (nint)_samples;
+
             _header->Length = (uint)(pcm.Length * 2);
+
             Check(WaveOutPrepareHeader(_device, _header, (uint)sizeof(WaveHeader)), "waveOutPrepareHeader");
+
             _prepared = true;
         }
         catch
@@ -71,6 +87,7 @@ internal sealed unsafe partial class WindowsPcmClock : IDisposable
         {
             var time = new MultimediaTime { Type = 2 }; // TIME_SAMPLES
             Check(WaveOutGetPosition(_device, &time, (uint)sizeof(MultimediaTime)), "waveOutGetPosition");
+
             var seconds = time.Type switch
             {
                 1 => time.Value / 1000.0, // TIME_MS
@@ -92,16 +109,21 @@ internal sealed unsafe partial class WindowsPcmClock : IDisposable
                 Check(WaveOutReset(_device), "waveOutReset");
                 // Never release driver-owned memory if unprepare fails.
                 Check(WaveOutUnprepareHeader(_device, _header, (uint)sizeof(WaveHeader)), "waveOutUnprepareHeader");
+
                 _prepared = false;
             }
 
             Check(WaveOutClose(_device), "waveOutClose");
+
             _device = 0;
         }
 
         NativeMemory.Free(_header);
+
         NativeMemory.Free(_samples);
+
         _header = null;
+
         _samples = null;
     }
 

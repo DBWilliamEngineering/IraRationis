@@ -13,7 +13,14 @@ public static partial class ConsoleGraphicsDevice
         uint count, uint first, int baseVertex, [NotNullWhen(true)] out R20IndexedUploadPlan? plan)
     {
         plan = null;
-        var indexSize = index.FormatOrStride switch { 57U => 2UL, 42U => 4UL, _ => 0UL };
+
+        var indexSize = index.FormatOrStride switch
+        {
+            57U => 2UL,
+            42U => 4UL,
+            _ => 0UL
+        };
+
         if (indexSize == 0 || count == 0 || vertex.FormatOrStride is 0 or > 256 ||
             vertex.Size < vertex.FormatOrStride || vertex.Size > R20MaximumIndexedUpload ||
             vertex.Address == 0 || index.Address == 0 || index.Address % indexSize != 0 ||
@@ -24,6 +31,7 @@ public static partial class ConsoleGraphicsDevice
 
         var start = first * indexSize;
         var bytes = count * indexSize;
+
         if (start > index.Size || bytes > index.Size - start ||
             start > ulong.MaxValue - index.Address || bytes > ulong.MaxValue - (index.Address + start))
         {
@@ -32,6 +40,7 @@ public static partial class ConsoleGraphicsDevice
 
         var offset = ((ulong)R14VertexOffset + vertex.Size + 3UL) & ~3UL;
         var capacity = offset + bytes;
+
         if (capacity > R20MaximumIndexedUpload)
         {
             return false;
@@ -54,8 +63,16 @@ public static partial class ConsoleGraphicsDevice
         out int byteOffset, out int byteCount)
     {
         byteOffset = 0;
+
         byteCount = 0;
-        var size = plan.IndexFormat switch { 57U => 2, 42U => 4, _ => 0 };
+
+        var size = plan.IndexFormat switch
+        {
+            57U => 2,
+            42U => 4,
+            _ => 0
+        };
+
         if (size == 0 || plan.VertexStride == 0 || plan.VertexBytes <= 0 || indices.IsEmpty ||
             indices.Length != plan.IndexBytes || indices.Length % size != 0)
         {
@@ -65,22 +82,26 @@ public static partial class ConsoleGraphicsDevice
         var vertexCount = plan.VertexBytes / plan.VertexStride;
         var minimum = long.MaxValue;
         var maximum = -1L;
+
         for (var offset = 0; offset < indices.Length; offset += size)
         {
             var raw = size == 2
                 ? BinaryPrimitives.ReadUInt16LittleEndian(indices[offset..])
                 : BinaryPrimitives.ReadUInt32LittleEndian(indices[offset..]);
             var effective = raw + plan.BaseVertex;
+
             if (effective < 0 || effective >= vertexCount)
             {
                 return false;
             }
 
             minimum = Math.Min(minimum, effective);
+
             maximum = Math.Max(maximum, effective);
         }
 
         byteOffset = checked((int)(minimum * plan.VertexStride));
+
         byteCount = checked((int)((maximum - minimum + 1) * plan.VertexStride));
 
         return byteCount > 0 && byteOffset <= plan.VertexBytes - byteCount;
@@ -90,6 +111,7 @@ public static partial class ConsoleGraphicsDevice
     {
         var vertex = new RecordedBufferView { Address = 0x1000, Size = 96, FormatOrStride = 24 };
         var index = new RecordedBufferView { Address = 0x2000, Size = 16, FormatOrStride = 57 };
+
         if (!TryPlanR20IndexedUpload(vertex, index, 3, 2, -1, out var plan) ||
             plan.IndexAddress != 0x2004 || plan.IndexBytes != 6 || plan.IndexOffset != 352 ||
             !ValidateR20Indices(plan, [1, 0, 2, 0, 4, 0]) ||
@@ -101,6 +123,7 @@ public static partial class ConsoleGraphicsDevice
         }
 
         index.FormatOrStride = 42;
+
         if (!TryPlanR20IndexedUpload(vertex, index, 3, 1, 0, out var wide) ||
             wide.IndexAddress != 0x2004 || wide.IndexBytes != 12 ||
             !ValidateR20Indices(wide, [0, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0]) ||
@@ -110,6 +133,7 @@ public static partial class ConsoleGraphicsDevice
         }
 
         var narrow = new R20IndexedUploadPlan(0x2000, 57, 1024, 16, 1280, 6, 1286, -1);
+
         if (!TryGetR26VertexRange(narrow, [3, 0, 5, 0, 4, 0], out var offset, out var count) ||
             offset != 32 || count != 48 ||
             TryGetR26VertexRange(narrow, [0, 0, 5, 0, 4, 0], out _, out _) ||

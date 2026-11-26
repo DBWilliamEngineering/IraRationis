@@ -28,6 +28,7 @@ public sealed record Title(uint Id, string StoreId, string Storage, ulong Storag
             using var input = new StringReader(text.TrimStart('\uFEFF'));
             using var reader = XmlReader.Create(input,
                 new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+
             var root = XDocument.Load(reader).Root;
 
             if (root is null || root.Name != "Game")
@@ -37,7 +38,9 @@ public sealed record Title(uint Id, string StoreId, string Storage, ulong Storag
 
             var idText = root.Element("TitleId")?.Value.Trim();
             var sizeText = root.Element("PersistentLocalStorage")?.Element("SizeMB")?.Value.Trim();
+
             _ = uint.TryParse(idText, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var id);
+
             _ = ulong.TryParse(sizeText, NumberStyles.None, CultureInfo.InvariantCulture, out var sizeMb);
 
             return new Title(id, root.Element("StoreId")?.Value.Trim() ?? string.Empty, string.Empty, sizeMb << 20);
@@ -102,6 +105,7 @@ public static class RuntimeState
         lock (StateLock)
         {
             ImagePaths.Remove(address);
+
             ImagePaths.Add(address, absolute);
         }
     }
@@ -141,6 +145,7 @@ public static class RuntimeState
     public static void SetTitleDllLoader(Func<string, nuint?> loader)
     {
         ArgumentNullException.ThrowIfNull(loader);
+
         Interlocked.CompareExchange(ref _titleDllLoader, loader, null);
     }
 

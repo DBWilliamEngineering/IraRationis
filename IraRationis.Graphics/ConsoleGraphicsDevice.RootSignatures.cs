@@ -33,6 +33,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _rootSignatureTable = (nint)ChildTable(24);
+
         device[16] =
             (nint)(delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)&CreateRootSignature;
     }
@@ -61,13 +62,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         RootSignatureObject* root = null;
+
         try
         {
             root = (RootSignatureObject*)NativeMemory.AllocZeroed((nuint)sizeof(RootSignatureObject) + size);
+
             root->Header.Table = _rootSignatureTable;
+
             root->Header.References = 1;
+
             root->BlobSize = size;
+
             new ReadOnlySpan<byte>(blob, (int)size).CopyTo(new Span<byte>(root + 1, (int)size));
+
             LiveObjects[(nint)root] = _rootSignatureTable;
         }
         catch (OutOfMemoryException)
@@ -81,6 +88,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = (nint)root;
+
         Console.WriteLine(
             $"[graphics] Root signature: bytes={size}, nodes=0x{nodes:X}, object=0x{(nuint)root:X} (CPU blob only).");
 
@@ -90,6 +98,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReleaseRootSignature(nint value)
     {
         _ = LiveObjects.TryRemove(value, out _);
+
         foreach (var key in ResourcePrivateData.Keys)
         {
             if (key.Item1 == value)

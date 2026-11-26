@@ -19,8 +19,11 @@ internal sealed class RuntimeLogSampling : IDisposable
     private RuntimeLogSampling()
     {
         _original = Console.Error;
+
         _sampling = new SamplingWriter(_original);
+
         Console.SetError(_sampling);
+
         _installed = Console.Error;
     }
 
@@ -32,6 +35,7 @@ internal sealed class RuntimeLogSampling : IDisposable
         }
 
         _disposed = true;
+
         if (ReferenceEquals(Console.Error, _installed))
         {
             Console.SetError(_original);
@@ -58,7 +62,7 @@ internal sealed class RuntimeLogSampling : IDisposable
         return new RuntimeLogSampling();
     }
 
-    internal sealed class SamplingWriter(TextWriter target) : TextWriter
+    private sealed class SamplingWriter(TextWriter target) : TextWriter
     {
         private long _emittedLists;
         private long _emittedResources;
@@ -88,22 +92,28 @@ internal sealed class RuntimeLogSampling : IDisposable
                                   value.EndsWith(" (CPU backing only).", StringComparison.Ordinal) &&
                                   value.AsSpan().IndexOfAny('\r', '\n') < 0)
             {
-                if (ShouldEmit(Interlocked.Increment(ref _resources)))
+                if (!ShouldEmit(Interlocked.Increment(ref _resources)))
                 {
-                    target.WriteLine(value);
-                    Interlocked.Increment(ref _emittedResources);
+                    return;
                 }
+
+                target.WriteLine(value);
+
+                Interlocked.Increment(ref _emittedResources);
 
                 return;
             }
 
             if (value is not null && IsCommandListCreation(value))
             {
-                if (ShouldEmit(Interlocked.Increment(ref _lists)))
+                if (!ShouldEmit(Interlocked.Increment(ref _lists)))
                 {
-                    target.WriteLine(value);
-                    Interlocked.Increment(ref _emittedLists);
+                    return;
                 }
+
+                target.WriteLine(value);
+
+                Interlocked.Increment(ref _emittedLists);
 
                 return;
             }
@@ -115,6 +125,7 @@ internal sealed class RuntimeLogSampling : IDisposable
         {
             const string prefix = "[graphics] Command list type ";
             const string suffix = " created.";
+
             if (!value.StartsWith(prefix, StringComparison.Ordinal) ||
                 !value.EndsWith(suffix, StringComparison.Ordinal) ||
                 value.Length <= prefix.Length + suffix.Length)
@@ -123,6 +134,7 @@ internal sealed class RuntimeLogSampling : IDisposable
             }
 
             var kind = value.AsSpan(prefix.Length, value.Length - prefix.Length - suffix.Length);
+
             foreach (var character in kind)
             {
                 if (character is < '0' or > '9')

@@ -25,6 +25,7 @@ internal static class DirectStoragePayload
             while (written < destination.Length)
             {
                 var read = inflater.Read(destination[written..]);
+
                 if (read == 0)
                 {
                     break;

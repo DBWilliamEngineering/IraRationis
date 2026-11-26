@@ -201,8 +201,11 @@ public static unsafe partial class MediaFoundationDecoder
                         if (count == 0)
                         {
                             layout = current;
+
                             frame = new byte[layout.CodedBytes];
+
                             cropped = layout.IsFullFrame ? Array.Empty<byte>() : new byte[layout.VisibleBytes];
+
                             start = timestamp;
 
                             Console.Error.WriteLine(
@@ -275,6 +278,7 @@ public static unsafe partial class MediaFoundationDecoder
         try
         {
             using var output = new MemoryStream();
+
             var start = 0L;
             var count = 0;
 
@@ -318,6 +322,7 @@ public static unsafe partial class MediaFoundationDecoder
                     }
 
                     CopyAudio(sample, output);
+
                     count++;
                 }
                 finally
@@ -356,26 +361,40 @@ public static unsafe partial class MediaFoundationDecoder
         try
         {
             Check(MFCreateFile(1, 0, 0, path, out byteStream), "MFCreateFile");
+
             Check(MFCreateSourceReaderFromByteStream(byteStream, 0, out reader), "MFCreateSourceReaderFromByteStream");
+
             var select = (delegate* unmanaged[Stdcall]<nint, uint, int, int>)Slot(reader, 4);
+
             Check(select(reader, AllStreams, 0), "Disable streams");
+
             Check(select(reader, stream, 1), "Select stream");
+
             Check(MFCreateMediaType(out type), "MFCreateMediaType");
+
             SetGuid(type, MajorType, major);
+
             SetGuid(type, Subtype, subtype);
 
             if (stream == AudioStream)
             {
                 SetUInt32(type, Channels, 2);
+
                 SetUInt32(type, SampleRate, 48000);
+
                 SetUInt32(type, BitsPerSample, 16);
+
                 SetUInt32(type, BlockAlignment, 4);
+
                 SetUInt32(type, AverageBytesPerSecond, 192000);
             }
 
             var set = (delegate* unmanaged[Stdcall]<nint, uint, uint*, nint, int>)Slot(reader, 7);
+
             Check(set(reader, stream, null, type), "SetCurrentMediaType");
+
             var result = reader;
+
             reader = 0;
 
             return result;
@@ -383,7 +402,9 @@ public static unsafe partial class MediaFoundationDecoder
         finally
         {
             Release(type);
+
             Release(reader);
+
             Release(byteStream);
         }
     }
@@ -392,6 +413,7 @@ public static unsafe partial class MediaFoundationDecoder
     {
         var type = nint.Zero;
         var get = (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Slot(reader, 6);
+
         Check(get(reader, stream, &type), "GetCurrentMediaType");
 
         return type;
@@ -404,6 +426,7 @@ public static unsafe partial class MediaFoundationDecoder
         try
         {
             RequireGuid(type, MajorType, VideoType);
+
             RequireGuid(type, Subtype, Nv12);
 
             var size = GetUInt64(type, FrameSize);
@@ -454,6 +477,7 @@ public static unsafe partial class MediaFoundationDecoder
         try
         {
             RequireGuid(type, MajorType, AudioType);
+
             RequireGuid(type, Subtype, Pcm);
 
             if (GetUInt32(type, Channels) != 2 || GetUInt32(type, SampleRate) != 48000 ||
@@ -472,6 +496,7 @@ public static unsafe partial class MediaFoundationDecoder
         out uint formatFlags)
     {
         var read = (delegate* unmanaged[Stdcall]<nint, uint, uint, uint*, uint*, long*, nint*, int>)Slot(reader, 9);
+
         formatFlags = 0;
 
         for (var attempt = 0; attempt < MaxConsecutiveFormatEvents; attempt++)
@@ -495,12 +520,15 @@ public static unsafe partial class MediaFoundationDecoder
                 // Retain notifications across sample-free reads. The caller inspects
                 // the current type when a sample actually arrives.
                 formatFlags |= flags & FormatChangeFlags;
+
                 timestamp = time;
+
                 end = (flags & EndOfStream) != 0;
 
                 if (sample != 0 || end)
                 {
                     var result = sample;
+
                     sample = 0;
 
                     return result;
@@ -584,6 +612,7 @@ public static unsafe partial class MediaFoundationDecoder
     {
         var buffer = nint.Zero;
         var convert = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(sample, 41);
+
         Check(convert(sample, &buffer), "ConvertToContiguousBuffer");
 
         return buffer;
@@ -604,6 +633,7 @@ public static unsafe partial class MediaFoundationDecoder
             {
                 var length = 0U;
                 var get = (delegate* unmanaged[Stdcall]<nint, uint*, int>)Slot(plane, 7);
+
                 Check(get(plane, &length), "GetContiguousLength");
 
                 if (length != destination.Length)
@@ -647,6 +677,7 @@ public static unsafe partial class MediaFoundationDecoder
         finally
         {
             Release(plane);
+
             Release(buffer);
         }
     }
@@ -685,6 +716,7 @@ public static unsafe partial class MediaFoundationDecoder
         var maximum = 0U;
         var current = 0U;
         var call = (delegate* unmanaged[Stdcall]<nint, byte**, uint*, uint*, int>)Slot(buffer, 3);
+
         Check(call(buffer, &data, &maximum, &current), "IMFMediaBuffer.Lock");
 
         if (data == null || current > maximum || current > int.MaxValue)
@@ -702,6 +734,7 @@ public static unsafe partial class MediaFoundationDecoder
     private static void Unlock(nint buffer)
     {
         var call = (delegate* unmanaged[Stdcall]<nint, int>)Slot(buffer, 4);
+
         Check(call(buffer), "IMFMediaBuffer.Unlock");
     }
 
@@ -709,6 +742,7 @@ public static unsafe partial class MediaFoundationDecoder
     {
         var value = 0U;
         var get = (delegate* unmanaged[Stdcall]<nint, Guid*, uint*, int>)Slot(type, 7);
+
         Check(get(type, &key, &value), "GetUINT32");
 
         return value;
@@ -718,6 +752,7 @@ public static unsafe partial class MediaFoundationDecoder
     {
         var value = 0UL;
         var get = (delegate* unmanaged[Stdcall]<nint, Guid*, ulong*, int>)Slot(type, 8);
+
         Check(get(type, &key, &value), "GetUINT64");
 
         return value;
@@ -727,6 +762,7 @@ public static unsafe partial class MediaFoundationDecoder
     {
         var value = Guid.Empty;
         var get = (delegate* unmanaged[Stdcall]<nint, Guid*, Guid*, int>)Slot(type, 10);
+
         Check(get(type, &key, &value), "GetGUID");
 
         if (value != expected)
@@ -738,12 +774,14 @@ public static unsafe partial class MediaFoundationDecoder
     private static void SetGuid(nint type, Guid key, Guid value)
     {
         var set = (delegate* unmanaged[Stdcall]<nint, Guid*, Guid*, int>)Slot(type, 24);
+
         Check(set(type, &key, &value), "SetGUID");
     }
 
     private static void SetUInt32(nint type, Guid key, uint value)
     {
         var set = (delegate* unmanaged[Stdcall]<nint, Guid*, uint, int>)Slot(type, 21);
+
         Check(set(type, &key, value), "SetUINT32");
     }
 
@@ -762,6 +800,7 @@ public static unsafe partial class MediaFoundationDecoder
         if (instance != 0)
         {
             var release = (delegate* unmanaged[Stdcall]<nint, uint>)Slot(instance, 2);
+
             _ = release(instance);
         }
     }

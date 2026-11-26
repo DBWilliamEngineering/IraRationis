@@ -91,8 +91,11 @@ public static unsafe partial class GameInputModule
         try
         {
             reading->Table = Shared.Value.ReadingTable;
+
             reading->References = 1;
+
             reading->State = GCHandle.ToIntPtr(GCHandle.Alloc(snapshot));
+
             *output = (nint)reading;
 
             return 0;
@@ -165,6 +168,7 @@ public static unsafe partial class GameInputModule
         try
         {
             *output = Shared.Value.Object;
+
             Console.WriteLine("[input] GameInput initialized.");
 
             return 0;
@@ -205,6 +209,7 @@ public static unsafe partial class GameInputModule
             lock (hub.Gate)
             {
                 Snapshot? newest = null;
+
                 var requested = device == 0 ? -1 : Array.IndexOf(hub.Devices, device);
 
                 if (device != 0 && requested < 0)
@@ -238,6 +243,7 @@ public static unsafe partial class GameInputModule
                 if (TraceInputR30)
                 {
                     var observation = Interlocked.Increment(ref _r30CurrentReads);
+
                     if (SampleInputR30(observation))
                     {
                         Console.WriteLine(
@@ -310,6 +316,7 @@ public static unsafe partial class GameInputModule
         nint output)
     {
         _ = NextToken(output);
+
         Console.Error.WriteLine(
             $"[input] IRX-R30-CALLBACK: reading registration kind=0x{kind:X}; not delivered (existing limitation).");
 
@@ -349,6 +356,7 @@ public static unsafe partial class GameInputModule
                 if (enumeration == 1)
                 {
                     hub.Pending.AddRange(events);
+
                     events.Clear();
                 }
             }
@@ -409,6 +417,7 @@ public static unsafe partial class GameInputModule
 
                 var remaining = timeout - elapsed;
                 var milliseconds = (int)Math.Clamp(remaining / 1000, 1UL, int.MaxValue);
+
                 Monitor.Wait(hub.Gate, milliseconds);
             }
 
@@ -501,6 +510,7 @@ public static unsafe partial class GameInputModule
             Left = motors == null ? (ushort)0 : (ushort)(Math.Clamp(motors[0], 0, 1) * ushort.MaxValue),
             Right = motors == null ? (ushort)0 : (ushort)(Math.Clamp(motors[1], 0, 1) * ushort.MaxValue)
         };
+
         _ = XInputSetState((uint)index, &vibration);
     }
 
@@ -525,6 +535,7 @@ public static unsafe partial class GameInputModule
         if (remaining == 0)
         {
             GCHandle.FromIntPtr(reading->State).Free();
+
             NativeMemory.Free(reading);
         }
 
@@ -576,6 +587,7 @@ public static unsafe partial class GameInputModule
 
         var keys = State(self).Keys;
         var length = (int)Math.Min((uint)keys.Length, count);
+
         keys.AsSpan(0, length).CopyTo(new Span<KeyState>(output, length));
 
         return (uint)length;
@@ -590,12 +602,14 @@ public static unsafe partial class GameInputModule
         }
 
         var snapshot = State(self);
+
         if (snapshot.Pad is not { } pad)
         {
             return 0;
         }
 
         *output = pad;
+
         if ((pad.Buttons & 32U) != 0)
         {
             ConsoleGraphicsDevice.RequestR31InputColorTrace();
@@ -605,6 +619,7 @@ public static unsafe partial class GameInputModule
         {
             var observation = Interlocked.Increment(ref _r30PadReads);
             var previous = Interlocked.Exchange(ref _r30GuestButtons, unchecked((int)pad.Buttons));
+
             if (SampleInputR30(observation) || unchecked((uint)previous) != pad.Buttons)
             {
                 Console.WriteLine(
@@ -626,27 +641,48 @@ public static unsafe partial class GameInputModule
         var table = (nint*)NativeMemory.Alloc((nuint)(22 * sizeof(nint)));
 
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&Query;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&PermanentReference;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&PermanentReference;
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&Timestamp;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint, nint*, int>)&Current;
+
         table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint*, int>)&Next;
+
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint*, int>)&Previous;
+
         table[7] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, nint, nint*, int>)&Temporal;
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, float, nint, nint, nint, int>)&RegisterReading;
+
         table[9] =
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, uint, nint, nint, nint, int>)&RegisterDevice;
+
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, nint, nint, int>)&RegisterOther;
+
         table[11] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, nint, nint, int>)&RegisterOther;
+
         table[12] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, void>)&Stop;
+
         table[13] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, ulong, byte>)&Unregister;
+
         table[14] = (nint)(delegate* unmanaged[Stdcall]<nint, nint*, int>)&Dispatcher;
+
         table[15] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)&Aggregate;
+
         table[16] = (nint)(delegate* unmanaged[Stdcall]<nint, byte*, nint*, int>)&FindId;
+
         table[17] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&FindOther;
+
         table[18] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&FindOther;
+
         table[19] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&FindOther;
+
         table[20] = (nint)(delegate* unmanaged[Stdcall]<nint, ushort, ushort, byte, byte, int>)&EnableOem;
+
         table[21] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void>)&Focus;
 
         return (nint)table;
@@ -657,25 +693,45 @@ public static unsafe partial class GameInputModule
         var table = (nint*)NativeMemory.Alloc((nuint)(21 * sizeof(nint)));
 
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&Query;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&PermanentReference;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&PermanentReference;
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, DeviceInfo*>)&Info;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&Status;
+
         table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[7] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[9] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, float*, void>)&Rumble;
+
         table[11] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[12] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[13] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[14] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[15] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[16] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[17] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[18] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[19] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
+
         table[20] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&Unsupported;
 
         return (nint)table;
@@ -686,29 +742,53 @@ public static unsafe partial class GameInputModule
         var table = (nint*)NativeMemory.Alloc((nuint)(25 * sizeof(nint)));
 
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)&Query;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&AddReading;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&ReleaseReading;
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&ReadingKind;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong>)&Sequence;
+
         table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&ReadingTimestamp;
+
         table[6] = (nint)(delegate* unmanaged[Stdcall]<nint, nint*, void>)&ReadingDevice;
+
         table[7] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[8] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[9] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[11] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[12] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[13] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[14] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&KeyCount;
+
         table[15] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, KeyState*, uint>)&GetKeys;
+
         table[16] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[17] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[18] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[19] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[20] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[21] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[22] = (nint)(delegate* unmanaged[Stdcall]<nint, PadState*, byte>)&GetPad;
+
         table[23] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
+
         table[24] = (nint)(delegate* unmanaged[Stdcall]<nint, nuint>)&Nothing;
 
         return (nint)table;
@@ -905,22 +985,35 @@ public static unsafe partial class GameInputModule
         {
             var inputTable = CreateInputTable();
             var deviceTable = CreateDeviceTable();
+
             ReadingTable = CreateReadingTable();
+
             var input = (nint*)NativeMemory.Alloc((nuint)sizeof(nint));
+
             *input = inputTable;
+
             Object = (nint)input;
 
             for (var index = 0; index < DeviceCount; index++)
             {
                 var device = (Device*)NativeMemory.AllocZeroed((nuint)sizeof(Device));
+
                 device->Table = deviceTable;
+
                 device->Index = index;
+
                 device->Info.Size = (uint)sizeof(DeviceInfo);
+
                 device->Info.SupportedInput = Kind(index);
+
                 device->Info.RumbleMotors = index < 4 ? 3U : 0U;
+
                 "victory"u8.CopyTo(new Span<byte>(device->Info.Id, 32));
+
                 device->Info.Id[31] = (byte)(index + 1);
+
                 new ReadOnlySpan<byte>(device->Info.Id, 32).CopyTo(new Span<byte>(device->Info.RootId, 32));
+
                 Devices[index] = (nint)device;
             }
 
@@ -930,7 +1023,9 @@ public static unsafe partial class GameInputModule
             }
 
             Poll();
+
             var thread = new Thread(PollLoop) { IsBackground = true, Name = "irx input poll" };
+
             thread.Start();
         }
 
@@ -947,6 +1042,7 @@ public static unsafe partial class GameInputModule
                 catch (Exception exception)
                 {
                     Console.Error.WriteLine($"[input] Poll failed: {exception.Message}");
+
                     Thread.Sleep(1000);
                 }
             }
@@ -978,12 +1074,15 @@ public static unsafe partial class GameInputModule
             var keys = ReadKeys();
             // Prefer existing XInput devices to avoid duplicate events from a virtual controller.
             var dualSense = pads.Any(pad => pad.HasValue) ? null : _dualSense?.Current;
+
             List<Notification> events;
 
             lock (Gate)
             {
                 events = new List<Notification>(Pending);
+
                 Pending.Clear();
+
                 var timestamp = Now();
 
                 for (var index = 0; index < pads.Length; index++)
@@ -993,15 +1092,18 @@ public static unsafe partial class GameInputModule
 
                 // Keep the same virtual controller identity when moving from keyboard to native HID.
                 var useFallback = !pads.Any(pad => pad.HasValue);
+
                 if (_usingDualSense != dualSense.HasValue)
                 {
                     _usingDualSense = dualSense.HasValue;
+
                     Console.WriteLine(
                         $"[input] IRX-R30-ROUTE: slot={Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
                 }
 
                 Update(Fallback, useFallback, useFallback ? dualSense ?? FallbackPad(keys) : null, [], timestamp,
                     events);
+
                 Update(Keyboard, true, null, keys, timestamp, events);
             }
 
@@ -1013,7 +1115,9 @@ public static unsafe partial class GameInputModule
         {
             var slot = Slots[index];
             var previous = slot.Connected;
+
             slot.Connected = connected;
+
             var last = slot.History.Count == 0 ? null : slot.History[^1];
 
             if (connected && (!previous || last is null || last.Pad != pad || !last.Keys.AsSpan().SequenceEqual(keys)))
@@ -1074,6 +1178,7 @@ public static unsafe partial class GameInputModule
                 {
                     var callback =
                         (delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void>)registration.Callback;
+
                     callback(registration.Token, registration.Context, Devices[notification.Index],
                         notification.Timestamp, notification.Current, notification.Previous);
                 }
@@ -1082,6 +1187,7 @@ public static unsafe partial class GameInputModule
                     lock (Gate)
                     {
                         Running.Remove((registration.Token, thread));
+
                         Monitor.PulseAll(Gate);
                     }
                 }
@@ -1091,6 +1197,7 @@ public static unsafe partial class GameInputModule
         public void Forget(ulong token)
         {
             Registrations.RemoveAll(value => value.Token == token);
+
             Pending.RemoveAll(value => value.Registration.Token == token);
         }
     }

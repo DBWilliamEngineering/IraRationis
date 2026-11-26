@@ -24,6 +24,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         _queryHeapTable = (nint)ChildTable(24);
+
         device[39] =
             (nint)(delegate* unmanaged[Stdcall]<nint, QueryHeapDescription*, Guid*, nint*, int>)&CreateQueryHeap;
     }
@@ -62,12 +63,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         QueryHeapObject* heap = null;
+
         try
         {
             heap = (QueryHeapObject*)NativeMemory.AllocZeroed((nuint)sizeof(QueryHeapObject));
+
             heap->Header.Table = _queryHeapTable;
+
             heap->Header.References = 1;
+
             heap->Description = *description;
+
             LiveObjects[(nint)heap] = _queryHeapTable;
         }
         catch (OutOfMemoryException)
@@ -81,6 +87,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *output = (nint)heap;
+
         Console.WriteLine(
             $"[graphics] Query heap: type={heap->Description.Kind}, count={heap->Description.Count}, nodes=0x{heap->Description.Nodes:X}, object=0x{(nuint)heap:X} (CPU metadata only).");
 
@@ -90,6 +97,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReleaseQueryHeap(nint value)
     {
         _ = LiveObjects.TryRemove(value, out _);
+
         foreach (var key in ResourcePrivateData.Keys)
         {
             if (key.Item1 == value)

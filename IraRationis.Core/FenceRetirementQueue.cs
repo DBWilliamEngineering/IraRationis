@@ -21,6 +21,7 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
         ArgumentOutOfRangeException.ThrowIfGreaterThan(capacity, 65536);
 
         _capacity = capacity;
+
         _pending = new Queue<Entry>(capacity);
     }
 
@@ -38,7 +39,9 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
     public bool TryRetire(ulong submittedFence, T resource)
     {
         CheckOwner();
+
         ArgumentNullException.ThrowIfNull(resource);
+
         if (submittedFence == 0 || submittedFence == ulong.MaxValue || submittedFence < _lastAdmitted)
         {
             throw new ArgumentOutOfRangeException(nameof(submittedFence));
@@ -50,6 +53,7 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
         }
 
         _pending.Enqueue(new Entry(submittedFence, resource));
+
         _lastAdmitted = submittedFence;
 
         return true;
@@ -63,17 +67,22 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
     public int Collect(ulong completedFence)
     {
         CheckOwner();
+
         if (completedFence == ulong.MaxValue || completedFence < _completed)
         {
             throw new ArgumentOutOfRangeException(nameof(completedFence));
         }
 
         _completed = completedFence;
+
         var count = 0;
+
         while (_pending.TryPeek(out var entry) && entry.Fence <= _completed)
         {
             _ = _pending.Dequeue();
+
             entry.Resource.Dispose();
+
             count++;
         }
 
@@ -84,6 +93,7 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
     public void EnsureEmpty()
     {
         CheckOwner();
+
         if (_pending.Count != 0)
         {
             throw new InvalidOperationException("GPU resource retirement is incomplete.");

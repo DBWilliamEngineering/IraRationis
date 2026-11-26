@@ -18,8 +18,10 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         device[UnknownPipelineLegacySlot] =
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, Guid*, nint*, int>)&RejectUnknownPipelineLegacy;
+
         device[UnknownPipelineModernSlot] =
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, Guid*, nint*, int>)&RejectUnknownPipelineModern;
+
         device[DebugErrorFilterSlot] = (nint)(delegate* unmanaged[Stdcall]<int>)&IgnoreDebugErrorFilter;
     }
 
@@ -43,6 +45,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var calls = Interlocked.Increment(ref counter);
+
         if (calls <= 4 || (calls & (calls - 1)) == 0)
         {
             // The description layout is unknown. Never dereference it speculatively.
@@ -102,6 +105,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var ignore = (delegate* unmanaged[Stdcall]<int>)device[DebugErrorFilterSlot];
+
         if (ignore() != 0)
         {
             throw new InvalidOperationException("Debug error filter ABI failed.");
@@ -109,7 +113,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         // These probes run before title execution and must not consume its initial log budget.
         Interlocked.Exchange(ref _unknownPipelineLegacyCalls, 0);
+
         Interlocked.Exchange(ref _unknownPipelineModernCalls, 0);
+
         Console.WriteLine("[graphics-probe] Optional device rejection and debug filter ABI passed.");
     }
 }

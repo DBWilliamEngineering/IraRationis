@@ -25,6 +25,7 @@ internal sealed unsafe class ImportThunks
     internal ImportThunks(int count)
     {
         _size = (nuint)checked((Math.Max(1, count) * ThunkSize + 4095) & ~4095);
+
         _address = ExecutableMemory.Allocate(_size);
     }
 
@@ -38,18 +39,28 @@ internal sealed unsafe class ImportThunks
         // Handles and executable blocks intentionally live until process exit.
         var handle = GCHandle.Alloc(new Site(import, policy));
         var code = new Span<byte>((void*)(_address + _used), ThunkSize);
+
         code.Fill(0xCC);
+
         code[0] = 0x48;
+
         code[1] = 0xB9;
+
         BinaryPrimitives.WriteUInt64LittleEndian(code[2..], (nuint)GCHandle.ToIntPtr(handle));
+
         code[10] = 0x48;
+
         code[11] = 0xB8;
+
         BinaryPrimitives.WriteUInt64LittleEndian(code[12..],
             (nuint)(delegate* unmanaged[Stdcall]<nint, ulong>)&OnMissing);
+
         code[20] = 0xFF;
+
         code[21] = 0xE0;
 
         var address = (nuint)(_address + _used);
+
         _used += ThunkSize;
 
         return address;
@@ -72,6 +83,7 @@ internal sealed unsafe class ImportThunks
             if (site.Policy == UnimplementedPolicy.Trap)
             {
                 Console.Error.WriteLine(message);
+
                 Environment.FailFast(message);
             }
 

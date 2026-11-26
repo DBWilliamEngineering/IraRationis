@@ -31,11 +31,17 @@ public static unsafe partial class AcpHalModule
 
         // Process-lifetime immutable native table; objects own only one pointer.
         var table = (nint*)NativeMemory.Alloc(6, (nuint)sizeof(nint));
+
         table[0] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, int>)&ConnectAcp;
+
         table[1] = (nint)(delegate* unmanaged[Stdcall]<nint, int>)&DisconnectAcp;
+
         table[2] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, ulong, uint, void*, uint, int>)&SubmitAcp;
+
         table[3] = (nint)(delegate* unmanaged[Stdcall]<nint, AcpMessage*, byte>)&PopAcpMessage;
+
         table[4] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&CountAcpMessages;
+
         table[5] = (nint)(delegate* unmanaged[Stdcall]<nint, void>)&ReleaseAcp;
 
         return (nint)table;
@@ -50,19 +56,26 @@ public static unsafe partial class AcpHalModule
         }
 
         *output = 0;
+
         var memory = (nint)0;
+
         try
         {
             var state = new AcpConnection();
+
             memory = (nint)NativeMemory.Alloc((nuint)sizeof(nint));
+
             *(nint*)memory = AcpTable;
+
             if (!Connections.TryAdd(memory, state))
             {
                 return Failure;
             }
 
             *output = memory;
+
             memory = 0;
+
             if (Interlocked.Exchange(ref _reportedCreate, 1) == 0)
             {
                 Console.Error.WriteLine(
@@ -106,9 +119,13 @@ public static unsafe partial class AcpHalModule
             }
 
             state.Mask = 0;
+
             state.Dropped = 0;
+
             state.Head = 0;
+
             state.Count = 0;
+
             state.Connected = true;
         }
 
@@ -134,6 +151,7 @@ public static unsafe partial class AcpHalModule
             }
 
             state.Post(Disconnected);
+
             state.Connected = false;
 
             return 0;
@@ -145,7 +163,9 @@ public static unsafe partial class AcpHalModule
     private static bool TryGetNotificationWord(uint address, out uint* word)
     {
         word = null;
+
         var index = FloorIndex(ByDevice, address);
+
         if (index < 0 || (address & 3) != 0)
         {
             return false;
@@ -153,6 +173,7 @@ public static unsafe partial class AcpHalModule
 
         var block = ByDevice.GetValueAtIndex(index);
         var offset = address - block.Device;
+
         if (block.Size < sizeof(uint) || offset > block.Size - sizeof(uint))
         {
             return false;
@@ -168,6 +189,7 @@ public static unsafe partial class AcpHalModule
         var first = command < 64
             ? (Interlocked.Or(ref _reportedUnsupportedCommands, 1L << (int)command) & (1L << (int)command)) == 0
             : Interlocked.Exchange(ref _reportedOtherCommand, 1) == 0;
+
         if (first)
         {
             Console.Error.WriteLine(
@@ -205,6 +227,7 @@ public static unsafe partial class AcpHalModule
             }
 
             var mask = Unsafe.ReadUnaligned<uint>(data);
+
             if (notification == 0)
             {
                 CompleteRegistration(state, command, id, mask);
@@ -220,6 +243,7 @@ public static unsafe partial class AcpHalModule
                 }
 
                 CompleteRegistration(state, command, id, mask);
+
                 Volatile.Write(ref *word, 1U);
 
                 return 0;
@@ -230,6 +254,7 @@ public static unsafe partial class AcpHalModule
     private static void CompleteRegistration(AcpConnection state, uint command, ulong id, uint mask)
     {
         state.Mask = command == RegisterMessages ? state.Mask | mask : state.Mask & ~mask;
+
         if (id != 0)
         {
             state.Post(CommandCompleted, command, id);
@@ -257,6 +282,7 @@ public static unsafe partial class AcpHalModule
             }
 
             state.Head++;
+
             if (state.Head == state.Messages.Length)
             {
                 state.Head = 0;
@@ -293,9 +319,13 @@ public static unsafe partial class AcpHalModule
         lock (state.Gate)
         {
             state.Released = true;
+
             state.Connected = false;
+
             state.Messages = [];
+
             state.Count = 0;
+
             NativeMemory.Free((void*)self);
         }
     }
@@ -343,6 +373,7 @@ public static unsafe partial class AcpHalModule
 
             var usec = (ulong)(Stopwatch.GetElapsedTime(Started).Ticks / 10);
             var tail = Head + Count;
+
             if (tail >= Messages.Length)
             {
                 tail -= Messages.Length;
@@ -357,7 +388,9 @@ public static unsafe partial class AcpHalModule
                 Id = id,
                 Frame = kind == CommandCompleted ? unchecked((uint)(usec * 375 / 1_000_000)) : 0
             };
+
             Dropped = 0;
+
             Count++;
         }
     }
