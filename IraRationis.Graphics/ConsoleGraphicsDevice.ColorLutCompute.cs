@@ -431,112 +431,67 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R17 output was GPU-written on another queue.");
         }
 
-        nint upload = 0, heap = 0, allocator = 0, list = 0;
+        using var utility = AcquireUtilityContext(R17UploadBytes, 2, versioned: true);
 
-        try
+        utility.PrepareVersionedUpload(snapshot);
+
+        var upload = utility.Upload;
+        var heap = utility.Heap;
+        var list = utility.List;
+
+        var nativeHeap = (ID3D12DescriptorHeap*)heap;
+        var cpu = nativeHeap->GetCPUDescriptorHandleForHeapStart();
+        var gpu = nativeHeap->GetGPUDescriptorHandleForHeapStart();
+        var increment = _host->GetDescriptorHandleIncrementSize(0);
+        var cbv = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
+
+        if (cpu.ptr == 0 || gpu.ptr == 0 || increment == 0 || cbv == 0 || (cbv & 255UL) != 0)
         {
-            CheckHostResult(CreateHostResource(HostBufferDescription(R17UploadBytes), 2, GenericRead, &upload),
-                "R17 CBV upload");
-
-            var noRead = default(HostRange);
-
-            void* mapped = null;
-
-            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload, 8))
-                (upload, 0, &noRead, &mapped), "R17 CBV map");
-
-            if (mapped == null)
-            {
-                throw new InvalidOperationException("R17 CBV map returned null.");
-            }
-
-            var written = new HostRange { End = R17UploadBytes };
-
-            try
-            {
-                snapshot.AsSpan().CopyTo(new Span<byte>(mapped, R17UploadBytes));
-            }
-            finally
-            {
-                ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(upload, 9))(upload, 0, &written);
-            }
-
-            var heapDescription = new DescriptorHeapDescription { Kind = 0, Count = 2, Flags = 1 };
-            var heapId = DescriptorHeapId;
-            var device = (nint)_host;
-
-            CheckHostResult(
-                ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
-                (device, &heapDescription, &heapId, &heap), "R17 shader-visible heap");
-
-            if (heap == 0)
-            {
-                throw new InvalidOperationException("R17 descriptor heap returned null.");
-            }
-
-            var nativeHeap = (ID3D12DescriptorHeap*)heap;
-            var cpu = nativeHeap->GetCPUDescriptorHandleForHeapStart();
-            var gpu = nativeHeap->GetGPUDescriptorHandleForHeapStart();
-            var increment = _host->GetDescriptorHandleIncrementSize(0);
-            var cbv = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
-
-            if (cpu.ptr == 0 || gpu.ptr == 0 || increment == 0 || cbv == 0 || (cbv & 255UL) != 0)
-            {
-                throw new InvalidOperationException("R17 invalid host binding address.");
-            }
-
-            fixed (byte* inputView = boundary.Input.Description)
-            fixed (byte* outputView = boundary.Output.Description)
-            {
-                _host->CreateShaderResourceView((ID3D12Resource*)boundary.InputHost,
-                    (D3D12_SHADER_RESOURCE_VIEW_DESC*)inputView, cpu);
-
-                cpu.ptr += increment;
-
-                _host->CreateUnorderedAccessView((ID3D12Resource*)boundary.OutputHost, null,
-                    (D3D12_UNORDERED_ACCESS_VIEW_DESC*)outputView, cpu);
-            }
-
-            CreateR16UtilityList(out allocator, out list);
-
-            TransitionHostResource(list, boundary.InputHost, 0, 0x40);
-
-            TransitionHostResource(list, boundary.OutputHost, 0, 8);
-
-            var commands = (ID3D12GraphicsCommandList*)list;
-
-            commands->SetDescriptorHeaps(1, &nativeHeap);
-            commands->SetPipelineState((ID3D12PipelineState*)boundary.Pipeline);
-            commands->SetComputeRootSignature((ID3D12RootSignature*)boundary.Root);
-            commands->SetComputeRootConstantBufferView(0, cbv);
-            commands->SetComputeRootConstantBufferView(1, cbv + R17LargeOffset);
-            commands->SetComputeRootDescriptorTable(2, gpu);
-
-            TraceR24($"[graphics] IRX-GFX-COMPUTE-R17: BOUND 2 CBVs, SRV, UAV; readsTexture={readsTexture}.");
-
-            commands->Dispatch(5, 5, 33);
-
-            TransitionHostResource(list, boundary.OutputHost, 8, 0);
-            TransitionHostResource(list, boundary.InputHost, 0x40, 0);
-
-            SubmitR16UtilityList(queue, list);
-
-            MarkR16GpuWrite(boundary.Output.Resource, queue);
-
-            Interlocked.Increment(ref _r24Dispatches);
-
-            TraceR24(
-                "[graphics] IRX-GFX-COMPUTE-R17: GPU COMPLETED 3D color transform (UAV content not numerically verified).");
+            throw new InvalidOperationException("R17 invalid host binding address.");
         }
-        finally
+
+        fixed (byte* inputView = boundary.Input.Description)
+        fixed (byte* outputView = boundary.Output.Description)
         {
-            ReleaseR16Utility(list, allocator, upload);
+            _host->CreateShaderResourceView((ID3D12Resource*)boundary.InputHost,
+                (D3D12_SHADER_RESOURCE_VIEW_DESC*)inputView, cpu);
 
-            if (heap != 0)
-            {
-                _ = HostRelease(heap);
-            }
+            cpu.ptr += increment;
+
+            _host->CreateUnorderedAccessView((ID3D12Resource*)boundary.OutputHost, null,
+                (D3D12_UNORDERED_ACCESS_VIEW_DESC*)outputView, cpu);
         }
+
+        TransitionHostResource(list, boundary.InputHost, 0, 0x40);
+
+        TransitionHostResource(list, boundary.OutputHost, 0, 8);
+
+        var commands = (ID3D12GraphicsCommandList*)list;
+
+        commands->SetDescriptorHeaps(1, &nativeHeap);
+        commands->SetPipelineState((ID3D12PipelineState*)boundary.Pipeline);
+        commands->SetComputeRootSignature((ID3D12RootSignature*)boundary.Root);
+        commands->SetComputeRootConstantBufferView(0, cbv);
+        commands->SetComputeRootConstantBufferView(1, cbv + R17LargeOffset);
+        commands->SetComputeRootDescriptorTable(2, gpu);
+
+        TraceR24($"[graphics] IRX-GFX-COMPUTE-R17: BOUND 2 CBVs, SRV, UAV; readsTexture={readsTexture}.");
+
+        commands->Dispatch(5, 5, 33);
+
+        TransitionHostResource(list, boundary.OutputHost, 8, 0);
+        TransitionHostResource(list, boundary.InputHost, 0x40, 0);
+
+        utility.SubmitAndWait(queue);
+
+        ReportUtilityExecution();
+
+        MarkR16GpuWrite(boundary.Output.Resource, queue);
+
+        Interlocked.Increment(ref _r24Dispatches);
+
+        TraceR24(
+            "[graphics] IRX-GFX-COMPUTE-R17: GPU COMPLETED 3D color transform (UAV content not numerically verified).");
     }
 
     private sealed record R17ComputeBoundary(

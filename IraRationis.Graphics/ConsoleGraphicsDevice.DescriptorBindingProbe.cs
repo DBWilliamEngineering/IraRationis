@@ -43,17 +43,17 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R52 host descriptor ABI size mismatch.");
         }
 
-        var upload = nint.Zero;
         var output = nint.Zero;
         var readback = nint.Zero;
-        var heap = nint.Zero;
         var root = nint.Zero;
         var pipeline = nint.Zero;
 
         try
         {
-            CheckHostResult(CreateHostResource(HostBufferDescription(R52UploadBytes), 2, GenericRead, &upload),
-                "R52 upload allocation");
+            using var utility = AcquireUtilityContext(R52UploadBytes,
+                2 * DescriptorTableCache.DescriptorsPerTable, versioned: true);
+
+            var input = CreateR52UploadData();
 
             var outputDescription = HostBufferDescription(R52OutputBytes);
 
@@ -64,28 +64,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             CheckHostResult(CreateHostResource(HostBufferDescription(R52OutputBytes), 3, CopyDestination, &readback),
                 "R52 readback allocation");
 
-            RequireR42Object(upload, "R52 upload");
             RequireR42Object(output, "R52 output");
             RequireR42Object(readback, "R52 readback");
 
-            InitializeR52Upload(upload);
-
             CreateR52Pipeline(out root, out pipeline);
-
-            var heapDescription = new DescriptorHeapDescription
-            {
-                Kind = 0,
-                Count = 2 * DescriptorTableCache.DescriptorsPerTable,
-                Flags = 1
-            };
-
-            var device = (nint)_host;
-            var heapId = DescriptorHeapId;
-            var createHeap = (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14);
-
-            CheckHostResult(createHeap(device, &heapDescription, &heapId, &heap), "R52 descriptor heap");
-
-            RequireR42Object(heap, "R52 shader-visible heap");
 
             var catalog = new DescriptorBindingCatalog(2);
             var uploadIdentity = catalog.Register(1, R52UploadBytes, false);
@@ -105,13 +87,38 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             // Each ordinal is published only after the actual host fence wait succeeds.
             // These are private serial probe ordinals, not the host fence's native values.
-            ExecuteR52Table(queue, heap, root, pipeline, upload, output, readback, cache, first, 1, [9, 11, 13, 15]);
+            ExecuteR52Table(queue, utility, root, pipeline, output, readback, cache, first, 1, input, [9, 11, 13, 15]);
 
-            ExecuteR52Table(queue, heap, root, pipeline, upload, output, readback, cache, first, 2, [9, 11, 13, 15]);
+            var initialBytes = utility.LastUploadBytes;
 
-            ExecuteR52Table(queue, heap, root, pipeline, upload, output, readback, cache, second, 3, [29, 39, 49, 59]);
+            utility.Reset();
 
-            ExecuteR52Table(queue, heap, root, pipeline, upload, output, readback, cache, first, 4, [9, 11, 13, 15]);
+            MemoryMarshal.Cast<byte, uint>(input.AsSpan())[0] = 8;
+
+            ExecuteR52Table(queue, utility, root, pipeline, output, readback, cache, first, 2, input, [10, 12, 14, 16]);
+
+            var changedBytes = utility.LastUploadBytes;
+
+            utility.Reset();
+
+            MemoryMarshal.Cast<byte, uint>(input.AsSpan())[0] = 7;
+
+            ExecuteR52Table(queue, utility, root, pipeline, output, readback, cache, second, 3, input, [29, 39, 49, 59]);
+
+            var restoredBytes = utility.LastUploadBytes;
+
+            utility.Reset();
+
+            ExecuteR52Table(queue, utility, root, pipeline, output, readback, cache, first, 4, input, [9, 11, 13, 15]);
+
+            if (initialBytes is not (0 or R52UploadBytes) || changedBytes != 256 || restoredBytes != 256 ||
+                utility.LastUploadBytes != 0)
+            {
+                throw new InvalidOperationException("R53 versioned utility upload accounting mismatch.");
+            }
+
+            Console.WriteLine($"[graphics-probe] IRX-R53: initialBytes={initialBytes}; changedBytes={changedBytes}; " +
+                              $"restoredBytes={restoredBytes}; unchangedBytes={utility.LastUploadBytes}; readback=verified.");
 
             cache.EnsureIdle();
 
@@ -131,63 +138,43 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             ReleaseR42Object(pipeline);
             ReleaseR42Object(root);
-            ReleaseR42Object(heap);
             ReleaseR42Object(readback);
             ReleaseR42Object(output);
-            ReleaseR42Object(upload);
         }
     }
 
-    private static void InitializeR52Upload(nint upload)
+    private static byte[] CreateR52UploadData()
     {
-        var noRead = default(HostRange);
-        var mapped = (void*)null;
-        var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(upload, 8);
-        var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(upload, 9);
+        var data = new byte[R52UploadBytes];
+        var words = MemoryMarshal.Cast<byte, uint>(data.AsSpan());
 
-        CheckHostResult(map(upload, 0, &noRead, &mapped), "R52 map upload");
+        words[0] = 7;
+        words[64] = 19;
 
-        try
+        for (var index = 0; index < 4; index++)
         {
-            if (mapped == null)
-            {
-                throw new InvalidOperationException("R52 upload mapping is null.");
-            }
-
-            var words = new Span<uint>(mapped, R52UploadBytes / sizeof(uint));
-
-            words.Clear();
-
-            words[0] = 7;
-            words[64] = 19;
-
-            for (var index = 0; index < 4; index++)
-            {
-                words[128 + index] = (uint)(2 * (index + 1));
-                words[132 + index] = (uint)(10 * (index + 1));
-            }
+            words[128 + index] = (uint)(2 * (index + 1));
+            words[132 + index] = (uint)(10 * (index + 1));
         }
-        finally
-        {
-            var written = new HostRange { End = R52UploadBytes };
 
-            unmap(upload, 0, &written);
-        }
+        return data;
     }
 
-    private static void ExecuteR52Table(nint queue, nint heap, nint root, nint pipeline, nint upload,
+    private static void ExecuteR52Table(nint queue, UtilityContext utility, nint root, nint pipeline,
         nint output, nint readback, DescriptorTableCache cache, ComputeBufferTable table, ulong ordinal,
-        ReadOnlySpan<uint> expected)
+        ReadOnlySpan<byte> input, ReadOnlySpan<uint> expected)
     {
         var lease = cache.TryAcquire(table) ?? throw new InvalidOperationException("R52 descriptor table exhausted.");
-        var allocator = nint.Zero;
-        var list = nint.Zero;
+        var upload = utility.Upload;
+        var list = utility.List;
         var submitted = false;
         var completed = false;
 
         try
         {
-            var nativeHeap = (ID3D12DescriptorHeap*)heap;
+            utility.PrepareVersionedUpload(input);
+
+            var nativeHeap = (ID3D12DescriptorHeap*)utility.Heap;
             var cpu = nativeHeap->GetCPUDescriptorHandleForHeapStart();
             var gpu = nativeHeap->GetGPUDescriptorHandleForHeapStart();
             var increment = _host->GetDescriptorHandleIncrementSize(0);
@@ -208,8 +195,6 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 cache.MarkMaterialized(lease);
             }
-
-            CreateR16UtilityList(out allocator, out list);
 
             var commands = (ID3D12GraphicsCommandList*)list;
 
@@ -240,17 +225,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(list, output, CopySource, 0);
 
-            CheckHostResult(commands->Close(), "R52 command list close");
-
-            var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10);
-
             cache.MarkSubmitted(lease, ordinal);
 
             submitted = true;
 
-            execute(queue, 1, &list);
-
-            WaitForHostCompletion(queue);
+            utility.SubmitAndWait(queue);
 
             completed = true;
 
@@ -271,10 +250,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             throw;
-        }
-        finally
-        {
-            ReleaseR16Utility(list, allocator, 0);
         }
     }
 

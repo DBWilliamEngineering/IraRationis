@@ -1036,8 +1036,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        nint staging = 0, allocator = 0, list = 0;
-
         var rented = ArrayPool<byte>.Shared.Rent((int)plan.Layout.Size);
 
         try
@@ -1051,8 +1049,10 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return false;
             }
 
-            CheckHostResult(CreateHostResource(HostBufferDescription(plan.Bytes), 2, GenericRead, &staging),
-                "R16 texture staging");
+            using var utility = AcquireUtilityContext(plan.Bytes, 0);
+
+            var staging = utility.Upload;
+            var list = utility.List;
 
             var noRead = default(HostRange);
 
@@ -1061,32 +1061,30 @@ public static unsafe partial class ConsoleGraphicsDevice
             CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(staging, 8))
                 (staging, 0, &noRead, &mapped), "R16 map texture staging");
 
-            if (mapped == null)
-            {
-                return false;
-            }
-
             var written = default(HostRange);
 
             try
             {
+                if (mapped == null)
+                {
+                    return false;
+                }
+
                 var target = new Span<byte>(mapped, (int)plan.Bytes);
 
                 target.Clear();
+
+                written.End = (nuint)plan.Bytes;
 
                 if (!DetileR16Texture(plan, source, target))
                 {
                     return false;
                 }
-
-                written.End = (nuint)plan.Bytes;
             }
             finally
             {
                 ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(staging, 9))(staging, 0, &written);
             }
-
-            CreateR16UtilityList(out allocator, out list);
 
             TransitionHostResource(list, host, 0, CopyDestination);
 
@@ -1114,7 +1112,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(list, host, CopyDestination, 0);
 
-            SubmitR16UtilityList(queue, list);
+            utility.SubmitAndWait(queue);
+
+            ReportUtilityExecution();
 
             TraceR24(
                 $"[graphics] IRX-GFX-TEXTURE-R16: UPLOADED {description.Width}x{description.Height}, mips={description.MipLevels}, bytes={plan.Bytes} from console layout.");
@@ -1124,8 +1124,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         finally
         {
             ArrayPool<byte>.Shared.Return(rented);
-
-            ReleaseR16Utility(list, allocator, staging);
         }
     }
 
