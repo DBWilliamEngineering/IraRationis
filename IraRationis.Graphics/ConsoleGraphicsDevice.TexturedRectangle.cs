@@ -1049,65 +1049,27 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return false;
             }
 
-            using var utility = AcquireUtilityContext(plan.Bytes, 0);
+            var versioned = VersionedTextureUploadsEnabled && plan.Bytes <= 16UL * 1024 * 1024;
+
+            using var utility = AcquireUtilityContext(plan.Bytes, 0, versioned);
 
             var staging = utility.Upload;
             var list = utility.List;
 
-            var noRead = default(HostRange);
-
-            void* mapped = null;
-
-            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(staging, 8))
-                (staging, 0, &noRead, &mapped), "R16 map texture staging");
-
-            var written = default(HostRange);
-
-            try
+            if (!PrepareHostTextureUpload(utility, plan, source))
             {
-                if (mapped == null)
-                {
-                    return false;
-                }
-
-                var target = new Span<byte>(mapped, (int)plan.Bytes);
-
-                target.Clear();
-
-                written.End = (nuint)plan.Bytes;
-
-                if (!DetileR16Texture(plan, source, target))
-                {
-                    return false;
-                }
-            }
-            finally
-            {
-                ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(staging, 9))(staging, 0, &written);
+                return false;
             }
 
             TransitionHostResource(list, host, 0, CopyDestination);
 
-            var copy =
-                (delegate* unmanaged[Stdcall]<nint, ClearProbeCopyLocation*, uint, uint, uint, ClearProbeCopyLocation*,
-                    void*, void>)Slot(list, 16);
-
             for (var index = 0; index < plan.Pitches.Length; index++)
             {
-                var to = new ClearProbeCopyLocation { Resource = host, Offset = (ulong)index };
-                var from = new ClearProbeCopyLocation
-                {
-                    Resource = staging,
-                    Kind = 1,
-                    Offset = plan.Offsets[index],
-                    Format = description.Format,
-                    Width = (uint)Math.Max(1UL, description.Width >> index),
-                    Height = Math.Max(1U, description.Height >> index),
-                    Depth = 1,
-                    Pitch = plan.Pitches[index]
-                };
+                var footprint = new HostTextureTransferFootprint((uint)index, description.Format,
+                    (uint)Math.Max(1UL, description.Width >> index), Math.Max(1U, description.Height >> index),
+                    plan.Pitches[index], plan.Offsets[index]);
 
-                copy(list, &to, 0, 0, 0, &from, null);
+                RecordHostTextureTransfer(list, host, staging, plan.Bytes, footprint, upload: true);
             }
 
             TransitionHostResource(list, host, CopyDestination, 0);

@@ -398,23 +398,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             CreateR16UtilityList(out allocator, out list);
 
-            var from = new ClearProbeCopyLocation { Resource = resource->HostResource };
-            var to = new ClearProbeCopyLocation
-            {
-                Resource = readback,
-                Kind = 1,
-                Format = desc.Format,
-                Width = width,
-                Height = height,
-                Depth = 1,
-                Pitch = pitch
-            };
+            var footprint = new HostTextureTransferFootprint(0, desc.Format, width, height, pitch, 0);
 
             TransitionHostResource(list, resource->HostResource, 0, CopySource);
 
-            ((delegate* unmanaged[Stdcall]<nint, ClearProbeCopyLocation*, uint, uint, uint, ClearProbeCopyLocation*,
-                    void*, void>)Slot(list, 16))
-                (list, &to, 0, 0, 0, &from, null);
+            RecordHostTextureTransfer(list, resource->HostResource, readback, bytes, footprint, upload: false);
 
             TransitionHostResource(list, resource->HostResource, CopySource, 0);
 

@@ -323,12 +323,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void CreateR52Pipeline(out nint root, out nint pipeline)
+    private static void CreateR52Pipeline(out nint root, out nint pipeline, string? source = null)
     {
         root = 0;
         pipeline = 0;
 
-        var shader = CompileR10Shader(R52Shader, "cs_5_1", Console.Error)
+        var shader = CompileR10Shader(source ?? R52Shader, "cs_5_1", Console.Error)
                      ?? throw new InvalidOperationException("R52 compute shader compilation failed.");
         var ranges = stackalloc D3D12_DESCRIPTOR_RANGE1[3];
 

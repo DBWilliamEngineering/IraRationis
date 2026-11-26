@@ -321,6 +321,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 upload,
                 readback,
                 new ReadOnlySpan<byte>(data, bytes));
+
+            VerifyHostTextureTransfers(hostQueue);
         }
         finally
         {
