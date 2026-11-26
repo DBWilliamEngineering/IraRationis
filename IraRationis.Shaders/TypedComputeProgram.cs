@@ -464,7 +464,11 @@ public sealed class TypedComputeProgram
     /// <summary>Emit a bounded typed compute kernel for the existing 103-word R32_UINT adapter.</summary>
     public string EmitHlsl()
     {
-        var source = new StringBuilder("Buffer<uint> Input : register(t0);\nRWBuffer<uint> Output : register(u0);\n[numthreads(1,1,1)]\nvoid main()\n{\n");
+        var source = new StringBuilder(
+            "Buffer<uint> Input : register(t0);\n" +
+            "RWBuffer<uint> Output : register(u0);\n" +
+            "[numthreads(1,1,1)]\n" +
+            "void main()\n{\n");
 
         for (var index = 0; index < _registers.Length; index++)
         {
@@ -477,29 +481,37 @@ public sealed class TypedComputeProgram
         {
             var register = _inputs[index];
             var start = index * 4;
-            var expression = $"uint4(Input[{start}],Input[{start + 1}],Input[{start + 2}],Input[{start + 3}])";
 
-            source.AppendLine($"    r{register} = {FromBits(register, expression)};");
+            var expression =
+                $"uint4(Input[{start}],Input[{start + 1}]," +
+                $"Input[{start + 2}],Input[{start + 3}])";
+
+            source.AppendLine(
+                $"    r{register} = {FromBits(register, expression)};");
         }
 
         source.AppendLine("    uint pc = 0u;");
         source.AppendLine("    bool done = false;");
 
-        source.AppendLine($"    [loop] for (uint stepIndex = 0u; stepIndex < {_budget}u; ++stepIndex)");
+        source.AppendLine(
+            $"    [loop] for (uint stepIndex = 0u; " +
+            $"stepIndex < {_budget}u; ++stepIndex)");
+
         source.AppendLine("    {");
-        source.AppendLine("        uint nextPc = pc;");
+        source.AppendLine("        uint currentPc = pc;");
 
         for (var index = 0; index < _blocks.Length; index++)
         {
             var block = _blocks[index];
-            var keyword = index == 0 ? "if" : "else if";
 
-            source.AppendLine($"        {keyword} (pc == {index}u)");
+            source.AppendLine($"        if (currentPc == {index}u)");
             source.AppendLine("        {");
 
             foreach (var instruction in block.Instructions)
             {
-                source.AppendLine($"            r{instruction.Destination} = {EmitInstruction(instruction)};");
+                source.AppendLine(
+                    $"            r{instruction.Destination} = " +
+                    $"{EmitInstruction(instruction)};");
             }
 
             var end = block.Terminator;
@@ -507,9 +519,12 @@ public sealed class TypedComputeProgram
             var transfer = end.Transfer switch
             {
                 ComputeTransfer.Return => "done = true;",
-                ComputeTransfer.Jump => $"nextPc = {end.Target}u;",
-                ComputeTransfer.Branch => $"nextPc = r{end.Condition}.x != 0u ? {end.Target}u : {end.Alternative}u;",
-                _ => throw new InvalidOperationException("Invalid compute transfer.")
+                ComputeTransfer.Jump => $"pc = {end.Target}u;",
+                ComputeTransfer.Branch =>
+                    $"pc = r{end.Condition}.x != 0u " +
+                    $"? {end.Target}u : {end.Alternative}u;",
+                _ => throw new InvalidOperationException(
+                    "Invalid compute transfer.")
             };
 
             source.AppendLine($"            {transfer}");
@@ -520,28 +535,62 @@ public sealed class TypedComputeProgram
         source.AppendLine("        {");
         source.AppendLine("            break;");
         source.AppendLine("        }");
-        source.AppendLine("        pc = nextPc;");
         source.AppendLine("    }");
+
+        // Failed execution must not publish partial results.
+
+        source.AppendLine("    if (!done)");
+        source.AppendLine("    {");
+
+        source.AppendLine(
+            $"        [unroll] for (uint i = 0u; i < {StatusWord}u; ++i)");
+
+        source.AppendLine("        {");
+        source.AppendLine("            Output[i] = 0u;");
+        source.AppendLine("        }");
+
+        source.AppendLine($"        Output[{StatusWord}] = 0u;");
+        source.AppendLine("        return;");
+        source.AppendLine("    }");
+
+        // Publish successful execution results.
 
         for (var index = 0; index < _outputs.Length; index++)
         {
             var register = _outputs[index];
-            var expression = Kind(register) == ComputeValueKind.Float32 ? $"asuint(r{register})" : $"r{register}";
 
-            source.AppendLine($"        uint4 packed{index} = {expression};");
+            var expression = Kind(register) == ComputeValueKind.Float32
+                ? $"asuint(r{register})"
+                : $"r{register}";
+
+            source.AppendLine(
+                $"    uint4 packed{index} = {expression};");
 
             for (var lane = 0; lane < 4; lane++)
             {
-                source.AppendLine($"        Output[{index * 4 + lane}] = packed{index}.{LaneNames[lane]};");
+                source.AppendLine(
+                    $"    Output[{index * 4 + lane}] = " +
+                    $"packed{index}.{LaneNames[lane]};");
             }
         }
 
-        source.AppendLine($"        [unroll] for (uint unusedIndex = {_outputs.Length * 4}u; unusedIndex < {StatusWord}u; ++unusedIndex) {{ Output[unusedIndex] = 0u; }}");
-        source.AppendLine("    }\n    else\n    {");
-        source.AppendLine($"        [unroll] for (uint failedIndex = 0u; failedIndex < {StatusWord}u; ++failedIndex) {{ Output[failedIndex] = 0u; }}");
-        source.AppendLine($"    }}\n    Output[{StatusWord}] = done ? 1u : 0u;\n}}");
+        source.AppendLine(
+            $"    [unroll] for (uint unusedIndex = {_outputs.Length * 4}u; " +
+            $"unusedIndex < {StatusWord}u; ++unusedIndex)");
 
-        return source.ToString();
+        source.AppendLine("    {");
+        source.AppendLine("        Output[unusedIndex] = 0u;");
+        source.AppendLine("    }");
+
+        source.AppendLine($"    Output[{StatusWord}] = 1u;");
+        source.AppendLine("}");
+
+        var result = source.ToString();
+
+        // Temporary diagnostic for R66 validation.
+        File.WriteAllText("R66-generated.hlsl", result);
+
+        return result;
     }
 
     private string FromBits(int register, string expression)
