@@ -20,6 +20,31 @@ public static partial class ConsoleGraphicsDevice
         Environment.GetEnvironmentVariable("IRX_PROFILE_THREADS") != "0";
     private static readonly Dictionary<int, (long StartTicks, long CpuTicks)> R27PreviousThreads = new();
     private static long _r27PreviousSample;
+    private static readonly long R70DetailIntervalTicks = ReadR70DetailInterval();
+    private static long _r70LastDetailReport;
+
+    private static long ReadR70DetailInterval()
+    {
+        var value = Environment.GetEnvironmentVariable("IRX_PROFILE_DETAIL_INTERVAL_MS");
+
+        if (!int.TryParse(value, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+        {
+            return -1;
+        }
+
+        if (milliseconds == 0)
+        {
+            return 0;
+        }
+
+        if (milliseconds is < 2000 or > 60000)
+        {
+            return -1;
+        }
+
+        return Stopwatch.Frequency * (long)milliseconds / 1000;
+    }
 
     // Called only by the existing report timer under R25ReportGate. This is a
     // sampled view of OS-thread CPU time, not a stack profiler or wait trace.
@@ -152,7 +177,8 @@ public static partial class ConsoleGraphicsDevice
             return default;
         }
 
-        if (Interlocked.CompareExchange(ref _r25Started, 1, 0) == 0)
+        if (Volatile.Read(ref _r25Started) == 0 &&
+            Interlocked.CompareExchange(ref _r25Started, 1, 0) == 0)
         {
             try
             {
@@ -287,9 +313,18 @@ public static partial class ConsoleGraphicsDevice
 
             LogR25(report.ToString());
 
-            ReportR27Threads(process, now);
+            // Detailed OS-thread and resource enumeration has a separate
+            // cadence. Preserve the ordinary stage counters at their original rate.
+            if (EnableR27ThreadMetrics && R70DetailIntervalTicks != 0 &&
+                (R70DetailIntervalTicks < 0 || _r70LastDetailReport == 0 ||
+                 now - _r70LastDetailReport >= R70DetailIntervalTicks))
+            {
+                _r70LastDetailReport = now;
 
-            ReportR27Resources();
+                ReportR27Threads(process, now);
+
+                ReportR27Resources();
+            }
         }
         catch (Exception exception)
         {

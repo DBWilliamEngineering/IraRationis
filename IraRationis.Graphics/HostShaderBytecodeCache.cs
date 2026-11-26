@@ -10,10 +10,10 @@ internal sealed class HostShaderBytecodeCache
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<(string Source, string Profile), Entry> _entries = new();
+    private readonly LinkedList<Entry> _completed = new();
     private readonly int _maximumEntries;
     private readonly long _maximumBytes;
     private long _bytes;
-    private long _sequence;
 
     internal HostShaderBytecodeCache(int maximumEntries, long maximumBytes)
     {
@@ -37,18 +37,24 @@ internal sealed class HostShaderBytecodeCache
             if (_entries.TryGetValue(key, out entry))
             {
                 reused = true;
-                entry.LastUse = ++_sequence;
+
+                if (entry.Result is { } cached)
+                {
+                    Touch(entry);
+
+                    return cached;
+                }
             }
             else if (keyBytes <= _maximumBytes)
             {
                 while ((_entries.Count >= _maximumEntries || keyBytes > _maximumBytes - _bytes) &&
-                       Evict(null))
+                       EvictOldest())
                 {
                 }
 
                 if (_entries.Count < _maximumEntries && keyBytes <= _maximumBytes - _bytes)
                 {
-                    entry = new Entry(compile, keyBytes, ++_sequence);
+                    entry = new Entry(key, compile, keyBytes);
 
                     _entries.Add(key, entry);
 
@@ -57,8 +63,8 @@ internal sealed class HostShaderBytecodeCache
             }
         }
 
-        // When every slot is pending, preserve bounded retention rather than
-        // evict in-flight compiles. Independent keys may compile concurrently.
+        // Pending entries are not eviction candidates. Compilation and waiting
+        // remain outside the cache lock, including the bounded bypass path.
         if (entry is null)
         {
             return compile();
@@ -74,7 +80,7 @@ internal sealed class HostShaderBytecodeCache
         {
             lock (_gate)
             {
-                RemoveIfCurrent(key, entry);
+                RemoveIfCurrent(entry);
             }
 
             throw;
@@ -89,80 +95,101 @@ internal sealed class HostShaderBytecodeCache
 
             if (result is null)
             {
-                RemoveIfCurrent(key, entry);
+                RemoveIfCurrent(entry);
 
                 return null;
             }
 
-            entry.LastUse = ++_sequence;
-
-            if (!entry.Completed)
+            if (entry.Result is not null)
             {
-                while (result.Length > _maximumBytes - _bytes && Evict(entry))
-                {
-                }
+                Touch(entry);
 
-                if (result.Length > _maximumBytes - _bytes)
-                {
-                    RemoveIfCurrent(key, entry);
-                }
-                else
-                {
-                    entry.Charge += result.Length;
-                    _bytes += result.Length;
-                    entry.Completed = true;
-                }
+                return result;
+            }
+
+            // An artifact that cannot fit even in an empty cache must not
+            // displace unrelated, usable completed entries.
+            if (result.Length > _maximumBytes - entry.Charge)
+            {
+                RemoveIfCurrent(entry);
+
+                return result;
+            }
+
+            while (result.Length > _maximumBytes - _bytes && EvictOldest())
+            {
+            }
+
+            if (result.Length > _maximumBytes - _bytes)
+            {
+                RemoveIfCurrent(entry);
+            }
+            else
+            {
+                entry.Node = _completed.AddLast(entry);
+                entry.Charge += result.Length;
+                _bytes += result.Length;
+                entry.Result = result;
             }
         }
 
         return result;
     }
 
-    // All metadata mutations occur under _gate. No caller, compiler, or waiter
-    // runs under this lock. Only successfully accounted results can be evicted.
-    private bool Evict(Entry? exclude)
+    // Only accounted completed entries have a node. The list is ordered from
+    // least to most recently used. All list and dictionary access is locked.
+    private void Touch(Entry entry)
     {
-        var key = (Source: string.Empty, Profile: string.Empty);
-        Entry? oldest = null;
+        var node = entry.Node;
 
-        foreach (var candidate in _entries)
+        if (node is null || ReferenceEquals(node, _completed.Last))
         {
-            var entry = candidate.Value;
-
-            if (entry.Completed && !ReferenceEquals(entry, exclude) &&
-                (oldest is null || entry.LastUse < oldest.LastUse))
-            {
-                oldest = entry;
-                key = candidate.Key;
-            }
+            return;
         }
 
-        if (oldest is null)
+        _completed.Remove(node);
+
+        _completed.AddLast(node);
+    }
+
+    private bool EvictOldest()
+    {
+        if (_completed.First is not { } oldest)
         {
             return false;
         }
 
-        RemoveIfCurrent(key, oldest);
+        RemoveIfCurrent(oldest.Value);
 
         return true;
     }
 
-    private void RemoveIfCurrent((string Source, string Profile) key, Entry entry)
+    private void RemoveIfCurrent(Entry entry)
     {
-        if (_entries.TryGetValue(key, out var current) && ReferenceEquals(current, entry))
+        if (!_entries.TryGetValue(entry.Key, out var current) || !ReferenceEquals(current, entry))
         {
-            _entries.Remove(key);
-
-            _bytes -= entry.Charge;
+            return;
         }
+
+        _entries.Remove(entry.Key);
+
+        if (entry.Node is { } node)
+        {
+            _completed.Remove(node);
+
+            entry.Node = null;
+        }
+
+        _bytes -= entry.Charge;
     }
 
-    private sealed class Entry(Func<byte[]?> compile, long charge, long lastUse)
+    private sealed class Entry((string Source, string Profile) key, Func<byte[]?> compile, long charge)
     {
+        internal readonly (string Source, string Profile) Key = key;
         internal readonly Lazy<byte[]?> Value = new(compile, LazyThreadSafetyMode.ExecutionAndPublication);
+        internal LinkedListNode<Entry>? Node;
+        internal byte[]? Result;
         internal long Charge = charge;
-        internal long LastUse = lastUse;
-        internal bool Completed;
     }
 
     internal static void Verify()
@@ -215,6 +242,19 @@ internal sealed class HostShaderBytecodeCache
         if (oversizedHit)
         {
             throw new InvalidOperationException("R63 retained an oversized artifact.");
+        }
+
+        var bounded = new HostShaderBytecodeCache(4, 256);
+
+        _ = bounded.GetOrCompile("keep", "cs", () => [11], out _);
+        _ = bounded.GetOrCompile("oversized", "cs", () => new byte[512], out _);
+
+        var retained = bounded.GetOrCompile("keep", "cs",
+            () => throw new InvalidOperationException("R70 oversized artifact displaced a valid entry."), out var retainedHit);
+
+        if (!retainedHit || retained is not [11])
+        {
+            throw new InvalidOperationException("R70 cache retention mismatch.");
         }
 
         Console.WriteLine("[graphics-probe] IRX-R63: requests=16; compilations=1; profileIsolation=verified; LRU=verified; retry=verified; byteBudget=verified (CPU cache contract).");
