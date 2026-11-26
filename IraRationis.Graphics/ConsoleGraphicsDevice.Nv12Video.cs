@@ -338,8 +338,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         root = 0;
         pipeline = 0;
 
-        var shader = CompileR10ShaderCore(shaderSource ?? Nv12ConversionShader, "cs_5_1", report)
-                     ?? throw new InvalidOperationException("R42 conversion shader compilation failed.");
+        var shader = CompileR47HostMediaShader(shaderSource ?? Nv12ConversionShader, report);
         var parameters = stackalloc D3D12_ROOT_PARAMETER1[2];
         var range = new D3D12_DESCRIPTOR_RANGE1 { NumDescriptors = 2 };
 
