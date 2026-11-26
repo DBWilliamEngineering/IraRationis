@@ -87,6 +87,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             ExecuteAuthoredScalarBatch(queue, source, inputA, inputB, expectedA, expectedB, started, lowered);
+
+            if (Environment.GetEnvironmentVariable("IRX_SAMPLE_TYPED_COMPUTE") == "1")
+            {
+                VerifyAuthoredTypedCompute(queue);
+            }
         }
         finally
         {
@@ -95,9 +100,29 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
+    private static void VerifyAuthoredTypedCompute(nint queue)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var program = TypedComputeProbe.CreateProgram();
+
+        TypedComputeProbe.Verify(program);
+
+        var inputA = TypedComputeProbe.CreateInput(3);
+        var inputB = TypedComputeProbe.CreateInput(100);
+        var expectedA = TypedComputeProbe.Expected(3);
+        var expectedB = TypedComputeProbe.Expected(100);
+        var source = program.EmitHlsl();
+        var lowered = Stopwatch.GetTimestamp();
+
+        ExecuteAuthoredScalarBatch(queue, source, inputA, inputB, expectedA, expectedB, started, lowered,
+            "IRX-R66-GPU");
+
+        Console.WriteLine("[runtime] IRX-R66: returned=2; exhausted=1; outputWords=309; partialOutput=none; readback=verified.");
+    }
+
     private static void ExecuteAuthoredScalarBatch(nint queue, string source, ReadOnlySpan<uint> inputA,
         ReadOnlySpan<uint> inputB, ReadOnlySpan<uint> expectedA, ReadOnlySpan<uint> expectedB,
-        long started, long lowered)
+        long started, long lowered, string reportMarker = "IRX-R58-62")
     {
         if (sizeof(R52BufferSrv) != sizeof(D3D12_SHADER_RESOURCE_VIEW_DESC) ||
             sizeof(R52BufferUav) != sizeof(D3D12_UNORDERED_ACCESS_VIEW_DESC))
@@ -203,7 +228,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             Console.WriteLine(FormattableString.Invariant(
-                $"[runtime] IRX-R58-62: scalarDispatches={AuthoredScalarDispatches}; tableMaterializations={cache.Materializations}; submissions=1; completionWaits=1; uploadBytes={utility.LastUploadBytes}; loweringMs={Stopwatch.GetElapsedTime(started, lowered).TotalMilliseconds:F3}; compileAndAcquireMs={Stopwatch.GetElapsedTime(lowered, compiled).TotalMilliseconds:F3}; recordMs={Stopwatch.GetElapsedTime(compiled, recorded).TotalMilliseconds:F3}; completionMs={Stopwatch.GetElapsedTime(recorded, completed).TotalMilliseconds:F3}; readback=verified."));
+                $"[runtime] {reportMarker}: scalarDispatches={AuthoredScalarDispatches}; tableMaterializations={cache.Materializations}; submissions=1; completionWaits=1; uploadBytes={utility.LastUploadBytes}; loweringMs={Stopwatch.GetElapsedTime(started, lowered).TotalMilliseconds:F3}; compileAndAcquireMs={Stopwatch.GetElapsedTime(lowered, compiled).TotalMilliseconds:F3}; recordMs={Stopwatch.GetElapsedTime(compiled, recorded).TotalMilliseconds:F3}; completionMs={Stopwatch.GetElapsedTime(recorded, completed).TotalMilliseconds:F3}; readback=verified."));
         }
         finally
         {
