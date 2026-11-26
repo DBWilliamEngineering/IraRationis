@@ -210,6 +210,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             frame.Texture = CreateR42Resource(_device, description, 1, CopyDestination);
             frame.Upload = CreateR42Resource(_device, HostBufferDescription((ulong)_uploadBytes), 2, GenericRead);
+            // Upload heaps may remain mapped for their entire lifetime. Each slot
+            // is written only after its previous GPU submission has completed.
+            var range = default(HostRange);
+            var mapped = (void*)null;
+            var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(frame.Upload, 8);
+            CheckHostResult(map(frame.Upload, 0, &range, &mapped), "R46 persistent upload map");
+            frame.UploadMapped = true;
+            frame.UploadAddress = (nint)mapped;
+            if (mapped == null)
+            {
+                throw new InvalidOperationException("R46 upload map returned null.");
+            }
+
+            new Span<byte>(mapped, _uploadBytes).Clear();
             var outputDescription = HostBufferDescription(_colorBytes);
             outputDescription.Flags = 4;
             frame.Output = CreateR42Resource(_device, outputDescription, 1, 8);
@@ -286,11 +300,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var frame = _frames[index];
             Wait(frame.FenceValue);
 
-            fixed (D3D12_PLACED_SUBRESOURCE_FOOTPRINT* layouts = _planes)
-            {
-                FillR42Upload(frame.Upload, _uploadBytes, layouts, nv12[..yBytes], _width, nv12[yBytes..], _width,
-                    _width, _height);
-            }
+            // The initial mapping cleared all padding. Subsequent writes touch
+            // only active pixels, never reading write-combined upload memory.
+            var upload = new Span<byte>((void*)frame.UploadAddress, _uploadBytes);
+            CopyR42Rows(nv12[..yBytes], _width, upload, _planes[0], _width, _height);
+            CopyR42Rows(nv12[yBytes..], _width, upload, _planes[1], _width, _height);
 
             var commands = (ID3D12GraphicsCommandList*)frame.List;
             CheckHostResult((int)((ID3D12CommandAllocator*)frame.Allocator)->Reset(), "R43 allocator reset");
@@ -458,6 +472,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ReleaseR42Object(frame.Heap);
                 ReleaseR42Object(frame.Buffer);
                 ReleaseR42Object(frame.Output);
+                if (frame.UploadMapped)
+                {
+                    var range = new HostRange { End = (nuint)_uploadBytes };
+                    var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(frame.Upload, 9);
+                    unmap(frame.Upload, 0, &range);
+                    frame.UploadMapped = false;
+                    frame.UploadAddress = 0;
+                }
+
                 ReleaseR42Object(frame.Upload);
                 ReleaseR42Object(frame.Texture);
             }
@@ -473,6 +496,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         private sealed class Frame
         {
             public nint Texture, Upload, Output, Heap, Buffer, Allocator, List;
+            public nint UploadAddress;
+            public bool UploadMapped;
             public ulong FenceValue;
         }
     }

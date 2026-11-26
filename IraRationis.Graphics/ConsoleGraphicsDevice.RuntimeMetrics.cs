@@ -9,8 +9,13 @@ namespace IraRationis.Graphics;
 public static partial class ConsoleGraphicsDevice
 {
     private static readonly bool R24Verbose = Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
-    private static readonly ConcurrentDictionary<(string File, int Line), long> R24TraceCounts = new();
+    private static readonly ConcurrentDictionary<(string File, int Line), R46TraceCounter> R24TraceCounts = new();
     private static readonly object R24MetricsGate = new();
+    private static Timer? _r46ReportTimer;
+    private sealed class R46TraceCounter
+    {
+        public long Count;
+    }
     private static long _r24FenceCreations, _r24FenceReuses, _r24FenceWaits, _r24FenceTicks;
     private static long _r24GuestWaits, _r24GuestWaitTicks, _r24PreviousGuestWaits, _r24PreviousGuestWaitTicks;
     private static long _r24Draws, _r24Dispatches, _r24PresentAttempts, _r24PresentSuccesses, _r24PresentTicks;
@@ -29,7 +34,8 @@ public static partial class ConsoleGraphicsDevice
             return;
         }
 
-        var count = R24TraceCounts.AddOrUpdate((file, line), 1, static (_, previous) => previous + 1);
+        var counter = R24TraceCounts.GetOrAdd((file, line), static _ => new R46TraceCounter());
+        var count = Interlocked.Increment(ref counter.Count);
         if (count <= 4 || (count & (count - 1)) == 0)
         {
             Console.Error.WriteLine(message);
@@ -63,6 +69,23 @@ public static partial class ConsoleGraphicsDevice
     }
 
     private static void ReportR24Metrics()
+    {
+        if (Volatile.Read(ref _r46ReportTimer) is not null)
+        {
+            return;
+        }
+
+        lock (R24MetricsGate)
+        {
+            if (_r46ReportTimer is null)
+            {
+                _r24LastReport = Stopwatch.GetTimestamp();
+                Volatile.Write(ref _r46ReportTimer, new Timer(static _ => ReportR46Metrics(), null, 2000, 2000));
+            }
+        }
+    }
+
+    private static void ReportR46Metrics()
     {
         var now = Stopwatch.GetTimestamp();
         if (now - Volatile.Read(ref _r24LastReport) < 2 * Stopwatch.Frequency || !Monitor.TryEnter(R24MetricsGate))
@@ -105,6 +128,10 @@ public static partial class ConsoleGraphicsDevice
             _r24PreviousSuccesses = successes;
             _r24PreviousPresentTicks = presentTicks;
             Volatile.Write(ref _r24LastReport, now);
+        }
+        catch (Exception)
+        {
+            // A closed diagnostic stream must not terminate execution.
         }
         finally
         {
