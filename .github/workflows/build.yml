@@ -43,7 +43,7 @@ jobs:
                   arch: x64
             - name: Normalize MSBuild platform after MSVC setup
               run: |
-                  "Platform=Any CPU" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+                  "Platform=AnyCPU" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             - name: Restore solution
               run: dotnet restore IraRationis.slnx -p:Configuration=Release -p:Platform="Any CPU"
             - name: Build solution
@@ -83,6 +83,10 @@ jobs:
               run: ./artifacts/native/irx.exe veh-probe
             - name: Test instruction memory validation and page permissions
               run: ./artifacts/native/irx.exe instruction-probe
+            - name: Publish authored runtime bridge contracts with Native AOT
+              run: dotnet publish IraRationis.Runtime.Tests -c Release -r win-x64 -p:Platform=AnyCPU -o artifacts/runtime-bridge-contracts
+            - name: Test native runtime bridge forwarding and diagnostic contracts
+              run: ./artifacts/runtime-bridge-contracts/IraRationis.Runtime.Tests.exe --runtime-bridge-only
             - name: Smoke-test native executable
               run: python tests/smoke.py artifacts/native/irx.exe
             - name: Test native entry and thread execution

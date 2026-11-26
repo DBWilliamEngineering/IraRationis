@@ -2,6 +2,7 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <PublishAot>true</PublishAot>
         <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>

@@ -10,6 +10,12 @@ Extraction makes dependencies visible but does not automatically remove them. In
 
 The [architecture atlas](ARCHITECTURE-ATLAS.md) provides subsystem diagrams. [Runtime integration](RUNTIME-INTEGRATION.md) describes utility-context and authored-sample integration, while [diagnostics](DIAGNOSTICS.md) covers startup and performance evidence.
 
+## Runtime boundary observation
+
+`HleResolver` accepts an optional `IHostFunctionObserver` after normal host resolution. The C# runtime-bridge observer decorates selected resolved function pointers while retaining host provenance, allow-list policy, and dependency-loading decisions. Observation is opt-in and does not add an HLE module claiming the runtime DLL. This keeps diagnostic lifetime separate from guest service ownership.
+
+Documented loader calls forward original arguments and results. Private initialization/query observers additionally require an inspected runtime fingerprint, module path, and export RVA. Returned service interfaces remain untouched; their implementations and asynchronous lifecycle are separate future compatibility work. Input callback/lookup records supply correlated timestamps without changing callback dispatch. [Runtime service diagnostics](DIAGNOSTICS.md#runtime-service-bridge) describes coverage and [authored contracts](RELEASING.md#runtime-bridge-diagnostic-validation) exercise forwarding in managed and Native AOT publications; execution results remain pending.
+
 ## Virtual unified memory (isolated research)
 
 ```mermaid

@@ -2,6 +2,7 @@
 // Wired DualSense input provider. No virtual device, output reports or third-party driver.
 
 using System.Runtime.InteropServices;
+using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
 
 namespace IraRationis.HLE.Input;
@@ -113,8 +114,7 @@ internal sealed unsafe class DualSenseProvider
 
                         if (GameInputModule.TraceInput && previous != pad.Buttons)
                         {
-                            Console.WriteLine(
-                                $"[input] IRX-R30-HID: buttons=0x{pad.Buttons:X8}; Y={(pad.Buttons & 32) != 0}");
+                            ReportButtons(previous, pad.Buttons);
                         }
 
                         previous = pad.Buttons;
@@ -131,6 +131,25 @@ internal sealed unsafe class DualSenseProvider
                 _ = GameInputModule.HidClose(handle);
             }
         }
+    }
+
+    private static void ReportButtons(uint previousButtons, uint currentButtons)
+    {
+        var category = InputDiagnosticCategory.HidButtonsChanged;
+
+        if (previousButtons == uint.MaxValue)
+        {
+            category = InputDiagnosticCategory.HidReading;
+        }
+        else if (((previousButtons ^ currentButtons) & 32) != 0)
+        {
+            category = (currentButtons & 32) != 0
+                ? InputDiagnosticCategory.HidYPressed
+                : InputDiagnosticCategory.HidYReleased;
+        }
+
+        GameInputModule.InputDiagnostics.Write(category, currentButtons,
+            static buttons => $"buttons=0x{buttons:X8}; Y={(buttons & 32) != 0}");
     }
 
     private static string? FindDualSensePath()

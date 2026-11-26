@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Graphics;
+using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
 using IraRationis.HLE.Runtime.Models;
 
@@ -244,13 +245,10 @@ public static unsafe partial class GameInputModule
 
                 if (TraceInput)
                 {
-                    var observation = Interlocked.Increment(ref _currentReads);
-
-                    if (SampleInput(observation))
-                    {
-                        Console.WriteLine(
-                            $"[input] IRX-R30-CURRENT: count={observation}; kind=0x{kind:X}; device={requested}; selected={newest?.Index ?? -1}");
-                    }
+                    InputDiagnostics.Write(InputDiagnosticCategory.CurrentReading,
+                        (Kind: kind, Device: device, Requested: requested, Selected: newest?.Index ?? -1),
+                        static reading => $"kind=0x{reading.Kind:X}; device=0x{reading.Device:X}; "
+                                          + $"requestedSlot={reading.Requested}; selectedSlot={reading.Selected}");
                 }
 
                 return Hand(output, newest);
@@ -317,10 +315,17 @@ public static unsafe partial class GameInputModule
     private static int RegisterReading(nint self, nint device, uint kind, float threshold, nint context, nint callback,
         nint output)
     {
-        _ = NextToken(output);
+        var token = NextToken(output);
 
-        Console.Error.WriteLine(
-            $"[input] IRX-R30-CALLBACK: reading registration kind=0x{kind:X}; not delivered (existing limitation).");
+        if (TraceInput)
+        {
+            InputDiagnostics.Write(InputDiagnosticCategory.ReadingRegistration,
+                (Token: token, Device: device, Kind: kind, Callback: callback, Context: context),
+                static registration => $"token={registration.Token}; device=0x{registration.Device:X}; "
+                                       + $"kind=0x{registration.Kind:X}; callback=0x{registration.Callback:X}; "
+                                       + $"context=0x{registration.Context:X}; "
+                                       + "result=0x00000000; delivered=false; reason=reading-callback-not-implemented");
+        }
 
         return 0;
     }
@@ -331,6 +336,14 @@ public static unsafe partial class GameInputModule
     {
         if (callback == 0)
         {
+            if (TraceInput)
+            {
+                InputDiagnostics.Write(InputDiagnosticCategory.DeviceRegistrationFailure,
+                    (Device: device, Kind: kind),
+                    static registration => $"device=0x{registration.Device:X}; kind=0x{registration.Kind:X}; "
+                                           + "result=0x80070057; reason=null-callback");
+            }
+
             return InvalidArgument;
         }
 
@@ -339,6 +352,7 @@ public static unsafe partial class GameInputModule
             var hub = Shared.Value;
             var registration = new GameInputRegistration(NextToken(output), device, kind, status, context, callback);
             var events = new List<GameInputNotification>();
+            var enumerationCount = 0;
 
             lock (hub.Gate)
             {
@@ -357,9 +371,21 @@ public static unsafe partial class GameInputModule
 
                 if (enumeration == 1)
                 {
+                    enumerationCount = events.Count;
                     hub.Pending.AddRange(events);
 
                     events.Clear();
+                }
+
+                if (TraceInput)
+                {
+                    InputDiagnostics.Write(InputDiagnosticCategory.DeviceRegistration,
+                        (Registration: registration, Enumeration: enumeration, Immediate: events.Count, Queued: enumerationCount),
+                        static request => $"token={request.Registration.Token}; device=0x{request.Registration.Device:X}; "
+                                          + $"kind=0x{request.Registration.Kind:X}; status=0x{request.Registration.Status:X}; "
+                                          + $"callback=0x{request.Registration.Callback:X}; context=0x{request.Registration.Context:X}; "
+                                          + $"enumeration={request.Enumeration}; immediate={request.Immediate}; "
+                                          + $"queued={request.Queued}; phase=registered");
                 }
             }
 
@@ -369,6 +395,14 @@ public static unsafe partial class GameInputModule
         }
         catch
         {
+            if (TraceInput)
+            {
+                InputDiagnostics.Write(InputDiagnosticCategory.DeviceRegistrationFailure,
+                    (Device: device, Kind: kind),
+                    static registration => $"device=0x{registration.Device:X}; kind=0x{registration.Kind:X}; "
+                                           + "result=0x80004005; reason=registration-or-delivery-exception");
+            }
+
             return Failure;
         }
     }
@@ -444,6 +478,14 @@ public static unsafe partial class GameInputModule
     {
         if (id == null || output == null)
         {
+            if (TraceInput)
+            {
+                InputDiagnostics.Write(InputDiagnosticCategory.FindDeviceFailure,
+                    (Id: (nuint)id, Output: (nuint)output),
+                    static request => $"idAddress=0x{request.Id:X}; outputAddress=0x{request.Output:X}; "
+                                      + "result=0x80070057; reason=null-argument");
+            }
+
             return Fail(output, InvalidArgument);
         }
 
@@ -455,8 +497,22 @@ public static unsafe partial class GameInputModule
             {
                 *output = pointer;
 
+                if (TraceInput)
+                {
+                    InputDiagnostics.Write(InputDiagnosticCategory.FindDeviceSuccess,
+                        (Id: (nuint)id, Device: pointer, Slot: device->Index),
+                        static match => $"idAddress=0x{match.Id:X}; device=0x{match.Device:X}; "
+                                        + $"slot={match.Slot}; result=0x00000000");
+                }
+
                 return 0;
             }
+        }
+
+        if (TraceInput)
+        {
+            InputDiagnostics.Write(InputDiagnosticCategory.FindDeviceFailure, (nuint)id,
+                static address => $"idAddress=0x{address:X}; result=0x838A0002; reason=id-not-found");
         }
 
         return Fail(output, DeviceNotFound);
@@ -620,16 +676,34 @@ public static unsafe partial class GameInputModule
         if (TraceInput)
         {
             var observation = Interlocked.Increment(ref _padReads);
-            var previous = Interlocked.Exchange(ref _guestButtons, unchecked((int)pad.Buttons));
+            var previous = Interlocked.Exchange(ref GuestButtons[snapshot.Index], unchecked((int)pad.Buttons));
+            var category = GuestReadingCategory(unchecked((uint)previous), pad.Buttons);
 
-            if (SampleInput(observation) || unchecked((uint)previous) != pad.Buttons)
-            {
-                Console.WriteLine(
-                    $"[input] IRX-R30-GUEST: count={observation}; slot={snapshot.Index}; buttons=0x{pad.Buttons:X8}; Y={(pad.Buttons & 32) != 0}");
-            }
+            InputDiagnostics.Write(category,
+                (Observation: observation, Snapshot: snapshot, Buttons: pad.Buttons),
+                static reading => $"reads={reading.Observation}; slot={reading.Snapshot.Index}; "
+                                  + $"sequence={reading.Snapshot.Sequence}; inputTimestamp={reading.Snapshot.Timestamp}; "
+                                  + $"buttons=0x{reading.Buttons:X8}; Y={(reading.Buttons & 32) != 0}");
         }
 
         return 1;
+    }
+
+    private static InputDiagnosticCategory GuestReadingCategory(uint previousButtons, uint currentButtons)
+    {
+        if (previousButtons == currentButtons)
+        {
+            return InputDiagnosticCategory.GuestReading;
+        }
+
+        if (((previousButtons ^ currentButtons) & 32) == 0)
+        {
+            return InputDiagnosticCategory.GuestButtonsChanged;
+        }
+
+        return (currentButtons & 32) != 0
+            ? InputDiagnosticCategory.GuestYPressed
+            : InputDiagnosticCategory.GuestYReleased;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

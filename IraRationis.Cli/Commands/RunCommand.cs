@@ -16,6 +16,7 @@ using IraRationis.HLE.Input;
 using IraRationis.HLE.Kernel;
 using IraRationis.HLE.Memory;
 using IraRationis.HLE.Runtime;
+using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.HLE.Runtime.Models;
 using IraRationis.HLE.Storage;
 using IraRationis.Loader.Images;
@@ -38,10 +39,12 @@ internal static class RunCommand
 
         using var logSampling = RuntimeLogSampling.Begin();
         using var startup = RuntimeStartupObservation.Begin();
+        using var runtimeBridge = RuntimeBridgeDiagnostics.Begin(Console.Error);
 
         HardwareCapabilityReport.WriteTo(Console.Error, HardwareCapabilityProbe.Capture());
 
         var path = Path.GetFullPath(executable);
+        runtimeBridge?.DescribeContext(path);
         var titleDirectory =
             Path.GetDirectoryName(path) ?? throw new InvalidDataException("Title directory not found.");
 
@@ -85,7 +88,7 @@ internal static class RunCommand
 
         var registry = new HleRegistry(modules);
         var host = strict ? new HostPolicy([]) : new HostPolicy();
-        var resolver = new HleResolver(registry, host);
+        var resolver = new HleResolver(registry, host, runtimeBridge);
         var dependencies = new TitleImages(titleDirectory, cache,
             dll => !host.Allows(dll) && !modules.Any(module => module.Serves(dll)), resolver);
 
@@ -120,6 +123,8 @@ internal static class RunCommand
 
         Console.WriteLine($"Console: {ConsoleConfiguration.GetName(console)}");
         Console.WriteLine($"Title: {title.Id:X8}; storage: {storage}");
+
+        runtimeBridge?.RegisterImages(dependencies.Ordered.Append(main));
 
         foreach (var image in dependencies.Ordered.Append(main))
         {

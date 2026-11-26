@@ -3,11 +3,12 @@
 
 using IraRationis.Loader.Imports;
 using IraRationis.Loader.Imports.Models;
+using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.PE.Models;
 
 namespace IraRationis.HLE.Runtime;
 
-public sealed class HleResolver(HleRegistry registry, HostPolicy host) : IImportResolver
+public sealed class HleResolver(HleRegistry registry, HostPolicy host, IHostFunctionObserver? observer = null) : IImportResolver
 {
     public ImportResolution? Resolve(string dll, ImportSymbol symbol)
     {
@@ -22,7 +23,8 @@ public sealed class HleResolver(HleRegistry registry, HostPolicy host) : IImport
 
         if (address.HasValue)
         {
-            return new ImportResolution(address.Value, ImportProvenance.Host);
+            return new ImportResolution(observer?.Observe(dll, symbol, address.Value) ?? address.Value,
+                ImportProvenance.Host);
         }
 
         return null;

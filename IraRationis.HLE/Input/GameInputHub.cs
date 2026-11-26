@@ -2,6 +2,7 @@
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/gameinput.rs.
 
 using System.Runtime.InteropServices;
+using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
 
 namespace IraRationis.HLE.Input;
@@ -177,7 +178,10 @@ internal sealed unsafe class GameInputHub
 
         if (GameInputModule.TraceInput)
         {
-            Console.WriteLine($"[input] IRX-R30-DEVICE: slot={index}; connected={connected}");
+            GameInputModule.InputDiagnostics.Write(InputDiagnosticCategory.DeviceConnection,
+                (Slot: index, Connected: connected, Timestamp: timestamp),
+                static connection => $"slot={connection.Slot}; connected={connection.Connected}; "
+                                     + $"inputTimestamp={connection.Timestamp}");
         }
 
         foreach (var registration in Registrations)
@@ -208,6 +212,8 @@ internal sealed unsafe class GameInputHub
             {
                 if (!Registrations.Any(value => value.Token == registration.Token))
                 {
+                    ReportCallback(InputDiagnosticCategory.DeviceCallbackSkipped, notification);
+
                     continue;
                 }
 
@@ -219,8 +225,12 @@ internal sealed unsafe class GameInputHub
                 var callback =
                     (delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void>)registration.Callback;
 
+                ReportCallback(InputDiagnosticCategory.DeviceCallbackEnter, notification);
+
                 callback(registration.Token, registration.Context, Devices[notification.Index],
                     notification.Timestamp, notification.Current, notification.Previous);
+
+                ReportCallback(InputDiagnosticCategory.DeviceCallbackReturn, notification);
             }
             finally
             {
@@ -231,6 +241,21 @@ internal sealed unsafe class GameInputHub
                     Monitor.PulseAll(Gate);
                 }
             }
+        }
+    }
+
+    private void ReportCallback(InputDiagnosticCategory category, GameInputNotification notification)
+    {
+        if (GameInputModule.TraceInput)
+        {
+            GameInputModule.InputDiagnostics.Write(category,
+                (Notification: notification, Device: Devices[notification.Index]),
+                static delivery => $"token={delivery.Notification.Registration.Token}; "
+                                   + $"callback=0x{delivery.Notification.Registration.Callback:X}; "
+                                   + $"context=0x{delivery.Notification.Registration.Context:X}; "
+                                   + $"slot={delivery.Notification.Index}; device=0x{delivery.Device:X}; "
+                                   + $"inputTimestamp={delivery.Notification.Timestamp}; "
+                                   + $"status=0x{delivery.Notification.Current:X}; previousStatus=0x{delivery.Notification.Previous:X}");
         }
     }
 

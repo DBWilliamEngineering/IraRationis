@@ -15,14 +15,34 @@ using IraRationis.PE.Models;
 using IraRationis.Runtime.Tests.Contracts;
 using IraRationis.Runtime.Tests.Hardware;
 using IraRationis.Runtime.Tests.Instructions;
+using IraRationis.Runtime.Tests.Input;
 using IraRationis.Runtime.Tests.Memory;
+using IraRationis.Runtime.Tests.RuntimeBridge;
 
 namespace IraRationis.Runtime.Tests;
 
 internal static class Program
 {
-    private static int Main()
+    private static int Main(string[] args)
     {
+        if (args is ["--runtime-bridge-only"])
+        {
+            InputDiagnosticReportTests.Run();
+
+            RuntimeBridgeDiagnosticsTests.Run();
+
+            Console.WriteLine("Runtime bridge diagnostic contracts passed.");
+
+            return 0;
+        }
+
+        if (args.Length != 0)
+        {
+            Console.Error.WriteLine("Usage: IraRationis.Runtime.Tests [--runtime-bridge-only]");
+
+            return 2;
+        }
+
         TestInstructions();
 
         TestSse4A();
@@ -40,6 +60,10 @@ internal static class Program
         GraphicsCapabilityTests.Run();
 
         InstructionEmulationOptionsTests.Run();
+
+        InputDiagnosticReportTests.Run();
+
+        RuntimeBridgeDiagnosticsTests.Run();
 
         MappedViewIndexTests.Run();
 

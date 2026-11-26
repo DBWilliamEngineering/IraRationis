@@ -17,18 +17,18 @@ The November 26, 2026 maintainer-supplied output reports:
 
 This is maintainer-supplied local evidence, not an independent rerun or a CI result. It does not report a pass for every command below; Native AOT publication, native/media/GPU probes, game startup, and physical output require their own results. Historical `IRX-Rxx` success markers identify existing contract suites and do not restore release-based implementation naming.
 
-Run from the repository root. Explicitly selecting `Any CPU` prevents an inherited MSVC `Platform=x64` environment from selecting a nonexistent solution configuration; publication still targets `win-x64`.
+Run from the repository root. The solution uses `Any CPU`; individual projects use `AnyCPU`. Explicitly selecting each prevents an inherited MSVC `Platform=x64` environment from selecting a nonexistent solution configuration or a different project output directory. Publication still targets `win-x64`.
 
 ```powershell
 dotnet restore IraRationis.slnx -p:Configuration=Release -p:Platform="Any CPU"
 dotnet build IraRationis.slnx -c Release --no-restore -p:Platform="Any CPU"
-dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
-dotnet run --project tests/startup-evidence/StartupEvidence.Contracts.csproj -c Release --no-build
-dotnet run --project tests/versioned-upload/VersionedUpload.Contracts.csproj -c Release --no-build
-dotnet run --project tests/descriptor-bindings/DescriptorBindings.Contracts.csproj -c Release --no-build
-dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build
-dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build
-dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
+dotnet run --project IraRationis.Runtime.Tests -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/startup-evidence/StartupEvidence.Contracts.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/versioned-upload/VersionedUpload.Contracts.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/descriptor-bindings/DescriptorBindings.Contracts.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet publish IraRationis.Cli -c Release -r win-x64 -p:Platform=AnyCPU -o artifacts/native
 ```
 
 Check each exit status and stop on failure. Use a separate publish directory when retaining a build's exact EXE/DLL/PDB identity for profiling.
@@ -47,7 +47,38 @@ dotnet msbuild tests/native/runtime-audio/RuntimeAudio.proj -t:Build
 
 The native probe scripts convert their expected synthetic success sentinel into exit code zero. For native audio launch and optional speaker acceptance, follow its [acceptance instructions](../tests/native/runtime-audio/README.md).
 
-`instruction-probe` compares baseline and resident-page destination validation on owned synthetic allocations. It checks exact cache-line writes, changing protections, guard preservation, commitment changes, page boundaries, mapped aliases, and copy-on-write isolation. It returns nonzero on a contract failure. The new instruction-memory and capability-report contracts have not yet been reported as executed; earlier passing results above do not cover these additions. Build and publish the managed executable and native DLL together because the handler now passes an explicit options ABI.
+`instruction-probe` compares baseline and resident-page destination validation on owned synthetic allocations. It checks exact cache-line writes, changing protections, guard preservation, commitment changes, page boundaries, mapped aliases, and copy-on-write isolation. It returns nonzero on a contract failure. Damon supplied passing `veh-probe` and `instruction-probe` output on November 26, 2026; see the [resident-page validation results](DIAGNOSTICS.md#resident-page-validation-results). The newly added instruction-option/ABI and capability-report tests in the runtime component suite have not separately been reported as executed; earlier component results do not cover those additions. Build and publish the managed executable and native DLL together because the handler now passes an explicit options ABI.
+
+## Runtime bridge diagnostic validation
+
+The bridge tests use authored unmanaged-callable C# targets and owned memory. They do not load or initialize the real gaming runtime, sign in a user, or make network requests. The regular component suite includes forwarding, error-state, bounded input correlation, and private-ABI policy tests. A separate Native AOT publication exercises the same forwarding contracts in the execution model used by the game host.
+
+`PublishAot` is configured locally in the test executable's project, as it is in the CLI project. Do not pass `-p:PublishAot=true` globally: MSBuild forwards that setting to referenced projects, including the compiler's `netstandard2.0` source generator, which produces `NETSDK1207`. The generator's framework is intentional; ordinary test builds and `dotnet run` remain managed.
+
+Run from the repository root, stopping on the first failure:
+
+```powershell
+dotnet build IraRationis.slnx -c Release -p:Platform="Any CPU"
+if ($LASTEXITCODE -ne 0) { throw 'Solution build failed.' }
+
+dotnet run --project IraRationis.Runtime.Tests -c Release --no-build -p:Platform=AnyCPU
+if ($LASTEXITCODE -ne 0) { throw 'Component tests failed.' }
+
+dotnet publish IraRationis.Runtime.Tests -c Release -r win-x64 `
+    -p:Platform=AnyCPU -o artifacts/runtime-bridge-contracts
+if ($LASTEXITCODE -ne 0) { throw 'Native AOT contract publication failed.' }
+
+& .\artifacts\runtime-bridge-contracts\IraRationis.Runtime.Tests.exe --runtime-bridge-only
+if ($LASTEXITCODE -ne 0) { throw 'Native AOT bridge contracts failed.' }
+
+dotnet publish IraRationis.Cli -c Release -r win-x64 `
+    -p:Platform=AnyCPU -o artifacts/runtime-bridge
+if ($LASTEXITCODE -ne 0) { throw 'Game-host publication failed.' }
+```
+
+The final authored-contract marker is `Runtime bridge diagnostic contracts passed.` Coverage includes full-width arguments, opaque options, exact HRESULT/output handling, both error channels, aliases/ordinals, conflicting addresses, throwing writers, limits, and cached callbacks after disposal. Owned-page fixtures check guard preservation, page-edge terminators, cross-page GUID/pointer reads, permission changes, and reserved pages. These additions have received static review; compilation and execution remain maintainer validation until results are supplied. They do not establish the actual Account Picker outcome.
+
+Then follow the [runtime service bridge capture](DIAGNOSTICS.md#runtime-service-bridge). Keep its EXE/DLL/PDB files together in the new publication directory; the prior `native-validation` build remains available for comparison.
 
 ## Media and GPU acceptance
 
@@ -58,7 +89,7 @@ $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 $fixture = (Resolve-Path tests/media-baseline/fixture.mp4).Path
 $intro = (Resolve-Path tests/media-baseline/vindex-intro.mp4).Path
 
-dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release --no-build -- $ffmpeg $fixture
+dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release --no-build -p:Platform=AnyCPU -- $ffmpeg $fixture
 & $irx media-probe $ffmpeg $intro --stream
 & $irx media-probe $ffmpeg $intro --stream-gpu
 & $irx media-probe --mf $intro --play
@@ -71,8 +102,8 @@ On Windows with D3D12 hardware, also run:
 
 ```powershell
 & $irx graphics-probe
-dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build
-dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build -- --clip $intro
+dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build -p:Platform=AnyCPU
+dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build -p:Platform=AnyCPU -- --clip $intro
 ```
 
 See [runtime integration](RUNTIME-INTEGRATION.md) for the authored native sample ABI and utility contexts, and [diagnostics](DIAGNOSTICS.md) for game-run observation and network capture.

@@ -37,11 +37,11 @@ On November 26, 2026, the maintainer supplied a successful local build and passi
 | --- | --- |
 | Native execution | Executable entry, dependency binding, and native execution have been observed in earlier local runs. Import resolution does not establish behavioral parity. |
 | Graphics | Recognizable guest UI and D3D12/DXGI presentation have been observed. Shader coverage, resource coherence, and general command semantics remain incomplete. |
-| Input | Guest-consumed wired DualSense readings have been observed. Reading-callback delivery is incomplete and is a candidate to investigate at the Account Picker. |
+| Input | Guest-consumed wired DualSense Y presses and UI recognition are confirmed, but Account Picker remains blocked. Reading-callback delivery is incomplete; no such registration was observed in the supplied runs. |
 | Storage | Raw/Zlib payload contracts passed in the maintainer's November 26 local run, including strict length checks, legacy short-output behavior, overflow, and invalid-data rejection. Ordered reads and completion reporting exist; BCPack and shared weighted scheduling remain outstanding. |
 | Independent media | Local decoding, CPU/GPU presentation, bounded streaming, and PCM output paths exist. Earlier authored-fixture playback was observed; this does not establish the game's movie/audio integration. |
-| Memory performance | Mapped views use indexed range lookup and contiguous alias resolution. CLZERO destination validation has an opt-in fresh resident-page query with a region-query fallback; its new contracts and game-performance effect await validation. |
-| Diagnostics | Startup/input observations, CPU attribution, native PDB output, process-scoped DNS/socket tracing, and host capability snapshots are available. |
+| Memory performance | Mapped views use indexed range lookup and contiguous alias resolution. The opt-in resident-page CLZERO validator passed the maintainer's authored-memory probes. A follow-up Account Picker run reported late presentation intervals of 16.48-17.21/s, versus 0-0.50/s previously; this is an observed cross-run improvement, not a controlled gameplay benchmark. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
+| Diagnostics | Startup/input observations, CPU attribution, native PDB output, process-scoped DNS/socket tracing, host capability snapshots, and opt-in C# runtime-bridge forwarding observations are available. The new bridge and timestamped input contracts await maintainer execution; see [validation](docs/RELEASING.md#runtime-bridge-diagnostic-validation). |
 | Logo, guest audio, account workflow, main menu | Unresolved end-to-end. A successful build or authored fixture does not establish these title paths. |
 | Gameplay and sustained FPS | Not demonstrated. No overall completion percentage or competitive performance claim is made. |
 

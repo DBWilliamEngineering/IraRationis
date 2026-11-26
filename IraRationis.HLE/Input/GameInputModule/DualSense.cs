@@ -2,6 +2,7 @@
 // Wired DualSense input provider. No virtual device, output reports or third-party driver.
 
 using System.Runtime.InteropServices;
+using IraRationis.HLE.Input.Diagnostics;
 using IraRationis.HLE.Input.Models;
 
 namespace IraRationis.HLE.Input;
@@ -9,9 +10,9 @@ namespace IraRationis.HLE.Input;
 public static unsafe partial class GameInputModule
 {
     internal static readonly bool TraceInput = Environment.GetEnvironmentVariable("IRX_INPUT_TRACE") == "1";
-    private static long _currentReads;
+    internal static readonly InputDiagnosticReport InputDiagnostics = new(TraceInput);
     private static long _padReads;
-    private static int _guestButtons;
+    private static readonly int[] GuestButtons = new int[DeviceCount];
 
     internal static bool SampleInput(long value)
     {
