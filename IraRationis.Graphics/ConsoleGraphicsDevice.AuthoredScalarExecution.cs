@@ -25,8 +25,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        ScalarValueGraphProbe.Verify();
+
         var started = Stopwatch.GetTimestamp();
-        uint[] words = [0xbe800385, 0x80018100, 0xb002fffe, 0x8003ff01, 0x12345678, 0xbf810000];
+        // Original fixture: dynamic add/subtract and bitwise operations, repeated
+        // expressions, overwritten values, then the existing known constant results.
+        uint[] words =
+        [
+            0x80058104, 0x80068104, 0x80878104, 0x87080405, 0x88090405, 0x890a0405,
+            0xbe8b0385, 0xbe8b0386, 0xbe800385, 0x80018100, 0xb002fffe,
+            0x8003ff01, 0x12345678, 0x800c810c, 0xbf810000
+        ];
         var code = new byte[words.Length * sizeof(uint)];
 
         for (var index = 0; index < words.Length; index++)
@@ -40,31 +49,31 @@ public static unsafe partial class ConsoleGraphicsDevice
         inputA[4] = 0x11223344;
         inputB[4] = 0x55667788;
         inputA[ScalarReferenceExecutor.RegisterCount] = 1;
+        inputB[12] = uint.MaxValue;
 
         var expectedA = ScalarReferenceExecutor.Execute(code, inputA);
         var expectedB = ScalarReferenceExecutor.Execute(code, inputB);
 
         if (expectedA[0] != 5 || expectedA[1] != 6 || expectedA[2] != 0xfffffffe ||
             expectedA[3] != 0x1234567e || expectedA[4] != inputA[4] || expectedB[4] != inputB[4] ||
-            expectedA[ScalarReferenceExecutor.RegisterCount] != 0)
+            expectedA[12] != 1 || expectedB[12] != 0 ||
+            expectedA[ScalarReferenceExecutor.RegisterCount] != 0 ||
+            expectedB[ScalarReferenceExecutor.RegisterCount] != 1)
         {
             throw new InvalidOperationException("Authored scalar reference result differs from known constants.");
         }
 
-        // LowerDiagnostic owns this source text. Typed R32_UINT views are equivalent to
-        // its one-dimensional uint structured buffers for this bounded diagnostic kernel.
-        var source = Rdna2ScalarCompiler.LowerDiagnostic(code);
-        const string inputDeclaration = "StructuredBuffer<uint> Input : register(t0);";
-        const string outputDeclaration = "RWStructuredBuffer<uint> Output : register(u0);";
+        var graph = ScalarValueGraph.Build(code);
 
-        if (!source.Contains(inputDeclaration, StringComparison.Ordinal) ||
-            !source.Contains(outputDeclaration, StringComparison.Ordinal))
+        if (!graph.Evaluate(inputA).AsSpan().SequenceEqual(expectedA) ||
+            !graph.Evaluate(inputB).AsSpan().SequenceEqual(expectedB))
         {
-            throw new InvalidOperationException("Scalar diagnostic binding contract changed.");
+            throw new InvalidOperationException("R65 optimized scalar graph differs from CPU reference.");
         }
 
-        source = source.Replace(inputDeclaration, "Buffer<uint> Input : register(t0);", StringComparison.Ordinal)
-            .Replace(outputDeclaration, "RWBuffer<uint> Output : register(u0);", StringComparison.Ordinal);
+        var source = graph.EmitTypedCompute();
+
+        Console.WriteLine($"[runtime] IRX-R65: values={graph.ValueCount}; live={graph.LiveValueCount}; eliminated={graph.ValueCount - graph.LiveValueCount}; sourceChars={source.Length}; backend=typed-hlsl.");
 
         var lowered = Stopwatch.GetTimestamp();
 
