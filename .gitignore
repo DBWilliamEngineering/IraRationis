@@ -27,3 +27,4 @@ __pycache__/
 /tools
 /R66-generated.hlsl
 /R66.2-validation.log
+*.etl
