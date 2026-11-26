@@ -1,64 +1,92 @@
-# Release engineering
+# Build, validation, and release engineering
 
-The Windows Native AOT workflow uses the SDK baseline in `global.json` and compiles the existing native bridge with the x64 MSVC developer environment. CI is required to pass before a draft release can be prepared. No guest binaries or third-party commercial assets are necessary for validation.
+The Windows Native AOT workflow uses the SDK in `global.json` and the x64 MSVC tools for the existing native bridge and synthetic fixtures. The maintainer reported a successful local test build on November 26, 2026. That report does not establish a new CI result, GPU acceptance, or integrated game compatibility.
 
-## CI diagnosis
+## Local build and component checks
 
-The November 25, 2026 [run 45712840752](https://github.com/DBWilliamEngineering/IraRationis/actions/runs/45712840752) built and published successfully. The native entry test reported the expected guest exit code `42`, printed a success message, then failed at the workflow shell boundary. GitHub's PowerShell shell propagates native exit status. The three native probe scripts now explicitly return `0` only after the original checks and cleanup succeed; their exception paths remain failures. This is a targeted correction, not proof that later tests pass.
-
-If the next run fails, inspect the first failing step and its complete log before changing test expectations. Do not use `continue-on-error` to get a green release.
-
-The later [run 45715465397](https://github.com/DBWilliamEngineering/IraRationis/actions/runs/45715465397) failed at restore with MSB4126 (Debug|x64). R37 normalizes the MSBuild Platform environment after the MSVC setup action and explicitly builds the solution as Release|Any CPU. Native AOT publication remains win-x64.
-
-## Local acceptance
-
-Run from an x64 Visual Studio Developer PowerShell:
+Run from the repository root. Explicitly selecting `Any CPU` prevents an inherited MSVC `Platform=x64` environment from selecting a nonexistent solution configuration; publication still targets `win-x64`.
 
 ```powershell
 dotnet restore IraRationis.slnx -p:Configuration=Release -p:Platform="Any CPU"
 dotnet build IraRationis.slnx -c Release --no-restore -p:Platform="Any CPU"
 dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
+dotnet run --project tests/startup-evidence/StartupEvidence.Contracts.csproj -c Release --no-build
+dotnet run --project tests/versioned-upload/VersionedUpload.Contracts.csproj -c Release --no-build
+dotnet run --project tests/descriptor-bindings/DescriptorBindings.Contracts.csproj -c Release --no-build
 dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build
-dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r37
+dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
+```
 
-$irx = (Resolve-Path artifacts/native-r37/irx.exe).Path
+Check each exit status and stop on failure. Use a separate publish directory when retaining a build's exact EXE/DLL/PDB identity for profiling.
+
+```powershell
+$irx = (Resolve-Path artifacts/native/irx.exe).Path
 & $irx memory-probe --self-test
 & $irx veh-probe
 python tests/smoke.py $irx
 & ./tests/native/smoke.ps1 $irx
 & ./tests/native/input-memory.ps1 $irx
 & ./tests/native/storage.ps1 $irx
+dotnet msbuild tests/native/runtime-audio/RuntimeAudio.proj -t:Build
 ```
 
-Check the exit status after each command. The native probe scripts translate the expected guest sentinel into exit code zero. Test media separately with an explicitly selected trusted FFmpeg executable:
+The native probe scripts convert their expected synthetic success sentinel into exit code zero. For native audio launch and optional speaker acceptance, follow its [acceptance instructions](../tests/native/runtime-audio/README.md).
+
+## Media and GPU acceptance
+
+Select a trusted FFmpeg executable for independent synthetic decoding:
 
 ```powershell
 $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 $fixture = (Resolve-Path tests/media-baseline/fixture.mp4).Path
 $intro = (Resolve-Path tests/media-baseline/vindex-intro.mp4).Path
+
 dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release --no-build -- $ffmpeg $fixture
 & $irx media-probe $ffmpeg $intro --stream
+& $irx media-probe $ffmpeg $intro --stream-gpu
+& $irx media-probe --mf $intro --play
+& $irx media-probe --mf $intro --gpu
 ```
 
-Expect 60 decoded frames from the original Vindex clip; review presented/skipped counts, visual playback, sound and termination. Audio is approximately two seconds (decoder padding may slightly increase the reported duration). Repeat with `--play` to compare R35's batch playback. The streaming path is an independent local player; guest media and account workflows are not integrated.
+`--stream` and `--stream-gpu` require FFmpeg. `--mf` uses installed Media Foundation codecs and supports batch playback with `--play` or `--gpu`. Review visible output, sound, presented/skipped counts, and termination. The original Vindex fixture has 60 video frames over approximately two seconds; decoder padding can affect audio duration. Independent playback does not establish guest movie or account-service integration.
 
-## Native media acceptance
+On Windows with D3D12 hardware, also run:
 
-Run `irx.exe media-probe --mf <local MP4> --play` against the original Vindex fixture. This uses Windows Media Foundation instead of FFmpeg. Use the manual workflow input `test_native_media` to run the noninteractive native-decoder check on a runner with appropriate codecs. This optional check is not required for tag publication, and the GUI/audio acceptance remains local.
+```powershell
+& $irx graphics-probe
+dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build
+dotnet run --project tests/gpu-media/GpuMedia.csproj -c Release --no-build -- --clip $intro
+```
 
-## Ready-to-run distribution
+See [runtime integration](RUNTIME-INTEGRATION.md) for the authored native sample ABI and utility contexts, and [diagnostics](DIAGNOSTICS.md) for game-run observation and network capture.
 
-Successful CI publishes both the release ZIP artifact and `irx-win-x64-unpacked`. The latter contains `irx.exe`, `irx-native.dll`, other published dependencies, license files, `QUICKSTART.txt`, and the original Vindex test clip. Download the whole package, extract it, and keep the executable and native DLL together. The release ZIP provides the same layout. No SDK or compiler is required on the end-user machine.
+## Continuous integration
 
-## Review and publish
+The [workflow](../.github/workflows/build.yml) builds the solution, runs component and contract tests, publishes Native AOT, checks native entry/input/storage/audio fixtures, and performs noninteractive FFmpeg decoding. Its optional `test_native_media` workflow-dispatch input enables a headless Media Foundation check on a runner with suitable codecs.
 
-1. Confirm the repository visibility and access policy. A private repository is not a substitute for correct software licensing.
-2. Inspect `git status --short` and `git ls-files`. Do not commit commercial game files, executable images, extracted shaders, private logs, credentials, caches, or generated build directories. Confirm that the original test fixtures and branding assets are authorized for the intended audience.
-3. Review GPL corresponding-source obligations and all third-party package licenses. Include applicable notices in the distribution before publishing; do not assume that a source archive alone satisfies every dependency's terms. Retain upstream attribution. The draft is not a legal compliance certification.
-4. Commit and push the intended source changes. Inspect the Actions result for that exact commit. Use a new `v*` tag only after validating the commit. Tags do not change the assembly version automatically.
-5. Push the annotated tag (e.g. `v0.1.0-r37`). The workflow tests the tagged source again, creates a binary ZIP, packages the exact tracked source using `git archive`, and writes a SHA-256 checksum manifest.
-6. Inspect the draft prerelease and download the artifacts. Verify their checksums and contents. Confirm runtime binaries, license texts, third-party notices, corresponding source and release notes. Publish manually only after review.
+GPU presentation, physical controller behavior, audible output, and guest startup remain local acceptance work. Compiling a GPU test does not execute it. Inspect the first failing step and its complete log; do not suppress failures to produce an artifact.
 
-The ordinary CI job is read-only. The draft-release job alone requests `contents: write` and runs only on successful tag pushes. If a draft for the same tag already exists, inspect it rather than automatically deleting or overwriting it. A rerun may fail with an existing release; use a new tag for a revised commit.
+## Distribution and symbols
 
-No runtime or guest-compatibility claim follows from a successful build. GPU output, physical controller behavior, media synchronization and native audio remain separate functional acceptance criteria.
+Successful validation uploads `irx-win-x64.zip` and the unpacked distribution. Extract the entire package and keep `irx-native.dll` beside `irx.exe`. The self-contained package includes the original Vindex clip, quick-start instructions, documentation, and license files. FFmpeg and commercial game assets are not bundled.
+
+Distribution excludes PDB files. Local publication retains the matching NativeAOT and native-bridge symbols. Preserve them with the exact binaries used for a trace; a later build's PDB is not interchangeable.
+
+## Tags and draft releases
+
+The current workflow has two separate mechanisms:
+
+- A successful push to `main` whose subject begins with an `R` revision followed by a colon can create an annotated revision tag. This existing `auto-tag` job has `contents: write` permission.
+- A pushed `v*` tag triggers validation and then `draft-release`, which creates a draft prerelease with the binary ZIP, matching tracked-source archive, and SHA-256 manifest. This job also has `contents: write`. An automatically created revision tag is not a `v*` tag and does not itself request this release flow.
+
+The normal validation job is read-only. Tags do not change the assembly version automatically.
+
+Before a version-tag release:
+
+1. Review the intended commit and its validation results. Confirm tracked files exclude game data, credentials, private traces, caches, and generated build output.
+2. Retain applicable licenses and attribution, and review dependency notices and corresponding-source requirements.
+3. Select a new `v*` tag, such as `v0.1.0`, for the validated source. Inspect the Actions result for that exact tagged commit.
+4. Download the archives, verify checksums and contents, and review the draft notes before publishing manually.
+
+The draft-release job does not publish automatically or overwrite an existing release. Inspect an existing draft if a rerun fails because its tag already has one. Successful packaging is separate evidence from working game startup, graphics correctness, or performance.

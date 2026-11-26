@@ -1,13 +1,17 @@
-# Media baseline
+# Media primitive and decoding contracts
 
-This independent regression executable verifies the NV12 color conversion, PCM mixing and WAVE encoding primitives, then decodes an original synthetic H.264/AAC fixture using a trusted external FFmpeg executable. It shares `MediaClipInspector` with the main `irx media-probe` command. It never runs native guest code.
+This independent executable checks NV12 conversion, PCM mixing, and WAVE serialization, then decodes an original synthetic H.264/AAC fixture using a trusted FFmpeg executable. It shares `MediaClipInspector` with `irx media-probe` and does not execute a guest image.
+
+From the repository root after building the solution:
 
 ```powershell
 $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
-$clip = (Resolve-Path .\tests\media-baseline\fixture.mp4).Path
-dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release -- $ffmpeg $clip --play
+$clip = (Resolve-Path tests/media-baseline/fixture.mp4).Path
+dotnet run --project tests/media-baseline/MediaBaseline.csproj -c Release --no-build -- $ffmpeg $clip
 ```
 
-Omit `--play` for decode/inspection only. Output is written into a unique `artifacts/media-baseline/` subdirectory. The original fixture has 60 frames at 30 FPS, two seconds of 48 kHz stereo audio, and changing video content. Expected counts: 60 distinct frames and 192,000 interleaved audio samples. The test rejects stationary or silent output; the main CLI accepts legitimate static or silent media.
+Add `--play` after `$clip` for synchronous Windows audio output. This test exports video previews; it does not open a live video window. For audiovisual playback, use the [CLI media commands](../../docs/RELEASING.md#media-and-gpu-acceptance).
 
-`LocalMediaDecoder` is a bounded local-file adapter (external process), not a native console decoder. Audio playback uses WinMM synchronously and video is exported as BMP previews, not played live. Windows build and execution still require validation.
+The original fixture contains 60 frames at 30 FPS and two seconds of 48 kHz stereo audio. Expected observations are 60 distinct frame hashes and 192,000 interleaved PCM samples. The test requires changing video and non-silent audio; the general CLI accepts static or silent media. Inspection output goes to a unique directory under `artifacts/media-baseline`.
+
+`LocalMediaDecoder` is a bounded local-file adapter around an external decoder. These checks establish fixture behavior, not a native console movie ABI or game startup. The project is included in the solution and CI invokes its headless decoding path. A build result alone does not establish that this test executed successfully.

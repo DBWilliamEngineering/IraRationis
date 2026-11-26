@@ -1,10 +1,10 @@
 # IRA RATIONIS | Architecture, Evidence & Performance Atlas
 
-> **Vindex / First Light · R52**  
+> **Vindex / First Light · Component architecture**<br>
 > *Nullius in verba · Non impone opinionem*  
 > Managed-first native compatibility research for Windows x64.
 
-**Source snapshot:** [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52, November 25, 2026 US Central time). This atlas describes the source at that revision, historical maintainer-reported observations, and explicitly labeled validation targets. It is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
+**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon reports a successful local test build of the restructured solution. No new runtime, GPU, or CI acceptance result is inferred from that build. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
 
 ## Contents
 
@@ -24,7 +24,7 @@
 
 Solid arrows depict documented source-level relationships or the flow of a specified fixture. Dotted arrows depict research, validation, optional integration, or future work as labeled. A source-level relationship does not prove that every guest call is supported. Status is conveyed by labels rather than color alone.
 
-- **Source:** implementation or documentation inspected at the R52 snapshot; execution may be unverified.
+- **Source:** inspected implementation; source links use the current layout, while historical snapshots are labeled explicitly. Execution may be unverified.
 - **Reported:** maintainer-reported local observation, not independently reproduced in preparing this atlas.
 - **Target:** a test expectation or derived workload quantity, not an observed result.
 - **Research:** isolated implementation or planned integration; no production compatibility claim.
@@ -74,20 +74,28 @@ flowchart TD
 
 | IRX development area | Source anchors | Provenance / maturity boundary |
 |---|---|---|
-| Managed graphics ABI | [ConsoleGraphicsDevice.Abi.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Abi.cs), [GraphicsDeviceModule.cs](../IraRationis.HLE/Graphics/GraphicsDeviceModule.cs) | Documented managed-first direction; mixed ancestry, exact source lineage not audited |
+| Managed graphics ABI | [Graphics ABI](../IraRationis.Graphics/ConsoleGraphicsDevice/Abi.cs), [GraphicsDeviceModule.cs](../IraRationis.HLE/Graphics/GraphicsDeviceModule.cs) | Documented managed-first direction; mixed ancestry, exact source lineage not audited |
 | Compile-time ABI fallbacks | [MissingGraphicsSlotGenerator.cs](../IraRationis.Generators/MissingGraphicsSlotGenerator.cs) | IRX-documented architectural extension; generated fallback is not semantic coverage |
 | Virtual Unified Memory | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/Diagnostics/MemoryProbe.cs) | IRX-documented isolated research; not global native memory interception |
-| Media pipeline | [IraRationis.Media](../IraRationis.Media), [R43](R43-GPU-MEDIA.md), [R45](R45-SHARED-DEVICE.md) | Host media architecture and explicit native fixture; not commercial guest movie ABI |
-| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs), [R48](R48-DEFERRED-FOUNDATION.md) | R48 documents independent C# implementation inspired by public design notes; not wired into guest dispatcher |
+| Media pipeline | [IraRationis.Media](../IraRationis.Media), [GPU media](../IraRationis.Graphics/Media/Nv12Presenter.cs), [Shared-device context](../IraRationis.Graphics/Media/MediaGpuContext.cs) | Host media architecture and explicit native fixture; not commercial guest movie ABI |
+| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs) | Historical R48 notes describe independent C# implementation inspired by public design notes; not wired into guest dispatcher |
 | Fence retirement | [FenceRetirementQueue.cs](../IraRationis.Core/Scheduling/FenceRetirementQueue.cs) | Bounded lifetime foundation; not general guest resource management |
-| Host copy queue | [R49](R49-HOST-COPY-QUEUE.md), [Nv12Presenter](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs) | R49 documents independent implementation inspired by public design notes; opt-in |
-| Resource versioning | [VersionedUploadBuffer.cs](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [R51](R51-VERSIONED-UPLOAD.md) | Explicit-write host buffer contract; independent GPU probe |
-| Descriptor identity and cache | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs), [R52](R52-DESCRIPTOR-TABLES.md) | Bounded host descriptor virtualization; independent probe, not general guest descriptor translation |
+| Host copy queue | [Nv12Presenter](../IraRationis.Graphics/Media/Nv12Presenter.cs) | Historical R49 notes describe independent implementation inspired by public design notes; opt-in |
+| Resource versioning | [VersionedUploadBuffer.cs](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs) | Explicit-write host buffer contract; independent GPU probe and authored runtime integration |
+| Descriptor identity and cache | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs) | Bounded host descriptor virtualization; authored runtime integration, not general guest descriptor translation |
 | Native CPU, HLE and shader paths | [Loader](../IraRationis.Loader), [Native](../IraRationis.Native), [HLE](../IraRationis.HLE), [Shaders](../IraRationis.Shaders) | Mixed provenance; requires file-level upstream comparison |
 
 Upstream references: [Zettrox/ztrx](https://github.com/Zettrox/ztrx), [DexNom/VIctory](https://github.com/DexNom/VIctory), [victory-fork](https://github.com/fxceless/victory-fork), [VIctory-7900XTX](https://github.com/avatarmanz/VIctory-7900XTX). See [runtime license](../LICENSE) and repository attribution. An independently developed extension does not remove applicable upstream license obligations.
 
 ## 02 · Runtime architecture
+
+### Component ownership and source layout
+
+Types are organized by responsibility, with data models beneath the component that owns their contract. For example, physical mappings belong to `IraRationis.HLE.Memory`, input state to `IraRationis.HLE.Input.Models`, and descriptor identities to `IraRationis.Graphics.Descriptors.Models`. Shared audio ABI layouts live in `IraRationis.Media.Audio.Models`; a generic shared library is not required merely because a type is a struct.
+
+Authored types are top-level and have individual files. Extracted behavior classes retain explicit assembly-internal dependencies where required; moving a nested type does not itself decouple its ownership. `ConsoleGraphicsDevice` remains one partial facade in `IraRationis.Graphics`, because its generated ABI callbacks and partial declarations must share a type identity. Its files are grouped under [ConsoleGraphicsDevice](../IraRationis.Graphics/ConsoleGraphicsDevice), with names such as `Drawing/VertexFetchSourceProbe.cs`.
+
+The [architecture notes](architecture.md) describe the implementation boundaries. [Runtime integration](RUNTIME-INTEGRATION.md) covers utility contexts and the authored scalar/media path; [diagnostics](DIAGNOSTICS.md) covers trace capture and startup evidence. Release-specific working notes live in Git history rather than serving as current documentation.
 
 ### Diagram 03 | System context
 
@@ -156,7 +164,7 @@ flowchart TD
     X --> L["Runtime observations / exit"]
 ```
 
-Sources: [PeImage](../IraRationis.PE/Parsing/PeImage.cs), [ImagePreparation](../IraRationis.Loader/Images/ImagePreparation.cs), [ImportResolver](../IraRationis.Loader/Imports/Models/ImportProvenance.cs), [ImportThunks](../IraRationis.Loader/Imports/ImportThunks.cs), [TlsRedirector](../IraRationis.Loader/Threads/TlsRedirector.cs), [TitleThreads](../IraRationis.Loader/Threads/TitleThreads.cs). Conceptual flow; not a complete loader call graph or sandbox.
+Sources: [PeImage](../IraRationis.PE/Parsing/PeImage.cs), [ImagePreparation](../IraRationis.Loader/Images/ImagePreparation.cs), [IImportResolver](../IraRationis.Loader/Imports/IImportResolver.cs), [ImportThunks](../IraRationis.Loader/Imports/ImportThunks.cs), [TlsRedirector](../IraRationis.Loader/Threads/TlsRedirector.cs), [TitleThreads](../IraRationis.Loader/Threads/TitleThreads.cs). Conceptual flow; not a complete loader call graph or sandbox.
 
 ### Diagram 06 | Native instruction compatibility boundary
 
@@ -189,7 +197,7 @@ flowchart LR
     D -->|No| E["Diagnostic fallback"]
 ```
 
-Sources: [MissingGraphicsSlotGenerator](../IraRationis.Generators/MissingGraphicsSlotGenerator.cs), [ConsoleGraphicsDevice.Missing](../IraRationis.Graphics/ConsoleGraphicsDevice.Missing.cs), [HleRegistry](../IraRationis.HLE/Runtime/HleRegistry.cs). An ABI callback existing is not evidence of behavioral parity.
+Sources: [MissingGraphicsSlotGenerator](../IraRationis.Generators/MissingGraphicsSlotGenerator.cs), [HleRegistry](../IraRationis.HLE/Runtime/HleRegistry.cs). Fallback callbacks are generated at build time; the former empty placeholder source file was removed. An ABI callback existing is not evidence of behavioral parity.
 
 ## 04 · Graphics and shader translation
 
@@ -207,7 +215,7 @@ flowchart LR
     E -->|No| I["Unsupported operation / evidence"]
 ```
 
-Sources: [GraphicsDeviceModule](../IraRationis.HLE/Graphics/GraphicsDeviceModule.cs), [ConsoleGraphicsDevice.Abi](../IraRationis.Graphics/ConsoleGraphicsDevice/Abi.cs), [ConsoleGraphicsDevice](../IraRationis.Graphics/ConsoleGraphicsDevice/ConsoleGraphicsDevice.cs).
+Sources: [GraphicsDeviceModule](../IraRationis.HLE/Graphics/GraphicsDeviceModule.cs), [Graphics ABI](../IraRationis.Graphics/ConsoleGraphicsDevice/Abi.cs), [ConsoleGraphicsDevice](../IraRationis.Graphics/ConsoleGraphicsDevice/ConsoleGraphicsDevice.cs).
 
 ### Diagram 09 | Shader evidence and bounded lowering
 
@@ -245,9 +253,9 @@ sequenceDiagram
     IRX->>Queue: Submit subsequent segment when valid
 ```
 
-Sources: [CommandMemory](../IraRationis.Graphics/ConsoleGraphicsDevice/Commands/CommandMemory.cs), [CommandOperations](../IraRationis.Graphics/ConsoleGraphicsDevice/Commands/CommandOperations.cs), [HostCompletionFence](../IraRationis.Graphics/ConsoleGraphicsDevice/Synchronization/HostCompletionFence.cs). Conservative segmentation is not a fully asynchronous guest GPU scheduler.
+Sources: [CommandMemory](../IraRationis.Graphics/ConsoleGraphicsDevice/Commands/CommandMemory.cs), [CommandOperations](../IraRationis.Graphics/ConsoleGraphicsDevice/Commands/CommandOperations.cs), [HostCompletionFence](../IraRationis.Graphics/Synchronization/HostCompletionFence.cs). Conservative segmentation is not a fully asynchronous guest GPU scheduler.
 
-### Diagram 11 | R52 descriptor identity and table materialization
+### Diagram 11 | Descriptor identity and table materialization
 
 ```mermaid
 flowchart TD
@@ -269,7 +277,7 @@ flowchart TD
     N --> F
 ```
 
-Source: [R52 design and validation](R52-DESCRIPTOR-TABLES.md). Pins are acquired with the lease, before materialization and submission. Only explicit host buffer identities are tracked. Physical aliases between different IDs are not detected.
+Source: [DescriptorTableCache](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs). Pins are acquired with the lease, before materialization and submission. Only explicit host buffer identities are tracked. Physical aliases between different IDs are not detected.
 
 ### Diagram 12 | Descriptor lease lifecycle
 
@@ -289,9 +297,9 @@ stateDiagram-v2
     end note
 ```
 
-Sources: [DescriptorTableCache](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs), [R52 CPU contracts](../tests/descriptor-bindings/Program.cs). Native COM lifetime remains the caller's responsibility; the catalog does not own the resources.
+Sources: [DescriptorTableCache](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs), [descriptor CPU contracts](../tests/descriptor-bindings/Program.cs). Native COM lifetime remains the caller's responsibility; the catalog does not own the resources.
 
-### Diagram 13 | R52 authored GPU descriptor fixture
+### Diagram 13 | Authored GPU descriptor fixture
 
 ```mermaid
 flowchart LR
@@ -313,7 +321,7 @@ flowchart LR
 | 3 | B | 29, 39, 49, 59 |
 | 4 | A | 9, 11, 13, 15 |
 
-Expected counters: 4 dispatches, 2 hits, 2 misses, 2 materializations, 6 native descriptors, 1 heap. These are **targets**, not observed results. R51 DEFAULT-buffer uploads and R52 bindings are exercised separately. Source: [DescriptorBindingProbe](../IraRationis.Graphics/ConsoleGraphicsDevice/Descriptors/DescriptorBindingProbe.cs), [R52](R52-DESCRIPTOR-TABLES.md).
+Expected counters: 4 dispatches, 2 hits, 2 misses, 2 materializations, 6 native descriptors, 1 heap. These are **targets**, not observed results. R51 DEFAULT-buffer uploads and R52 bindings are exercised separately. Source: [DescriptorBindingProbe](../IraRationis.Graphics/ConsoleGraphicsDevice/Descriptors/DescriptorBindingProbe.cs), [Descriptor tables](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs).
 
 ## 05 · Memory and resource ownership
 
@@ -334,6 +342,12 @@ flowchart TD
 
 Sources: [VirtualPageTable](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe](../IraRationis.Memory/Diagnostics/MemoryProbe.cs). Isolated research; no hardware page-table interception or arbitrary pointer-write tracking.
 
+### Production physical-view indexing
+
+The production [PhysicalPageModule](../IraRationis.HLE/Memory/PhysicalPageModule.cs) is distinct from that research page table. Its [MappedViewIndex](../IraRationis.HLE/Memory/MappedViewIndex.cs) indexes disjoint half-open ranges and snapshots overlapping views before they are unmapped or split. Lookup is O(log n + k) for n views and k overlaps; index updates during unmapping add O(k log n). Alias resolution works by contiguous view portions rather than repeating a complete search for each page. The existing owner lock and Windows mapping calls remain serialized, and values retain their section-handle ownership. These costs describe the algorithm, not a measured FPS improvement.
+
+Host resource materialization currently has a 512 MiB total budget and 256 MiB per-resource limit in [HostResources](../IraRationis.Graphics/ConsoleGraphicsDevice/Resources/HostResources.cs). More available VRAM does not remove the need for coherent aliases, guest-write observation, and fence-safe eviction before expanding residency policy.
+
 ### Diagram 15 | VUM comparative workload design
 
 ```mermaid
@@ -352,7 +366,7 @@ flowchart LR
 
 No comparative speed results are asserted here. Backing availability is hardware and driver dependent.
 
-### Diagram 16 | R51 immutable versioned uploads
+### Diagram 16 | Immutable versioned uploads
 
 ```mermaid
 sequenceDiagram
@@ -372,9 +386,11 @@ sequenceDiagram
     CPU->>V: Capture later dirty bytes as next version
 ```
 
-Sources: [VersionedUploadBuffer](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [R51](R51-VERSIONED-UPLOAD.md), [VersionedUploadProbe](../IraRationis.Graphics/ConsoleGraphicsDevice/Resources/VersionedUploadProbe.cs). One outstanding snapshot; no general alias coherence.
+Sources: [VersionedUploadBuffer](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [VersionedUploadProbe](../IraRationis.Graphics/ConsoleGraphicsDevice/Resources/VersionedUploadProbe.cs). One outstanding snapshot; no general alias coherence.
 
-### Diagram 17 | R51 upload state machine
+Current integration also uses this buffer in [UtilityContext](../IraRationis.Graphics/Commands/UtilityContext.cs) for explicitly captured data. The pool reuses completed utility work in texture-upload and compute paths; the authored scalar fixture uses versioned upload and descriptor tables together. This still does not track arbitrary guest-pointer writes or general guest descriptor lifetimes. See [runtime integration](RUNTIME-INTEGRATION.md) for those contracts and validation limits.
+
+### Diagram 17 | Upload state machine
 
 ```mermaid
 stateDiagram-v2
@@ -393,7 +409,7 @@ Writes after capture remain dirty for the next snapshot; they do not mutate the 
 
 ## 06 · Concurrency and GPU synchronization
 
-### Diagram 18 | R48 bounded concurrent preparation
+### Diagram 18 | Bounded concurrent preparation
 
 ```mermaid
 flowchart LR
@@ -410,7 +426,7 @@ flowchart LR
     H --> O
 ```
 
-Source: [DeferredPreparationQueue](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs), [R48](R48-DEFERRED-FOUNDATION.md). Worker semaphore bounds parallelism; managed snapshots only. This foundation is not wired into the guest dispatcher.
+Source: [DeferredPreparationQueue](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs). Worker semaphore bounds parallelism; managed snapshots only. This foundation is not wired into the guest dispatcher.
 
 ### Diagram 19 | Completion-aware retirement
 
@@ -430,7 +446,7 @@ flowchart TD
 
 Source: [FenceRetirementQueue](../IraRationis.Core/Scheduling/FenceRetirementQueue.cs). Queue does not signal fences or own native COM resources directly.
 
-### Diagram 20 | R47 two-level host shader caching
+### Diagram 20 | Two-level host shader caching
 
 ```mermaid
 flowchart TD
@@ -449,9 +465,9 @@ flowchart TD
     E -->|Failure| X["Remove failed entry / propagate error"]
 ```
 
-Source: [HostMediaShaderCache](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs), [R47](R47-HOST-SHADER-CACHE.md). Retention limits: 32 entries and 8 MiB completed bytecode; source strings over 64 Ki characters bypass retention. Pending entries are not evicted; not a global bound on concurrent compilation.
+Source: [HostMediaShaderCache](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs). Retention limits: 32 entries and 8 MiB completed bytecode; source strings over 64 Ki characters bypass retention. Pending entries are not evicted; not a global bound on concurrent compilation.
 
-### Diagram 21 | R49 opt-in COPY and DIRECT queue synchronization
+### Diagram 21 | Opt-in COPY and DIRECT queue synchronization
 
 ```mermaid
 sequenceDiagram
@@ -472,7 +488,7 @@ sequenceDiagram
     DF-->>CPU: Slot safe to reuse after completion
 ```
 
-Source: [R49](R49-HOST-COPY-QUEUE.md). No dedicated CPU copy-fence wait in the designed path; DIRECT reuse may still wait. Separate GPU engines are not proof of measured overlap or speedup.
+Source: [Host copy queue](../IraRationis.Graphics/Media/Nv12Presenter.cs). No dedicated CPU copy-fence wait in the designed path; DIRECT reuse may still wait. Separate GPU engines are not proof of measured overlap or speedup.
 
 ## 07 · Media and audio
 
@@ -496,9 +512,9 @@ flowchart TD
     GPU -.->|Guest texture publication not established| GT["Guest graphics resources"]
 ```
 
-Sources: [MediaFoundationDecoder](../IraRationis.Media/Decoding/MediaFoundationDecoder.cs), [GpuMediaPlaybackSession](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [RuntimeMediaSample](../IraRationis.Cli/Media/RuntimeMediaSample.cs), [R44](R44-RUNTIME-MEDIA-SAMPLE.md).
+Sources: [MediaFoundationDecoder](../IraRationis.Media/Decoding/MediaFoundationDecoder.cs), [GpuMediaPlaybackSession](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [RuntimeMediaSample](../IraRationis.Cli/Media/RuntimeMediaSample.cs).
 
-### Diagram 23 | R43–R45 device ownership and triple buffering
+### Diagram 23 | Device ownership and triple buffering
 
 ```mermaid
 flowchart TD
@@ -517,7 +533,7 @@ flowchart TD
     F --> P
 ```
 
-Sources: [R43](R43-GPU-MEDIA.md), [R45](R45-SHARED-DEVICE.md), [MediaGpuContext](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/MediaGpuContext.cs). Sharing a device is not equivalent to sharing resource ownership or queue ordering.
+Sources: [Nv12Presenter](../IraRationis.Graphics/Media/Nv12Presenter.cs), [MediaGpuContext](../IraRationis.Graphics/Media/MediaGpuContext.cs). Sharing a device is not equivalent to sharing resource ownership or queue ordering.
 
 ### Diagram 24 | NV12 plane upload and conversion
 
@@ -535,9 +551,9 @@ flowchart LR
     S --> D["Present"]
 ```
 
-Source: [PitchedPlaneCopy](../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs), [Nv12Presenter](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs), [R51](R51-VERSIONED-UPLOAD.md). The GPU presentation path avoids CPU video readback; it still performs CPU upload and GPU copies.
+Sources: [PitchedPlaneCopy](../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs), [Nv12Presenter](../IraRationis.Graphics/Media/Nv12Presenter.cs), [VersionedUploadBuffer](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs). The GPU presentation path avoids CPU video readback; it still performs CPU upload and GPU copies.
 
-### Diagram 25 | R50 first-frame and audio-clock synchronization
+### Diagram 25 | First-frame and audio-clock synchronization
 
 ```mermaid
 sequenceDiagram
@@ -562,7 +578,7 @@ sequenceDiagram
     end
 ```
 
-Sources: [HostFrameTimeline](../IraRationis.Media/Playback/HostFrameTimeline.cs), [GpuMediaPlaybackSession](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [R50](R50-STARTUP-EVIDENCE.md). Accepted presentation is not proof of monitor scanout.
+Sources: [HostFrameTimeline](../IraRationis.Media/Playback/HostFrameTimeline.cs), [GpuMediaPlaybackSession](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs). Accepted presentation is not proof of monitor scanout.
 
 ### Diagram 26 | Reported R39.1 audio timeline alignment
 
@@ -590,7 +606,7 @@ flowchart TD
     O -.->|Requires measured evidence| X
 ```
 
-Sources: [XApuModule.Pcm](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs), [IPcmPacketSink](../IraRationis.Media/Audio/IPcmPacketSink.cs), [RuntimePcmObservation](../IraRationis.Cli/Diagnostics/RuntimePcmObservation.cs), [WindowsPcmMonitor](../IraRationis.Media/Audio/WindowsPcmMonitor.cs). Do not infer guest audio support from standalone wave output.
+Sources: [Guest PCM observation](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs), [IPcmPacketSink](../IraRationis.Media/Audio/IPcmPacketSink.cs), [RuntimePcmObservation](../IraRationis.Cli/Diagnostics/RuntimePcmObservation.cs), [WindowsPcmMonitor](../IraRationis.Media/Audio/WindowsPcmMonitor.cs). Do not infer guest audio support from standalone wave output.
 
 ## 08 · Storage and input
 
@@ -643,7 +659,7 @@ flowchart TD
 
 This is a reporting model, not a mandatory chronological dependency between every subsystem. Evidence at one level never automatically establishes the next level.
 
-### Diagram 31 | Revision-specific contract coverage
+### Diagram 31 | Historical component contract evidence
 
 ```mermaid
 flowchart LR
@@ -658,7 +674,7 @@ flowchart LR
     R52 -.-> I["Independent GPU fixture: validation target"]
 ```
 
-Sources: [R50 test source](../tests/startup-evidence/Program.cs), [R51 test source](../tests/versioned-upload/Program.cs), [R52 test source](../tests/descriptor-bindings/Program.cs). R50/R51 success markers were supplied by the maintainer; no R52 execution result was supplied for this atlas.
+Current sources: [startup-evidence contracts](../tests/startup-evidence/Program.cs), [versioned-upload contracts](../tests/versioned-upload/Program.cs), [descriptor-binding contracts](../tests/descriptor-bindings/Program.cs). The revision labels identify the historical evidence baseline: R50/R51 success markers were supplied by the maintainer, while no R52 execution result was supplied for the original atlas. Current project names describe behavior; see [validation](VALIDATION.md) for the present command inventory.
 
 ### Diagram 32 | Startup evidence decision tree
 
@@ -712,11 +728,11 @@ flowchart TD
     T -->|No| E["CI artifact"]
     T -->|Yes| R["Draft prerelease and source archive"]
     R --> H["Maintainer review"]
-    X["R50/R51/R52 contract projects"] -.->|Ensure explicitly executed in CI| C
+    X["Executable contract projects"] -.->|Require explicit execution in CI| C
     G["GPU and real A/V acceptance"] -.->|Separate local evidence| H
 ```
 
-Source: historical [build workflow](../.github/workflows/build.yml) and README. Confirm current workflow explicitly runs each RXX executable: adding a console test project to a solution does not execute its `Main` during `dotnet build` or guarantee execution by `dotnet test`.
+Source: [build workflow](../.github/workflows/build.yml). The diagram summarizes configured gates, not a successful CI run. Executable contract projects need explicit execution: adding a console project to a solution does not execute its `Main` during `dotnet build` or guarantee execution by `dotnet test`.
 
 ## 10 · Performance evidence
 
@@ -760,7 +776,7 @@ xychart-beta
 
 This is one reported sparse upload case; it is not a GPU bandwidth measurement or generalized speedup.
 
-### Diagram 36 | R50 log-volume model (prediction)
+### Diagram 36 | Log-volume model (prediction)
 
 ```mermaid
 xychart-beta
@@ -777,9 +793,9 @@ xychart-beta
 | Command list creations | 625 | 11 |
 | Total of these two categories | 5,226 | 25 |
 
-The first bar series is original, second is predicted retained. The rule retains the first four and subsequent powers of two; other messages pass through. The approximately 99.5% reduction is for these categories only, assuming all messages flow through the wrapper. Original full log: 6,022 lines. No wall-time improvement measured. Source: [R50](R50-STARTUP-EVIDENCE.md).
+The first bar series is original, second is predicted retained. The rule retains the first four and subsequent powers of two; other messages pass through. The approximately 99.5% reduction is for these categories only, assuming all messages flow through the wrapper. Original full log: 6,022 lines. No wall-time improvement measured. Current implementation: [RuntimeLogSampling](../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs).
 
-### Diagram 37 | R51 and R52 fixture efficiency targets
+### Diagram 37 | Upload and descriptor fixture efficiency targets
 
 ```mermaid
 flowchart TD
@@ -802,7 +818,7 @@ flowchart TD
 | R52 | 3 descriptors per materialized table | 6 native descriptors | Two materializations; no general heap reduction claim |
 | R49 | 60 frames at 320×180 NV12 | 5,184,000 active pixel bytes | Derived workload quantity; excludes padding and other copies |
 
-All rows are target or derived fixture quantities, not hardware measurements. Sources: [R49](R49-HOST-COPY-QUEUE.md), [R51](R51-VERSIONED-UPLOAD.md), [R52](R52-DESCRIPTOR-TABLES.md).
+All rows are target or derived fixture quantities, not hardware measurements. Sources: [Host copy queue](../IraRationis.Graphics/Media/Nv12Presenter.cs), [Versioned uploads](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [Descriptor tables](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs).
 
 ### Diagram 38 | Performance instrumentation map
 
@@ -824,7 +840,13 @@ flowchart LR
     GPU -.->|Timestamp queries needed for actual GPU duration| M
 ```
 
-Sources: [RuntimeMetrics](../IraRationis.Graphics/ConsoleGraphicsDevice/Diagnostics/RuntimeMetrics.cs), [TimingMetrics](../IraRationis.Graphics/ConsoleGraphicsDevice/Diagnostics/TimingMetrics.cs), [R43](R43-GPU-MEDIA.md). Instrumentation map identifies useful measurements; not all are implemented for every path. CPU submit wall time is not GPU execution duration.
+Sources: [RuntimeMetrics](../IraRationis.Graphics/ConsoleGraphicsDevice/Diagnostics/RuntimeMetrics.cs), [TimingMetrics](../IraRationis.Graphics/ConsoleGraphicsDevice/Diagnostics/TimingMetrics.cs), [GPU media](../IraRationis.Graphics/Media/Nv12Presenter.cs). Instrumentation map identifies useful measurements; not all are implemented for every path. CPU submit wall time is not GPU execution duration.
+
+### CPU samples and network observation
+
+[CpuAttribution](../IraRationis.Graphics/ConsoleGraphicsDevice/Diagnostics/CpuAttribution.cs) provides sampled host-thread CPU evidence alongside the wall-time counters. The native build emits a matching bridge PDB for future traces. Preserve the exact executable, DLL, and PDB from each measured run; symbol files from a newer build are not interchangeable.
+
+[NetworkTraceCommand](../IraRationis.Cli/Diagnostics/Network/NetworkTraceCommand.cs) and [NetworkTraceSession](../IraRationis.Cli/Diagnostics/Network/NetworkTraceSession.cs) capture selected user-mode DNS/Winsock events for one process into a bounded circular ETL. [Export-NetworkTrace.ps1](../scripts/Export-NetworkTrace.ps1) exports those events as JSON Lines. This observes network-operation metadata, not application authentication success; pre-capture and off-process work may be absent. Capture procedure and interpretation belong in [diagnostics](DIAGNOSTICS.md).
 
 ### Diagram 39 | Reproducible benchmark protocol
 
@@ -877,17 +899,17 @@ flowchart LR
 
 | Revision / work | Source or history |
 |---|---|
-| R43 | [GPU compositor design](R43-GPU-MEDIA.md) |
-| R44 | [Native sample](R44-RUNTIME-MEDIA-SAMPLE.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/371b67561b1345cb1bfe773b71a71f065dadbc14) |
-| R45 | [Shared device](R45-SHARED-DEVICE.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/6eb59ffd6c9cd7db7fd5f07a32cc528a41d0244d) |
+| R43 | [GPU compositor design](../IraRationis.Graphics/Media/Nv12Presenter.cs) |
+| R44 | [Native sample](../IraRationis.Cli/Media/RuntimeMediaSample.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/371b67561b1345cb1bfe773b71a71f065dadbc14) |
+| R45 | [Shared device](../IraRationis.Graphics/Media/MediaGpuContext.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/6eb59ffd6c9cd7db7fd5f07a32cc528a41d0244d) |
 | R46 | [Preparation work commit](https://github.com/DBWilliamEngineering/IraRationis/commit/8725bddc4277097cfcb8b0886621c02f76f84704) |
-| R47 | [Shader cache](R47-HOST-SHADER-CACHE.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/f481a1207744a357e20d20b339e495553ed58722) |
-| R48 | [Deferred foundation](R48-DEFERRED-FOUNDATION.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/52d2ceebd751f0b69b64e2053435fb5cd84cf76e) |
-| R49 | [Copy queue](R49-HOST-COPY-QUEUE.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/7f12083610f70b10a759b9698e204cdc29de34af) |
-| R50 | [Startup evidence](R50-STARTUP-EVIDENCE.md) · [chroma fix commit](https://github.com/DBWilliamEngineering/IraRationis/commit/6a11bac6c31575b70c8ded8f0afbf69ef46ae03a) |
-| R51 | [Versioned uploads](R51-VERSIONED-UPLOAD.md) |
+| R47 | [Shader cache](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/f481a1207744a357e20d20b339e495553ed58722) |
+| R48 | [Deferred foundation](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/52d2ceebd751f0b69b64e2053435fb5cd84cf76e) |
+| R49 | [Copy queue](../IraRationis.Graphics/Media/Nv12Presenter.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/7f12083610f70b10a759b9698e204cdc29de34af) |
+| R50 | [Startup evidence](../IraRationis.Media/Playback/HostFrameTimeline.cs) · [chroma fix commit](https://github.com/DBWilliamEngineering/IraRationis/commit/6a11bac6c31575b70c8ded8f0afbf69ef46ae03a) |
+| R51 | [Versioned uploads](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs) |
 | Quality pass | [Formatting commit](https://github.com/DBWilliamEngineering/IraRationis/commit/f40e48e2a6bae9466b4c26b8ad83664acfc9f214) · [follow-up](https://github.com/DBWilliamEngineering/IraRationis/commit/15e3184637eba902671f54421f12445d5bb2b81d) |
-| R52 | [Descriptor tables](R52-DESCRIPTOR-TABLES.md) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) |
+| R52 | [Descriptor tables](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs) · [commit](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) |
 
 The timeline describes development sequence, not the independent validation date of each feature. Combined commits can include multiple revision-level changes.
 
@@ -920,13 +942,13 @@ dotnet build IraRationis.slnx -c Release -p:Platform="Any CPU"
 dotnet run --project tests/startup-evidence/StartupEvidence.Contracts.csproj -c Release
 dotnet run --project tests/versioned-upload/VersionedUpload.Contracts.csproj -c Release
 dotnet run --project tests/descriptor-bindings/DescriptorBindings.Contracts.csproj -c Release
-dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r52
-.\artifacts\native-r52\irx.exe graphics-probe
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
+.\artifacts\native\irx.exe graphics-probe
 $env:IRX_HOST_MEDIA_DIAGNOSTICS = '1'
 $env:IRX_HOST_MEDIA_COPY_QUEUE = '1'
 $clip = (Resolve-Path tests/media-baseline/vindex-intro.mp4).Path
 try {
-    & .\artifacts\native-r52\irx.exe media-probe --mf $clip --gpu
+    & .\artifacts\native\irx.exe media-probe --mf $clip --gpu
 } finally {
     Remove-Item Env:IRX_HOST_MEDIA_COPY_QUEUE -ErrorAction SilentlyContinue
     Remove-Item Env:IRX_HOST_MEDIA_DIAGNOSTICS -ErrorAction SilentlyContinue
@@ -935,4 +957,4 @@ try {
 
 Archive the exact commit, command, environment, stdout/stderr, exit status and test fixture hash. Only publish authorized original fixtures, sanitized diagnostics, or other material you have permission to distribute. No proprietary game data or credentials should enter source control.
 
-**Review boundary:** This atlas was assembled from the repository source inventory, inspected revision documentation and selected contract source, plus earlier maintainer-reported logs. It has not been built or executed, the Mermaid blocks have not been rendered in GitHub, and no full upstream diff or authorship audit was performed. The performance charts deliberately separate historical observations, predictions, and test targets.
+**Review boundary:** This atlas combines current source inspection with historical revision documentation and maintainer-reported observations. The maintainer reports a successful local test build of the reorganized solution; that does not establish new GPU, game, or CI results. No build or runtime test was performed as part of this documentation update, the Mermaid blocks have not been rendered in GitHub, and no full upstream diff or authorship audit was performed. The performance charts deliberately separate historical observations, predictions, and test targets.

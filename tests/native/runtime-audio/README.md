@@ -1,39 +1,32 @@
-# R41 | Runtime launch audio acceptance
+# Native runtime audio acceptance
 
-This is an original synthetic PE and external audio asset test for the normal `irx run` pipeline. It uses the same 20 ms, 48 kHz stereo Opus packet from R40's verified synthetic test. No commercial binaries, assets or account services are used.
+This original synthetic PE and external Opus packet exercise ordinary `irx run` loading, the virtual filesystem, the XApu ABI, and an optional diagnostic PCM observer. No commercial binary, asset, network, or account service is involved.
 
-## Apply
+## Build
 
-Requires the locally verified R40 patch (including its HLE project reference to Media, partial XApu declaration, PCM sink hook and WindowsPcmMonitor). Extract the R41 archive over that tree. No patch application scripts or project changes are needed. The published GitHub snapshot `44ad3c30` did not yet include R40, so retain and commit those R40 files too.
-
-## Build the runtime and fixture
-
-Run these commands in an x64 Visual Studio Developer PowerShell from the repository root. They build the synthetic fixture, not apply a patch.
+From the repository root with the SDK and MSVC x64 tools installed:
 
 ```powershell
-dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native-r41
-if ($LASTEXITCODE -ne 0) { throw 'Runtime publish failed' }
+dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
+dotnet msbuild tests/native/runtime-audio/RuntimeAudio.proj -t:Build
 
-$irx = (Resolve-Path artifacts/native-r41/irx.exe).Path
-$fixture = (Resolve-Path tests/native/runtime-audio).Path
-$stage = (New-Item -ItemType Directory -Force artifacts/runtime-audio-r41).FullName
-Copy-Item (Join-Path $fixture 'tone.opuspacket') $stage -Force
-
-Push-Location $stage
-try {
-    & lib.exe /nologo /machine:x64 "/def:$fixture\xapu.def" /out:xapu.lib
-    if ($LASTEXITCODE -ne 0) { throw 'Import library failed' }
-    & cl.exe /nologo /W4 /WX /O2 /GS- /Zl "$fixture\probe.c" /link /NODEFAULTLIB /ENTRY:ProbeEntry /SUBSYSTEM:CONSOLE /BASE:0x600000000 /DYNAMICBASE /FIXED:NO /OUT:probe.exe xapu.lib kernel32.lib
-    if ($LASTEXITCODE -ne 0) { throw 'Fixture compile failed' }
-}
-finally {
-    Pop-Location
-}
-
-$probe = Join-Path $stage 'probe.exe'
+$irx = (Resolve-Path artifacts/native/irx.exe).Path
+$probe = (Resolve-Path artifacts/runtime-audio-r41/probe.exe).Path
 ```
 
-## Run through the ordinary loader
+Check each exit status before continuing. The fixture project discovers Visual Studio through `VSINSTALLDIR` or `vswhere`, selects the x64 toolchain, and copies `tone.opuspacket` beside the fixture. Its current default output remains `artifacts/runtime-audio-r41`. Override toolchain discovery with `-p:VisualStudioRoot="<Visual Studio installation>"` if needed.
+
+## Headless and audible checks
+
+With the observer unset, expect the deliberate success sentinel `42` without opening the PCM monitor:
+
+```powershell
+Remove-Item Env:IRX_RUNTIME_PCM_STREAM -ErrorAction SilentlyContinue
+& $irx run $probe
+if ($LASTEXITCODE -ne 42) { throw "Unexpected fixture exit: $LASTEXITCODE" }
+```
+
+For audible acceptance, select voice 1 and listen to the synthetic tone:
 
 ```powershell
 $env:IRX_RUNTIME_PCM_STREAM = '1'
@@ -46,9 +39,9 @@ finally {
 }
 ```
 
-The fixture imports XApu through the HLE registry, reads `G:\tone.opuspacket` using the existing virtual filesystem mapping, activates voice 1, submits 50 packets, checks returned PCM buffer identity, frame count, finite nonzero PCM and guest result status, deactivates the voice and disconnects. The exit code 42 is the deliberate synthetic success sentinel. Missing asset returns 11; activation failure 12; decode/ABI failure 13; invalid PCM 14; deactivation/disconnect failures 15/16.
+The fixture reads `G:\tone.opuspacket`, activates voice 1, submits 50 packets, checks PCM buffer identity, frame count, finite nonzero samples, and result status, then deactivates and disconnects. Failure sentinels distinguish a missing asset (11), activation failure (12), decoding/ABI failure (13), invalid PCM (14), and deactivation/disconnection failures (15/16).
 
-Expected host markers (counts are acceptance targets, not measurements from this patch):
+Expected audible-run evidence uses existing log markers:
 
 ```text
 [audio] IRX-R41: diagnostic PCM observer enabled for stream=1; single voice, not a mixer.
@@ -58,8 +51,6 @@ Title entry returned 42 (0x0000002A).
 [audio] IRX-R41: observed=50; frames=48000; accepted=50; completed=50; drained=True; faulted=False.
 ```
 
-Listen for the synthetic tone. For negative control, unset the environment variable and rerun the same fixture; expect guest exit 42 with no observer/device markers. A bind-only launch must not open an audio device even if the variable is set. A wrong stream (e.g. `0`) should produce zero observed packets. The observer selects the first connection that produces valid PCM on the requested stream and does not switch connections; explicit per-connection registration has precedence. No global registration is active by default. This is a diagnostic single-voice tap, not a mixer. Queue drops, device errors and drain timeouts do not change the guest return code. Fail-fast termination cannot guarantee a final drain.
+These are acceptance targets, not a fresh measurement. Bind-only launch must not open an audio device. Selecting another stream should observe zero packets. The observer attaches to the first connection producing valid PCM for the selected stream and does not switch connections; explicit per-connection registration takes precedence.
 
-R41 does not implement GPU uploads or guest movie decoding. The Media Foundation decoder and R40 video-plane contracts remain untouched. This is not an assertion of commercial title compatibility. Test only executables and media you have authorization to run.
-
-Windows build, loader and audio acceptance have not been performed in the authoring environment.
+This is a single-voice diagnostic tap, not the game's mixer. Queue drops, device faults, or drain timeouts do not change the guest return code, so inspect host counters too. CI builds and invokes the headless fixture; speaker output and game audio integration are separate acceptance work.

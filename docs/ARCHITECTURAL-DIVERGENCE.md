@@ -57,7 +57,7 @@ Native C++ remains appropriate for platform-specific operations that require nat
 | Media | Independent decoding and playback infrastructure, including Windows Media Foundation |
 | Storage | Ordered request processing, decompression, and strict payload validation |
 | Input | Native controller integration and guest-compatible input contracts |
-| Diagnostics | Instrumented execution, capability reporting, and revision-specific validation |
+| Diagnostics | Instrumented execution, process-scoped network observation, and component contract validation |
 | Deployment | Self-contained Windows x64 Native AOT distribution |
 
 These areas represent the project's current architectural direction and varying levels of implementation maturity. Their inclusion does not imply that every capability is complete or integrated into guest execution.
@@ -86,9 +86,21 @@ This reduces repetitive implementation requirements and avoids introducing a run
 
 ### Contract-Driven Development
 
-Release-specific contract tests establish behavioral expectations for individual runtime subsystems.
+Component contract tests establish behavioral expectations for individual runtime subsystems. Their project and implementation names describe the behavior under test; historical log markers remain stable where tooling depends on them.
 
 Contracts are intended to identify regressions independently of commercial title execution and distinguish implementation correctness from apparent compatibility.
+
+### Component ownership and maintainability
+
+Authored types have one top-level declaration per file and live with the component that owns their contract. Input models, descriptor identities, and audio ABI structures therefore have local `Models` namespaces rather than a general shared-type library. Independent behavior classes make their owner dependencies explicit; extraction alone does not remove coupling. The partial graphics facade keeps one public type identity while its files are organized by graphics responsibility.
+
+Maintainability is evaluated through understandable ownership and control flow, with cyclomatic and Halstead complexity used as review signals. Moving files does not itself simplify branches or prove a better maintainability score. Names should explain intent, comments should preserve non-obvious contracts and performance costs, and `//TODO: Damon -> ...` notes should identify actionable decisions. SOLID, DRY, and YAGNI guide abstractions; a design pattern is useful when it solves an actual responsibility or lifetime problem.
+
+### Performance and memory contracts
+
+The production physical-page owner now uses a C# range index to find mapped-view overlaps and resolve aliases by contiguous portions. This changes lookup cost without moving mapping policy into C++ or removing synchronization. The separate VUM research model is still not a complete production coherence manager.
+
+Existing bounded preparation and fence-retirement abstractions are foundations for using additional CPU cores while preserving guest-visible order. VRAM residency likewise requires guest-write observation, alias coherence, and completion-safe lifetime before transfer skipping or budget expansion is valid. The current implementation and remaining boundaries are documented in [architecture notes](architecture.md), [runtime integration](RUNTIME-INTEGRATION.md), and [diagnostics](DIAGNOSTICS.md).
 
 ## 6. Upstream Relationship
 
@@ -112,6 +124,8 @@ IRX distinguishes the following levels of evidence:
 8. Sustained performance and stability.
 
 Success at one level does not automatically establish success at subsequent levels.
+
+On November 26, 2026, the maintainer reported a successful local test build after the component restructure. This updates compilation evidence only; no new game, GPU, or CI outcome is implied.
 
 The project does not represent synthetic media playback, diagnostic presentation, successful API invocation, or partial initialization as completed gameplay compatibility.
 
@@ -229,7 +243,7 @@ flowchart TD
     class ABI,GFX,CPU,MED,VUM irx
 ```
 
-## R52 descriptor binding architecture
+## Descriptor binding architecture
 
 ```mermaid
 flowchart TD

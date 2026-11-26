@@ -1,15 +1,16 @@
-# R40 runtime media contracts
+# Runtime media contracts
 
-This is a standalone synthetic test of the runtime library interfaces, not a commercial game or a guest startup workaround. The XApu hook remains explicitly host-registered for one connection/voice; it does not activate automatically during a normal launch. The NV12 upload type prepares CPU snapshots and pitched plane copies. It does not create D3D12 resources, submit commands, or establish GPU coherency.
+This synthetic test covers PCM sink registration and NV12 upload snapshots through the runtime library interfaces. The XApu hook is explicitly registered for one connection/voice; ordinary launches do not activate it automatically. The NV12 type owns CPU snapshots and performs pitched plane copies; that contract alone does not create D3D12 resources or establish GPU coherence.
 
-From the repository root, after extracting this archive over R39.1:
+From the repository root after building the solution:
 
 ```powershell
-dotnet build IraRationis.slnx -c Release
-dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release
-dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release -- --play
+dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build
+dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build -- --play
 ```
 
-The first test invocation is headless. The second invokes the Windows audio device for an original synthetic Opus packet, repeatedly decoded through the XApu ABI. A repeated packet is a diagnostic sound, not a final mixed stream. Expect a nonzero peak and one packet / 960 frames headless; 50 packets / 48000 frames with playback enabled. The device monitor may drop queued packets under backpressure; its counters distinguish accepted, completed and dropped packets. No network or commercial media is used.
+The first invocation is headless. The second opens the Windows audio device and repeatedly decodes an original synthetic Opus packet through the XApu ABI. Expected observations are one packet and 960 frames headlessly, or 50 packets and 48,000 frames with playback enabled, with a nonzero peak. The repeated packet is diagnostic sound, not a mixed game stream. Under backpressure the monitor can drop packets; counters distinguish accepted, completed, and dropped work.
 
-Existing source baseline: main tree `44ad3c30b48ca04e185fd52a2894e2dbd0be9829`, XApu blob `1916daaaa00bf96336a28d1ece33467d28112b75`. Review local changes before overwriting. The validated R39.1 decoder is not modified. The test project is separate from the solution and must be run explicitly; CI wiring is not included in this patch. Windows compile and execution must be verified on the target machine.
+The project is included in `IraRationis.slnx`, and CI invokes the headless test. Audio-device acceptance remains local. No network or commercial media is used. Historical `IRX-R40` markers identify existing log events rather than a required patch baseline.
+
+See [native runtime audio acceptance](../native/runtime-audio/README.md) for the separate PE/loader fixture and [runtime integration](../../docs/RUNTIME-INTEGRATION.md) for the authored audiovisual service.

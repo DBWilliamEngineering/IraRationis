@@ -3,7 +3,8 @@
 > Nullius in verba · Non impone opinionem
 
 **Project:** Ira Rationis (IRX)  
-**Review baseline:** [R52 / d188685](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340)  
+**Historical review baseline:** [R52 / d188685](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340)<br>
+**Source paths updated:** November 26, 2026, following component extraction and namespace organization.<br>
 **Status:** Maintainer review required; preliminary source-lineage inventory, not a complete copyright audit.
 
 ## 1. Purpose
@@ -20,6 +21,7 @@ IRX is an independently evolving, managed-first native compatibility runtime tar
 | [DexNom/VIctory](https://github.com/DexNom/VIctory) | Upstream ancestry and technical reference | Preserve inherited notices and applicable licensing obligations. |
 | [fxceless/victory-fork](https://github.com/fxceless/victory-fork) | Upstream ancestry and technical reference | Direct versus inherited incorporation must be determined at file level. |
 | [avatarmanz/VIctory-7900XTX](https://github.com/avatarmanz/VIctory-7900XTX) | Architectural reference | R43, R48 and R49 notes document inspiration from resource publication, deferred preparation and transfer queues. R48/R49 notes report independent implementations rather than copied reference code; this has not been independently audited. |
+| [Belobug/VIctory-Belobug-AMD](https://github.com/Belobug/VIctory-Belobug-AMD) | Technical reference | Supplied by the maintainer for investigating critical compatibility and performance issues. No implementation from this repository was incorporated in the component-restructure change. This entry is not an audit of either repository. |
 
 ```mermaid
 flowchart TD
@@ -48,7 +50,7 @@ Arrows describe documented relationships, not a verified file-by-file dependency
 
 ## 4. Component-level provenance inventory
 
-Paths refer to the R52 repository inventory. Classifications are provisional unless supported by a completed source comparison.
+Paths follow the current component layout. Historical revision labels and commits identify the evidence available when a feature was introduced; source links do not turn historical execution claims into current test results. Classifications remain provisional unless supported by a completed source comparison.
 
 | Component | Source | Current classification | Evidence / remaining audit |
 | --- | --- | --- | --- |
@@ -60,18 +62,20 @@ Paths refer to the R52 repository inventory. Classifications are provisional unl
 | Virtual Unified Memory research | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/Diagnostics/MemoryProbe.cs) | Documented IRX research extension | Isolated research, not a production guest memory manager. Verify introduction commit. |
 | Shader inspection and lowering | [IraRationis.Shaders](../IraRationis.Shaders) | Mixed / unresolved | Audit parsers, instruction semantics and lowering implementations separately. |
 | DirectStorage | [DirectStorageModule.cs](../IraRationis.HLE/Storage/DirectStorageModule.cs), [DirectStoragePayload.cs](../IraRationis.HLE/Storage/DirectStoragePayload.cs) | Mixed / documented IRX development | Trace queue and payload validation changes. |
-| Controller input | [GameInputModule.DualSense.cs](../IraRationis.HLE/Input/GameInputModule/DualSense.cs) | Documented IRX development | R30 documentation describes native wired DualSense integration; verify source ancestry. |
-| Audio and PCM | [IraRationis.Media](../IraRationis.Media), [XApuModule.Pcm.cs](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs) | Mixed / documented IRX development | Distinguish adapted APU/DSP behavior from new host PCM contracts. |
+| Controller input | [DualSense provider](../IraRationis.HLE/Input/DualSenseProvider.cs), [input decoding](../IraRationis.HLE/Input/GameInputModule/DualSense.cs) | Documented IRX development | R30 documentation describes native wired DualSense integration; extraction preserves inherited notices. Verify source ancestry. |
+| Audio and PCM | [IraRationis.Media](../IraRationis.Media), [PCM observation](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs) | Mixed / documented IRX development | Distinguish adapted APU/DSP behavior from host PCM contracts. The shared audio-local WaveFormat/WaveHeader types consolidate existing identical ABI layouts. |
 | Media decoding | [MediaFoundationDecoder.cs](../IraRationis.Media/Decoding/MediaFoundationDecoder.cs) | Documented IRX extension | R37 commit and README record in-process Windows Media Foundation integration. |
-| Persistent GPU media | [GpuMediaPlaybackSession.cs](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs) | Documented IRX development / reference-inspired | [R43](R43-GPU-MEDIA.md), [R44](R44-RUNTIME-MEDIA-SAMPLE.md), [R45](R45-SHARED-DEVICE.md). |
-| Host shader cache | [HostMediaShaderCache.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs) | Documented IRX extension | [R47](R47-HOST-SHADER-CACHE.md). Host media bytecode, not general guest shader caching. |
-| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs), [OrderedPreparation.cs](../IraRationis.Core/Scheduling/OrderedPreparation.cs) | Documented IRX extension / reference-inspired | [R48](R48-DEFERRED-FOUNDATION.md). General guest dispatcher integration not established. |
+| Persistent GPU media | [GpuMediaPlaybackSession.cs](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [Nv12Presenter.cs](../IraRationis.Graphics/Media/Nv12Presenter.cs) | Documented IRX development / reference-inspired | [Authored media service](../IraRationis.Cli/Media/RuntimeMediaSample.cs), [shared-device context](../IraRationis.Graphics/Media/MediaGpuContext.cs). |
+| Host shader cache | [HostMediaShaderCache.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs) | Documented IRX extension | [Host shader cache](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs). Host media bytecode, not general guest shader caching. |
+| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs), [OrderedPreparation.cs](../IraRationis.Core/Scheduling/OrderedPreparation.cs) | Documented IRX extension / reference-inspired | [Deferred preparation](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs). General guest dispatcher integration not established. |
 | Fence retirement | [FenceRetirementQueue.cs](../IraRationis.Core/Scheduling/FenceRetirementQueue.cs) | Documented IRX extension / reference-inspired | R48 notes identify a bounded owner-thread foundation. |
-| Host media transfer queue | [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs) | Documented IRX extension / reference-inspired | [R49](R49-HOST-COPY-QUEUE.md). Opt-in host media path. |
-| Startup evidence and timing | [HostFrameTimeline.cs](../IraRationis.Media/Playback/HostFrameTimeline.cs), [RuntimeLogSampling.cs](../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs) | Documented IRX extension | [R50](R50-STARTUP-EVIDENCE.md). Does not prove commercial title startup. |
-| Versioned uploads | [VersionedUploadBuffer.cs](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [PitchedPlaneCopy.cs](../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs) | Documented IRX extension | [R51](R51-VERSIONED-UPLOAD.md). Explicitly written host buffers and independent probe. |
-| Descriptor virtualization | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs) | Documented IRX extension | [R52](R52-DESCRIPTOR-TABLES.md). Independent authored host compute fixture; guest descriptor integration not established. |
-| Revision contract testing | [R50](../tests/startup-evidence), [R51](../tests/versioned-upload), [R52](../tests/descriptor-bindings) | Documented IRX development | Review fixture authorship and preserve any applicable notices. |
+| Host media transfer queue | [Nv12Presenter.cs](../IraRationis.Graphics/Media/Nv12Presenter.cs) | Documented IRX extension / reference-inspired | Historical R49 notes describe the opt-in host media path. |
+| Startup evidence and timing | [HostFrameTimeline.cs](../IraRationis.Media/Playback/HostFrameTimeline.cs), [RuntimeLogSampling.cs](../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs) | Documented IRX extension | [Frame timeline](../IraRationis.Media/Playback/HostFrameTimeline.cs). Does not prove commercial title startup. |
+| Versioned uploads | [VersionedUploadBuffer.cs](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [PitchedPlaneCopy.cs](../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs) | Documented IRX extension | [Versioned uploads](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs). Explicitly written host buffers and independent probe. |
+| Descriptor virtualization | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs) | Documented IRX extension | [Descriptor tables](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs). Independent authored host compute fixture; guest descriptor integration not established. |
+| Component contract testing | [Startup evidence](../tests/startup-evidence), [Versioned uploads](../tests/versioned-upload), [Descriptor bindings](../tests/descriptor-bindings) | Documented IRX development | Project names now identify behavior rather than release number. Existing fixture provenance and historical diagnostic markers remain. |
+| Physical-view index | [MappedViewIndex](../IraRationis.HLE/Memory/MappedViewIndex.cs), [mapping owner](../IraRationis.HLE/Memory/PhysicalPageModule.cs) | Documented IRX extension / adapted owner | The C# range index replaces full-view scans while preserving the existing mapping owner's provenance. An independently added data structure does not change the lineage of surrounding adapted code. |
+| Network diagnostics | [NetworkTraceSession](../IraRationis.Cli/Diagnostics/Network/NetworkTraceSession.cs), [export script](../scripts/Export-NetworkTrace.ps1) | Documented IRX extension | Managed control of Windows ETW providers; provider contracts come from platform documentation. No reference-project network implementation was incorporated in this change. |
 | Build and release engineering | [GitHub Actions workflow](../.github/workflows/build.yml), [release procedure](RELEASING.md) | Documented IRX development | Audit inherited build files and third-party actions separately. |
 
 ## 5. Traceable architectural development
@@ -133,4 +137,6 @@ A first appearance in IRX history is not proof of independent authorship. Compar
 
 This inventory is based on the R52 repository tree, selected source files, revision notes, commit summaries, and existing attribution statements. No complete upstream diff, dependency license audit, or independent authorship verification has been performed. Unresolved classifications must remain visible until the maintainer completes that review.
 
-See also [Architecture and Research](architecture.md), [Architecture Atlas](IRX-ARCHITECTURE-ATLAS.md), and [Architectural Divergence](ARCHITECTURAL-DIVERGENCE.md) where those companion documents have been added.
+The current layout update preserves those provisional classifications and adds the physical-view index and network diagnostics. File moves, semantic renames, and extraction into top-level classes do not establish new authorship. Replacing earlier ported implementations should retain contract tests, record the replacement design and references, and keep notices applicable to any derived implementation that remains. The maintainer's successful local build is behavioral evidence about compilation, not a provenance audit.
+
+See also [Architecture and Research](architecture.md), [Architecture Atlas](ARCHITECTURE-ATLAS.md), and [Architectural Divergence](ARCHITECTURAL-DIVERGENCE.md). Retired release-specific notes remain in Git history; current subsystem behavior belongs in topic documents and source contracts.

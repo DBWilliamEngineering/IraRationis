@@ -1,6 +1,14 @@
 # IRX architecture and research
 
-Vindex / First Light. Source inventory reviewed 2026-11-25. These are conceptual diagrams; implemented source is not equivalent to tested behavior. Research extensions are IRX-specific relative to the referenced upstream, not claims of worldwide novelty.
+Vindex / First Light. Source organization reviewed November 26, 2026. These are conceptual diagrams; implemented source is not equivalent to tested behavior. Research extensions describe IRX's development direction, not claims of worldwide novelty.
+
+## Component ownership
+
+Production code is grouped by responsibility and namespace. Data types live beneath the component that owns their contract, such as `HLE/Input/Models`, `Graphics/Descriptors/Models`, and `Media/Audio/Models`. Shared abstractions require a concrete cross-component responsibility; there is no catch-all model library. Authored types are top-level and have individual files. The partial `ConsoleGraphicsDevice` facade retains its public type identity while its source files are grouped by graphics responsibility.
+
+Extraction makes dependencies visible but does not automatically remove them. Internal members shared with extracted behavior classes remain explicit review boundaries. Preserve native field layout and resource lifetime when simplifying those relationships. Prefer descriptive names, bounded ownership, and clear control flow; code metrics support design review but do not replace it.
+
+The [architecture atlas](ARCHITECTURE-ATLAS.md) provides subsystem diagrams. [Runtime integration](RUNTIME-INTEGRATION.md) describes utility-context and authored-sample integration, while [diagnostics](DIAGNOSTICS.md) covers startup and performance evidence.
 
 ## Virtual unified memory (isolated research)
 
@@ -15,7 +23,7 @@ flowchart TD
     class B,E research
 ```
 
-[VirtualPageTable](../IraRationis.Memory/VirtualPageTable.cs) supports map, translate and unmap. It does not modify hardware page tables or transparently intercept native accesses. It remains separate from title allocation and GPU submission.
+[VirtualPageTable](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs) supports map, translate and unmap. It does not modify hardware page tables or transparently intercept native accesses. It remains separate from title allocation and GPU submission.
 
 ```mermaid
 flowchart LR
@@ -32,6 +40,10 @@ flowchart LR
 
 Four backing strategies use a common checksum workload. Existing-system-memory heaps and GPU upload depend on hardware and driver support. No title performance advantage has been established.
 
+Production physical mappings use [MappedViewIndex](../IraRationis.HLE/Memory/MappedViewIndex.cs) to find overlapping views and resolve aliases by contiguous portions. Its owner, [PhysicalPageModule](../IraRationis.HLE/Memory/PhysicalPageModule.cs), retains synchronization and section-handle ownership. Range lookup is O(log n + k) for n views and k overlaps; Windows mapping work and index updates add their own costs.
+
+This index is not a CPU/GPU coherence manager. [VersionedUploadBuffer](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs) tracks explicit writes to an owned host buffer, not arbitrary guest-pointer writes or physical aliases. Broader VRAM residency requires those observations and fence-safe eviction. The current host materialization budget is 512 MiB with a 256 MiB resource limit.
+
 ## Managed graphics ABI
 
 ```mermaid
@@ -46,7 +58,7 @@ flowchart TD
     D -.-> I[Experimental shader and resource translation]
 ```
 
-Source: [Graphics](../IraRationis.Graphics). Separate console and host layouts, explicit unmanaged calls and direct COM dispatch. Newer source includes host resource materialization, pipeline metadata, texture computer interfaces, query heaps and host DXR capability detection. Guest ray tracing, complete shader translation, coherence and original frame presentation are not established.
+Source: [Graphics](../IraRationis.Graphics). Separate console and host layouts, explicit unmanaged calls and direct COM dispatch. Source includes host resource materialization, pipeline metadata, texture computer interfaces, query heaps and host DXR capability detection. The maintainer has reported recognizable guest UI rendering; that does not establish complete shader translation, guest ray tracing, coherent resources, or playable gameplay.
 
 ## Build-time ABI fallbacks
 
@@ -77,4 +89,4 @@ This describes the diagnostic workflow reported in the existing README, not a co
 
 ## Validation boundary
 
-Maintainer-reported Debug/JIT execution reached partial graphics initialization. Synthetic probes are not title rendering. Keep original frame, intro, menu, gameplay and Native AOT claims separate until reproduced. The latest repository source was not compiled or executed during this documentation review.
+The maintainer reports a successful local test build after the component restructure. No build, GPU probe, game execution, or CI result was independently reproduced during this documentation update. Synthetic probes remain distinct from title rendering; original startup video/audio, account completion, main menu, and gameplay need their own evidence.
