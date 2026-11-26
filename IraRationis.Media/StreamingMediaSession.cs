@@ -25,6 +25,20 @@ public static class StreamingMediaSession
 
     public static StreamingPlaybackResult Play(string ffmpeg, string input, int seconds = 30)
     {
+        return PlayCore(ffmpeg, input, seconds, null);
+    }
+
+    public static StreamingPlaybackResult PlayGpu(string ffmpeg, string input,
+        Func<nint, int, int, IGpuVideoPresenter> createPresenter, int seconds = 30)
+    {
+        ArgumentNullException.ThrowIfNull(createPresenter);
+
+        return PlayCore(ffmpeg, input, seconds, createPresenter);
+    }
+
+    private static StreamingPlaybackResult PlayCore(string ffmpeg, string input, int seconds,
+        Func<nint, int, int, IGpuVideoPresenter>? createPresenter)
+    {
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException();
@@ -89,10 +103,38 @@ public static class StreamingMediaSession
             pending = first;
 
             using var window = new WindowsVideoWindow(width, height);
+            using var presenter = createPresenter?.Invoke(window.Handle, width, height);
             using var audio = new WindowsPcmClock(pcm, SampleRate, Channels);
 
-            var pixels = new byte[width * height * 4];
-            var hasPixels = false;
+            if (createPresenter is not null && presenter is null)
+            {
+                throw new InvalidOperationException("GPU presenter factory returned null.");
+            }
+
+            var pixels = presenter is null ? new byte[width * height * 4] : null;
+
+            if (!window.Pump())
+            {
+                return new StreamingPlaybackResult(0, 0, 0, true, 0);
+            }
+
+            // Submit the opening frame before starting the PCM master clock.
+            if (!PresentFrame(first, frameBytes, width, height, window, presenter, pixels))
+            {
+                throw new InvalidOperationException("Opening streamed frame was not accepted.");
+            }
+
+            ArrayPool<byte>.Shared.Return(first.Buffer);
+
+            pending = null;
+            decoded = 1;
+            presented = 1;
+
+            if (!window.Pump())
+            {
+                return new StreamingPlaybackResult(decoded, presented, 0, true, 0);
+            }
+
             var timer = Stopwatch.StartNew();
 
             audio.Start();
@@ -150,20 +192,14 @@ public static class StreamingMediaSession
 
                     if (selected is { } current)
                     {
-                        var data = current.Buffer.AsSpan(0, frameBytes);
-
-                        Nv12Converter.Convert(data[..(width * height)], width, data[(width * height)..], width,
-                            width, height, pixels, width * 4);
-
-                        hasPixels = true;
-
-                        if (window.Draw(pixels))
+                        if (!done && PresentFrame(current, frameBytes, width, height, window, presenter, pixels))
                         {
                             presented++;
                         }
                     }
-                    else if (hasPixels)
+                    else if (pixels is not null)
                     {
+                        // Software windows need repainting; GPU frames are submitted only once.
                         window.Draw(pixels);
                     }
                 }
@@ -221,6 +257,25 @@ public static class StreamingMediaSession
                 ArrayPool<byte>.Shared.Return(remainingFrame.Buffer);
             }
         }
+    }
+
+    private static bool PresentFrame(VideoFrame frame, int frameBytes, int width, int height,
+        WindowsVideoWindow window, IGpuVideoPresenter? presenter, byte[]? pixels)
+    {
+        var data = frame.Buffer.AsSpan(0, frameBytes);
+
+        if (presenter is not null)
+        {
+            return presenter.Present(data);
+        }
+
+        var target = pixels ?? throw new InvalidOperationException("Missing software pixel buffer.");
+        var lumaBytes = width * height;
+
+        Nv12Converter.Convert(data[..lumaBytes], width, data[lumaBytes..], width,
+            width, height, target, width * 4);
+
+        return window.Draw(target);
     }
 
     private static async Task<short[]> DecodeAudioAsync(string ffmpeg, string input, int seconds,

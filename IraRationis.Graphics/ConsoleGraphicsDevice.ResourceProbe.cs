@@ -78,6 +78,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             VerifyTextureFootprints(device);
+            VerifyLinearTextureTransfer();
 
             var properties = new HeapProperties { Kind = 1, CreationNodes = 1, VisibleNodes = 1 };
             var heapDesc = new HeapDescription

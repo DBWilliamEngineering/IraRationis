@@ -286,6 +286,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void ExecuteDeferredCopy(DeferredCopy copy)
     {
+        if (copy.Texture is { } texture)
+        {
+            ExecuteLinearTextureTransfer(texture);
+
+            return;
+        }
+
         const int chunkSize = 65536;
 
         var scratch = ArrayPool<byte>.Shared.Rent(chunkSize);
@@ -368,6 +375,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void CopyWhole(nint self, nint dst, nint src)
     {
+        if (LinearTextureTransferEnabled && TryRecordWholeLinearTexture(self, dst, src))
+        {
+            return;
+        }
+
         CopyWholeCore(self, dst, src);
     }
 
@@ -500,7 +512,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void CopyTextureGuest(nint self, nint dst, uint x, uint y, uint z, nint src, nint box)
     {
-        IncompleteOperation(self, "CopyTextureRegion", "texture upload/readback and resource coherence");
+        if (LinearTextureTransferEnabled && TryRecordLinearTextureTransfer(self, dst, x, y, z, src, box))
+        {
+            return;
+        }
+
+        IncompleteOperation(self, "CopyTextureRegion", "unsupported texture layout, copy ABI or resource coherence");
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -899,7 +916,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             "[graphics-probe] Known command-list registration, aligned upload ownership and deferred overlapping copy passed (CPU only).");
     }
 
-    private readonly record struct DeferredCopy(ulong Destination, ulong Source, ulong Size);
+    private readonly record struct DeferredCopy(ulong Destination, ulong Source, ulong Size,
+        LinearTextureTransfer? Texture = null);
 
     [StructLayout(LayoutKind.Explicit, Size = 48)]
     private struct ClearProbeCopyLocation

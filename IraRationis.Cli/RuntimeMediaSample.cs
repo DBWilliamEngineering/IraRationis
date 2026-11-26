@@ -101,6 +101,13 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
 
     private int Run()
     {
+        var decoder = Environment.GetEnvironmentVariable("IRX_SAMPLE_MEDIA_FFMPEG");
+
+        if (!string.IsNullOrWhiteSpace(decoder))
+        {
+            return RunStreaming(decoder);
+        }
+
         var clip = MediaFoundationDecoder.Decode(_clipPath);
 
         using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, true);
@@ -123,6 +130,19 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
         }
 
         return 0;
+    }
+
+    private int RunStreaming(string decoder)
+    {
+        using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, true);
+
+        var result = StreamingMediaSession.PlayGpu(decoder, _clipPath,
+            (window, width, height) => new Presenter(window, width, height, context));
+
+        Console.WriteLine(FormattableString.Invariant(
+            $"[media] IRX-R56: decoded={result.DecodedFrames}; presented={result.PresentedFrames}; skipped={result.SkippedFrames}; cancelled={result.Cancelled}; audioSeconds={result.AudioSeconds:F3}; queueCapacity={StreamingMediaSession.FrameQueueCapacity}."));
+
+        return result.Cancelled || result.PresentedFrames == 0 || result.SkippedFrames != 0 ? 3 : 0;
     }
 
     private sealed class Presenter : IGpuVideoPresenter
