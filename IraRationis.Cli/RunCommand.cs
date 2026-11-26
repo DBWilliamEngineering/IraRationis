@@ -29,13 +29,19 @@ internal static class RunCommand
         RuntimeState.SetImagePath(main.BaseAddress, path);
 
         var threads = new TitleThreads();
-        var modules = new[]
+        using var mediaSample = RuntimeMediaSample.Begin();
+        var modules = new List<HleModule>
         {
             KernelThreadModule.Create(threads), KernelImageModule.Create(), XMemModule.Create(), DspModule.Create(),
             RootSignatureModule.Create(), FileSystemModule.Create(), GameInputModule.Create(),
             PhysicalPageModule.Create(), DirectStorageModule.Create(), GraphicsDeviceModule.Create(), XgModule.Create(),
             AcpHalModule.Create(), XApuModule.Create()
         };
+        if (mediaSample is not null)
+        {
+            modules.Add(mediaSample.CreateModule());
+        }
+
         var registry = new HleRegistry(modules);
         var host = strict ? new HostPolicy([]) : new HostPolicy();
         var resolver = new HleResolver(registry, host);

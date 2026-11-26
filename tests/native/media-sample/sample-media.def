@@ -1,0 +1,3 @@
+LIBRARY irx-sample-media.dll
+EXPORTS
+    IrxPlaySampleMedia
