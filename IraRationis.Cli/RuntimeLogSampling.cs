@@ -62,7 +62,7 @@ internal sealed class RuntimeLogSampling : IDisposable
         return new RuntimeLogSampling();
     }
 
-    private sealed class SamplingWriter(TextWriter target) : TextWriter
+    public sealed class SamplingWriter(TextWriter target) : TextWriter
     {
         private long _emittedLists;
         private long _emittedResources;

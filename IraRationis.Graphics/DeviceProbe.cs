@@ -240,6 +240,8 @@ public static unsafe class DeviceProbe
 
                 ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
 
+                ConsoleGraphicsDevice.VerifyR52DescriptorTables(queue);
+
                 Check(reset(allocator), "Allocator reset after completion");
 
                 var resetList =

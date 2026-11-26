@@ -9,6 +9,13 @@
         <ProjectReference Include="../IraRationis.Shaders/IraRationis.Shaders.csproj" />
         <PackageReference Include="TerraFX.Interop.Windows" />
     </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="R50.Contracts" />
+        <InternalsVisibleTo Include="R51.Contracts" />
+        <InternalsVisibleTo Include="R52.Contracts" />
+    </ItemGroup>
+
     <ItemGroup>
         <!-- Explicit membership for new graphics infrastructure. Remove SDK glob entries first. -->
         <Compile Remove="ConsoleGraphicsDevice.HostCompletionFence.cs;ConsoleGraphicsDevice.HostValidation.cs;ConsoleGraphicsDevice.Presentation.cs;ConsoleGraphicsDevice.FenceAddress.cs;ConsoleGraphicsDevice.DrawEvidence.cs;ConsoleGraphicsDevice.VertexFetchTranslation.cs;ConsoleGraphicsDevice.VertexFetchExecutionProbe.cs;ConsoleGraphicsDevice.VertexFetchSourceProbe.cs;ConsoleGraphicsDevice.VertexFetchGuestDraw.cs;ConsoleGraphicsDevice.RectangleGuestDraw.cs;ConsoleGraphicsDevice.PageMappings.cs;ConsoleGraphicsDevice.TexturedRectangle.cs;ConsoleGraphicsDevice.GuestPreview.cs;ConsoleGraphicsDevice.ComputeEvidence.cs;ConsoleGraphicsDevice.ColorLutCompute.cs;ConsoleGraphicsDevice.SwapChainPresentation.cs;ConsoleGraphicsDevice.IndexedInput.cs;ConsoleGraphicsDevice.RuntimeMetrics.cs;ConsoleGraphicsDevice.TimingMetrics.cs" />

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using IraRationis.Media;
 
 VerifyPrimitives();
+
 if (args.Length is < 2 or > 3 || (args.Length == 3 && args[2] != "--play"))
 {
     Console.WriteLine("Usage: MediaBaseline <ffmpeg.exe> <local clip.mp4> [--play]");
@@ -12,9 +13,12 @@ if (args.Length is < 2 or > 3 || (args.Length == 3 && args[2] != "--play"))
 var clip = await LocalMediaDecoder.DecodeAsync(args[0], args[1]);
 var directory = Path.Combine("artifacts", "media-baseline", $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}");
 var report = MediaClipInspector.Inspect(clip, directory);
+
 Console.WriteLine(
     $"[media] frames={report.Frames}; unique={report.DistinctFrames}; audioSamples={report.AudioSamples}; peak={report.Peak}");
+
 Console.WriteLine($"[media] Output: {report.OutputDirectory}");
+
 if (report.DistinctFrames < 2 || report.Peak == 0)
 {
     throw new InvalidDataException("Expected moving video and non-silent audio in the synthetic fixture.");
@@ -43,7 +47,7 @@ static void VerifyPrimitives()
 
     PcmMixer.Mix([0.5f, -0.75f, float.NaN, 0.25f], [0.75f, -0.75f, 0.5f, -0.25f], 1, 1, mixed);
 
-    if (!mixed.AsSpan().SequenceEqual(new[] { 1, -1, 0.5f, 0 }))
+    if (!mixed.AsSpan().SequenceEqual([1, -1, 0.5f, 0]))
     {
         throw new InvalidDataException("PCM mixer regression.");
     }

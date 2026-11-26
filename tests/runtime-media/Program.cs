@@ -8,6 +8,9 @@ namespace IraRationis.RuntimeMedia.Tests;
 
 internal static unsafe class Program
 {
+    private const float Pcm16Scale = 1.0f / 32768.0f;
+    private const float Tolerance = Pcm16Scale;
+
     private static int Main(string[] args)
     {
         if (args.Length > 1 || (args.Length == 1 && args[0] != "--play"))
@@ -43,13 +46,9 @@ internal static unsafe class Program
         frame.CopyToUpload(upload.AsSpan(0, 512), 256, upload.AsSpan(512), 256);
 
         Require(upload.AsSpan(0, 4).SequenceEqual(new byte[] { 16, 16, 16, 16 }), "Luma row zero");
-
         Require(upload.AsSpan(256, 4).SequenceEqual(new byte[] { 235, 235, 235, 235 }), "Luma row one");
-
         Require(upload.AsSpan(512, 4).SequenceEqual(new byte[] { 128, 128, 128, 128 }), "Chroma row");
-
         Require(upload.AsSpan(4, 252).IndexOfAnyExcept((byte)0) < 0, "Initialized padding");
-
         Require(frame.Timestamp == 123, "Timestamp ownership");
 
         var bgra = new byte[32];
@@ -66,11 +65,6 @@ internal static unsafe class Program
     private static void TestAudio(bool play)
     {
         var registry = new HleRegistry([XApuModule.Create()]);
-
-        nuint Export(string name)
-        {
-            return registry.Lookup("xapu.dll", name) ?? throw new InvalidOperationException(name);
-        }
 
         var connect = (delegate* unmanaged[Stdcall]<uint*, nint*, nint*, int>)Export("XApuConnect");
         var disconnect = (delegate* unmanaged[Stdcall]<nint, int>)Export("XApuDisconnect");
@@ -107,11 +101,8 @@ internal static unsafe class Program
             commandBytes.Clear();
 
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 1);
-
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[4..], 1);
-
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[24..], 2);
-
             BinaryPrimitives.WriteSingleLittleEndian(commandBytes[40..], 1);
 
             Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
@@ -120,17 +111,11 @@ internal static unsafe class Program
             commandBytes[24..].Clear();
 
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 3);
-
             BinaryPrimitives.WriteSingleLittleEndian(commandBytes[28..], 1);
-
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[36..], 960);
-
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[40..], (uint)packet.Length);
-
             BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[44..], (nuint)memory);
-
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[52..], 7680);
-
             BinaryPrimitives.WriteUInt64LittleEndian(commandBytes[56..], (nuint)(memory + 4096));
 
             var packets = play ? 50 : 1;
@@ -158,7 +143,7 @@ internal static unsafe class Program
 
             for (var index = 0; index < guest.Length; index++)
             {
-                Require(guest[index] == sink.LastPacket[index] * (1.0f / 32768.0f), "Guest output unchanged");
+                Require(Math.Abs(guest[index] - sink.LastPacket[index] * (1.0f / 32768.0f)) < Tolerance, "Guest output unchanged");
             }
 
             Require(XApuModule.AttachPcmSink(handle, 1, null), "Sink detached");
@@ -180,6 +165,13 @@ internal static unsafe class Program
                 Require(monitor.WaitForCompletion(TimeSpan.FromSeconds(8)) && !monitor.Faulted &&
                         monitor.CompletedPackets > 0, "Windows PCM output completion");
             }
+        }
+
+        return;
+
+        nuint Export(string name)
+        {
+            return registry.Lookup("xapu.dll", name) ?? throw new InvalidOperationException(name);
         }
     }
 

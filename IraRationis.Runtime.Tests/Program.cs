@@ -24,14 +24,15 @@ internal static class Program
         TestHostPolicy();
 
         FoundationTests.Run();
-
         InteropTests.Run();
 
         GameInputModule.VerifyLayouts();
 
         Require(
-            GameInputModule.ConvertPad(0x1014, 255, 0, short.MinValue, short.MaxValue, 0, 0)
-            == new GameInputModule.PadState(0x105, 1, 0, -1, 1, 0, 0), "GameInput pad conversion");
+            GameInputModule
+                .ConvertPad(0x1014, 255, 0, short.MinValue, short.MaxValue, 0, 0) 
+            == new GameInputModule.PadState(0x105, 1, 0, -1, 1, 0, 0), 
+            "GameInput pad conversion");
 
         Require(new HleRegistry([GameInputModule.Create()]).Lookup("GameInput.dll", "#1") is not null,
             "GameInput ordinal");

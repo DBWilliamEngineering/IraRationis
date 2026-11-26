@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../IraRationis.Graphics/DescriptorBindingCatalog.cs" Link="DescriptorBindingCatalog.cs" />
+        <Compile Include="../../IraRationis.Graphics/DescriptorTableCache.cs" Link="DescriptorTableCache.cs" />
+    </ItemGroup>
+</Project>

@@ -39,7 +39,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             _ = DescriptorRecords.TryGetValue(token.Id, out record);
         }
 
-        if (record == null || record.Kind != 19 || record.Counter != 0 || !IsResource(record.Resource))
+        if (record is not { Kind: 19 } || record.Counter != 0 || !IsResource(record.Resource))
         {
             return false;
         }
@@ -306,7 +306,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.HostViews.Count > R13MaximumHostViews - 2)
         {
             Console.Error.WriteLine(
-                $"[graphics] IRX-GFX-COMPUTE-R17.4: groups={x}x{y}x{z}; flags=0x{flags:X}; listType={*(uint*)(self + 0x10)}; rootMatches={state.Compute.Signature == metadata.Root}; tables={state.Compute.Tables.Count}; constants={state.Compute.Constants.Count}; views={state.Compute.Views.Count}; boundaries={state.MemoryBoundaries.Count}; hostViews={state.HostViews.Count}.");
+                $"[graphics] IRX-GFX-COMPUTE-R17.4: groups={x}x{y}x{z}; "
+                + $"flags=0x{flags:X}; listType={*(uint*)(self + 0x10)}; "
+                + $"rootMatches={state.Compute.Signature == metadata.Root}; "
+                + $"tables={state.Compute.Tables.Count}; "
+                + $"constants={state.Compute.Constants.Count}; "
+                + $"views={state.Compute.Views.Count}; "
+                + $"boundaries={state.MemoryBoundaries.Count}; "
+                + $"hostViews={state.HostViews.Count}.");
 
             return RefuseR17("dispatch or root contract differs from the translated program");
         }

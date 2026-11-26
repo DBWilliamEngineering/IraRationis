@@ -10,7 +10,7 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        if (args.Length != 0 && (args.Length != 2 || args[0] != "--clip"))
+        if (args.Length != 0 && args is not ["--clip", _])
         {
             Console.Error.WriteLine("Usage: GpuMedia [--clip <local authorized MP4>]");
 

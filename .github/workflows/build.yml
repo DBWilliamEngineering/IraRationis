@@ -146,6 +146,26 @@ jobs:
                   path: artifacts/distribution/
                   if-no-files-found: error
                   retention-days: 14
+                              - name: Run revision regression contracts
+              run: |
+                  $projects = Get-ChildItem `
+                      -Path 'tests/r*-contracts/*.csproj' `
+                      -File |
+                      Sort-Object FullName
+
+                  foreach ($project in $projects)
+                  {
+                      Write-Host "Testing $($project.Name)"
+
+                      dotnet run `
+                          --project $project.FullName `
+                          -c Release
+
+                      if ($LASTEXITCODE -ne 0)
+                      {
+                          throw "Contract failure: $($project.Name)"
+                      }
+                  }
 
     draft-release:
         needs: native-aot
@@ -181,3 +201,60 @@ jobs:
               run: |
                   gh release create $env:RELEASE_TAG artifacts/release/irx-win-x64.zip artifacts/release/irx-source.zip artifacts/release/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --verify-tag --draft --prerelease --generate-notes --title "Ira Rationis $env:RELEASE_TAG"
                   if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed; inspect any existing draft before retrying.' }
+                  
+    auto-tag:
+        name: Tag validated IraRationis revision
+        needs: native-aot
+
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Detect and tag release
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  subject=$(git show -s --format=%s "$GITHUB_SHA")
+                  pattern='^(R[1-9][0-9]*(\.[0-9]+)*):[[:space:]]'
+
+                  if [[ ! "$subject" =~ $pattern ]]; then
+                      echo "Not a release commit. Skipping."
+
+                      exit 0
+                  fi
+
+                  tag="${BASH_REMATCH[1]}"
+
+                  if git show-ref --verify --quiet "refs/tags/$tag"; then
+                      existing=$(git rev-parse "refs/tags/$tag^{commit}")
+
+                      if [[ "$existing" == "$GITHUB_SHA" ]]; then
+                          echo "$tag already exists for this commit."
+
+                          exit 0
+                      fi
+
+                      echo "::error::Tag $tag belongs to another commit."
+
+                      exit 1
+                  fi
+
+                  git config user.name "github-actions[bot]"
+                  git config user.email \
+                      "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  git tag -a "$tag" "$GITHUB_SHA" -m "$subject"
+
+                  git push origin "refs/tags/$tag"
+
+                  echo "Successfully created release tag $tag."

@@ -7,6 +7,7 @@ namespace IraRationis.Shaders;
 
 public static class NativeShaderProbe
 {
+
     public static void Verify()
     {
         uint[] words = [0xbe800385, 0x80018100, 0xb002fffe, 0x8003ff01, 0x12345678, 0xbf810000];
@@ -42,7 +43,7 @@ public static class NativeShaderProbe
         var threads = native.Count == 1 ? native[0].Threads : null;
 
         if (native.Count != 1 || native[0].Stage != NativeShaderStage.Compute || native[0].Wave64 ||
-            threads is not { Length: 3 } || threads[0] != 8 || threads[1] != 4 || threads[2] != 1 ||
+            threads is not [8, 4, 1] ||
             !native[0].Code.AsSpan().SequenceEqual(code))
         {
             throw new InvalidOperationException("XDAT/XBCH/FSSM extraction mismatch.");

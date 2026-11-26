@@ -53,7 +53,7 @@ public static unsafe partial class MediaFoundationDecoder
         var path = Path.GetFullPath(inputPath);
         var root = Path.GetPathRoot(path);
 
-        if (root is null || root.Length != 3 || root[1] != ':' ||
+        if (root is null || root is not [_, ':', _] ||
             !Path.GetExtension(path).Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
             new DriveInfo(root).DriveType is not (DriveType.Fixed or DriveType.Removable or DriveType.Ram) ||
             !File.Exists(path))
