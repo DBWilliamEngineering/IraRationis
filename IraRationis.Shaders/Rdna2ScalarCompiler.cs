@@ -209,7 +209,7 @@ public static class Rdna2ScalarCompiler
         }
 
         source.AppendLine(
-            "    [unroll] for (uint i = 0; i < 102; ++i) { Output[i] = s[i]; }\n    Output[102] = scc;\n}");
+            "    [unroll] for (uint outputIndex = 0; outputIndex < 102; ++outputIndex) { Output[outputIndex] = s[outputIndex]; }\n    Output[102] = scc;\n}");
 
         return source.ToString();
     }

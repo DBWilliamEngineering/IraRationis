@@ -11,14 +11,7 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
-    private const long R19ShaderCacheLimit = 64L << 20;
-
-    // Cache validated host bytecode, not resource bindings or native PSOs.
-    // Exact source/profile keys prevent cross-stage reuse. Failed compilations
-    // are never cached. The compiler executes outside the cache lock.
-    private static readonly Lock R19ShaderCacheGate = new();
-    private static readonly Dictionary<(string Source, string Profile), byte[]> R19ShaderCache = new();
-    private static long _r19ShaderCacheBytes;
+    private static readonly HostShaderBytecodeCache R19ShaderCache = new(256, 64L << 20);
     private static long _r19ShaderCacheHits;
 
     // This is an executable host-bytecode preparation stage, not draw execution.
@@ -109,61 +102,48 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static byte[]? CompileR10Shader(string source, string profile, TextWriter report)
     {
-        var key = (source, profile);
+        var bytecode = R19ShaderCache.GetOrCompile(source, profile, Compile, out var reused);
 
-        byte[]? cached;
-
-        lock (R19ShaderCacheGate)
-        {
-            _ = R19ShaderCache.TryGetValue(key, out cached);
-        }
-
-        if (cached != null)
+        if (reused && bytecode != null)
         {
             var hits = Interlocked.Increment(ref _r19ShaderCacheHits);
 
             if (hits <= 4 || (hits & (hits - 1)) == 0)
             {
                 report.WriteLine(
-                    $"[graphics] IRX-GFX-SHADER-R19: cache hit #{hits}, {profile}, bytes={cached.Length}.");
+                    $"[graphics] IRX-GFX-SHADER-R19: cache hit #{hits}, {profile}, bytes={bytecode.Length}.");
             }
-
-            return cached;
         }
 
-        BeginR18ShaderCompilation(profile);
+        return bytecode;
 
-        var succeeded = false;
-
-        try
+        byte[]? Compile()
         {
-            var bytecode = CompileR10ShaderCore(source, profile, report);
+            BeginR18ShaderCompilation(profile);
 
-            succeeded = bytecode != null;
+            var succeeded = false;
 
-            if (bytecode != null)
+            try
             {
-                var charge = (long)source.Length * sizeof(char) + profile.Length * sizeof(char) + bytecode.Length;
+                var result = CompileR10ShaderCore(source, profile, report);
 
-                lock (R19ShaderCacheGate)
-                {
-                    if (R19ShaderCache.Count < 256 && charge <= R19ShaderCacheLimit - _r19ShaderCacheBytes &&
-                        R19ShaderCache.TryAdd(key, bytecode))
-                    {
-                        _r19ShaderCacheBytes += charge;
-                    }
-                }
+                succeeded = result != null;
+
+                return result;
             }
-
-            return bytecode;
-        }
-        finally
-        {
-            EndR18ShaderCompilation(succeeded);
+            finally
+            {
+                EndR18ShaderCompilation(succeeded);
+            }
         }
     }
 
     private static byte[]? CompileR10ShaderCore(string source, string profile, TextWriter report)
+    {
+        return CompileR64PersistentShader(source, profile, report);
+    }
+
+    private static byte[]? CompileR64ShaderUncached(string source, string profile, TextWriter report)
     {
         var sourceBytes = Encoding.UTF8.GetBytes(source);
         var target = Encoding.ASCII.GetBytes(profile + "\0");
@@ -561,6 +541,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void VerifyR10VertexFetchExtent()
     {
+        HostShaderBytecodeCache.Verify();
+
         var pair = new VertexFetchShaderPair(string.Empty, string.Empty, 3, 0, new VertexFetchField(0, 3),
             new VertexFetchField(12, 4));
 
@@ -605,6 +587,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static partial int SerializeR10RootNative(D3D12_VERSIONED_ROOT_SIGNATURE_DESC* description,
         nint* blob, nint* errors);
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("d3dcompiler_47.dll", EntryPoint = "D3DCompile")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvStdcall)])]
     private static partial int CompileR10ShaderNative(void* source, nuint size, byte* name, void* defines,
