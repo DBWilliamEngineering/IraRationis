@@ -99,7 +99,7 @@ internal static unsafe class Program
             BinaryPrimitives.WriteSingleLittleEndian(commandBytes[40..], 1);
 
             Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
-                BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0, "Voice activation");
+                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0, "Voice activation");
 
             commandBytes[24..].Clear();
             BinaryPrimitives.WriteUInt32LittleEndian(commandBytes, 3);
@@ -117,8 +117,8 @@ internal static unsafe class Program
                 BinaryPrimitives.WriteUInt32LittleEndian(commandBytes[8..], (uint)(index + 1));
 
                 Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
-                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 &&
-                    BinaryPrimitives.ReadUInt32LittleEndian(resultBytes[48..]) == 960, "PCM decode");
+                        BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 &&
+                        BinaryPrimitives.ReadUInt32LittleEndian(resultBytes[48..]) == 960, "PCM decode");
 
                 if (play)
                 {
@@ -139,7 +139,7 @@ internal static unsafe class Program
 
             Require(XApuModule.AttachPcmSink(handle, 1, null), "Sink detached");
             Require(enqueue(handle, command, null) == 0 && dequeue(handle, result) == 0 &&
-                BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 && sink.Packets == packets,
+                    BinaryPrimitives.ReadInt32LittleEndian(resultBytes[44..]) == 0 && sink.Packets == packets,
                 "Detached sink not called");
 
             Console.WriteLine($"[audio] IRX-R40: packets={sink.Packets}; frames={sink.Frames}; peak={sink.Peak}.");
@@ -153,7 +153,7 @@ internal static unsafe class Program
                 monitor.Dispose();
 
                 Require(monitor.WaitForCompletion(TimeSpan.FromSeconds(8)) && !monitor.Faulted &&
-                    monitor.CompletedPackets > 0, "Windows PCM output completion");
+                        monitor.CompletedPackets > 0, "Windows PCM output completion");
             }
         }
     }
@@ -168,10 +168,29 @@ internal static unsafe class Program
 
     private sealed class ProbeSink(WindowsPcmMonitor? monitor) : IPcmPacketSink
     {
-        public int Packets { get; private set; }
-        public int Frames { get; private set; }
-        public int Peak { get; private set; }
-        public short[] LastPacket { get; private set; } = [];
+        public int Packets
+        {
+            get;
+            private set;
+        }
+
+        public int Frames
+        {
+            get;
+            private set;
+        }
+
+        public int Peak
+        {
+            get;
+            private set;
+        }
+
+        public short[] LastPacket
+        {
+            get;
+            private set;
+        } = [];
 
         public bool TrySubmit(ReadOnlySpan<short> samples, int channels)
         {

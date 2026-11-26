@@ -62,6 +62,7 @@ public static class GpuMediaPlaybackSession
             {
                 Report($"failed; stage={stage}; error={exception.GetType().Name}; " +
                        $"HRESULT=0x{exception.HResult:X8}.");
+                Report(exception.ToString());
             }
 
             throw;
@@ -81,19 +82,65 @@ public static class GpuMediaPlaybackSession
         {
             Report("window, GPU presenter and audio clock initialized.");
         }
-        var last = -1;
-        var presented = 0;
-        var skipped = 0;
-        var position = 0.0;
-        var timer = Stopwatch.StartNew();
+
+        var timeline = new HostFrameTimeline(clip.FrameCount);
+        stage = "first frame window pump";
+        if (!window.Pump())
+        {
+            stage = "cancellation and disposal";
+
+            return new PlaybackResult(0, 0, true, 0);
+        }
+
+        // Keep audio stopped during the initial submission. A slow first Present
+        // must not cause the opening image to be skipped by the audio clock.
+        var firstStarted = Stopwatch.GetTimestamp();
+        stage = "first frame timeline selection";
+        if (!timeline.TrySelect(0, out var first))
+        {
+            throw new InvalidOperationException("Unable to select the opening frame.");
+        }
+
+        stage = "first frame retrieval";
+        var pixels = clip.GetFrame(first);
+        if (diagnostics)
+        {
+            Report($"preroll input; index={first}; frameCount={clip.FrameCount}; " +
+                   $"bytes={pixels.Length}; expectedBytes={clip.FrameBytes}; " +
+                   $"size={clip.Width}x{clip.Height}.");
+        }
+
+        stage = "first frame GPU presenter";
+        var accepted = presenter.Present(pixels);
+        stage = "first frame timeline accounting";
+        timeline.Record(accepted);
+        if (diagnostics)
+        {
+            Report(FormattableString.Invariant(
+                $"preroll; accepted={accepted}; index={first}; ms={Stopwatch.GetElapsedTime(firstStarted).TotalMilliseconds:F3}; content unverified."));
+        }
+
+        if (!accepted)
+        {
+            throw new InvalidOperationException("Opening frame was not accepted; audio not started.");
+        }
+
+        stage = "post-preroll window pump";
+        if (!window.Pump())
+        {
+            stage = "cancellation and disposal";
+
+            return new PlaybackResult(timeline.Presented, timeline.Skipped, true, 0);
+        }
 
         stage = "audio start";
+        var timer = Stopwatch.StartNew();
         audio.Start();
         stage = "playback";
         var clockAdvanced = false;
         if (diagnostics)
         {
-            Report("audio start returned successfully.");
+            Report("audio start returned successfully after first frame acceptance.");
         }
 
         while (window.Pump())
@@ -103,56 +150,52 @@ public static class GpuMediaPlaybackSession
                 throw new TimeoutException("GPU playback exceeded its bounded deadline.");
             }
 
+            stage = "audio clock read";
             var done = audio.Done;
-            position = Math.Max(position, audio.Seconds);
-            if (diagnostics && !clockAdvanced && position > 0)
+            var seconds = audio.Seconds;
+            stage = "playback timeline selection";
+            var selected = timeline.TrySelect(seconds, out var index);
+            if (diagnostics && !clockAdvanced && timeline.Position > 0)
             {
                 clockAdvanced = true;
-                Report(FormattableString.Invariant($"audio clock advanced; seconds={position:F3}."));
+                Report(FormattableString.Invariant($"audio clock advanced; seconds={timeline.Position:F3}."));
             }
 
-            var index = Math.Min(clip.FrameCount - 1, (int)(position * 30));
-            if (index != last)
+            if (selected)
             {
-                skipped += index - last - 1;
-                last = index;
-                if (presenter.Present(clip.GetFrame(index)))
-                {
-                    presented++;
-                    if (diagnostics && presented == 1)
-                    {
-                        Report($"first frame accepted by presenter; index={index}; content unverified.");
-                    }
-                }
-                else
-                {
-                    skipped++;
-                }
+                stage = "playback frame retrieval";
+                var frame = clip.GetFrame(index);
+                stage = "playback GPU presenter";
+                var frameAccepted = presenter.Present(frame);
+                stage = "playback timeline accounting";
+                timeline.Record(frameAccepted);
             }
 
             if (done)
             {
-                skipped += clip.FrameCount - 1 - last;
-
+                timeline.Finish();
                 stage = "completion and disposal";
                 if (diagnostics)
                 {
-                    Report(FormattableString.Invariant($"completed; accepted={presented}; skipped={skipped}; audioSeconds={position:F3}; expectedSeconds={duration:F3}; audible output unverified."));
+                    Report(FormattableString.Invariant(
+                        $"completed; accepted={timeline.Presented}; skipped={timeline.Skipped}; audioSeconds={timeline.Position:F3}; expectedSeconds={duration:F3}; audible output unverified."));
                 }
 
-                return new PlaybackResult(presented, skipped, false, position);
+                return new PlaybackResult(timeline.Presented, timeline.Skipped, false, timeline.Position);
             }
 
+            stage = "playback window pump";
             Thread.Sleep(2);
         }
 
         stage = "cancellation and disposal";
         if (diagnostics)
         {
-            Report(FormattableString.Invariant($"cancelled; accepted={presented}; skipped={skipped}; audioSeconds={position:F3}."));
+            Report(FormattableString.Invariant(
+                $"cancelled; accepted={timeline.Presented}; skipped={timeline.Skipped}; audioSeconds={timeline.Position:F3}."));
         }
 
-        return new PlaybackResult(presented, skipped, true, position);
+        return new PlaybackResult(timeline.Presented, timeline.Skipped, true, timeline.Position);
     }
 
     private static void Report(string message)

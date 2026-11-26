@@ -7,16 +7,27 @@ public sealed class Nv12UploadFrame
 {
     private readonly byte[] _pixels;
 
-    public int Width { get; }
-    public int Height { get; }
-    public long Timestamp { get; }
-
     private Nv12UploadFrame(int width, int height, long timestamp, byte[] pixels)
     {
         Width = width;
         Height = height;
         Timestamp = timestamp;
         _pixels = pixels;
+    }
+
+    public int Width
+    {
+        get;
+    }
+
+    public int Height
+    {
+        get;
+    }
+
+    public long Timestamp
+    {
+        get;
     }
 
     public static Nv12UploadFrame Capture(ReadOnlySpan<byte> luma, int lumaStride,

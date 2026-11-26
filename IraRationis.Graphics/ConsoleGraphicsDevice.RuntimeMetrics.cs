@@ -12,10 +12,6 @@ public static partial class ConsoleGraphicsDevice
     private static readonly ConcurrentDictionary<(string File, int Line), R46TraceCounter> R24TraceCounts = new();
     private static readonly object R24MetricsGate = new();
     private static Timer? _r46ReportTimer;
-    private sealed class R46TraceCounter
-    {
-        public long Count;
-    }
     private static long _r24FenceCreations, _r24FenceReuses, _r24FenceWaits, _r24FenceTicks;
     private static long _r24GuestWaits, _r24GuestWaitTicks, _r24PreviousGuestWaits, _r24PreviousGuestWaitTicks;
     private static long _r24Draws, _r24Dispatches, _r24PresentAttempts, _r24PresentSuccesses, _r24PresentTicks;
@@ -137,5 +133,10 @@ public static partial class ConsoleGraphicsDevice
         {
             Monitor.Exit(R24MetricsGate);
         }
+    }
+
+    private sealed class R46TraceCounter
+    {
+        public long Count;
     }
 }

@@ -8,28 +8,29 @@ namespace IraRationis.Graphics;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     /// <summary>Thread-affine, bounded host NV12 presenter. No guest resource state is published.</summary>
-    public sealed unsafe class Nv12Presenter : IDisposable
+    public sealed class Nv12Presenter : IDisposable
     {
         private const int BufferCount = 3;
-        private readonly int _width;
-        private readonly int _height;
-        private readonly int _owner = Environment.CurrentManagedThreadId;
-        private readonly TextWriter _report;
-        private readonly MediaGpuContext? _sharedContext;
         private readonly EventWaitHandle _completion = new(false, EventResetMode.AutoReset);
         private readonly Frame[] _frames = [new(), new(), new()];
+        private readonly int _height;
+        private readonly int _owner = Environment.CurrentManagedThreadId;
         private readonly D3D12_PLACED_SUBRESOURCE_FOOTPRINT[] _planes = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT[2];
-        private D3D12_PLACED_SUBRESOURCE_FOOTPRINT _colorLayout;
-        private nint _device, _queue, _fence, _root, _pipeline, _chain;
-        private nint _copyQueue, _copyFence;
-        private int _uploadBytes;
-        private long _copySubmissions, _copyWaits;
-        private ulong _copyBytes;
+        private readonly TextWriter _report;
+        private readonly MediaGpuContext? _sharedContext;
+        private readonly int _width;
         private ulong _colorBytes, _nextFence;
-        private long _submitted, _presented, _waitCount, _waitTicks, _submitTicks;
+        private D3D12_PLACED_SUBRESOURCE_FOOTPRINT _colorLayout;
+        private ulong _copyBytes;
+        private nint _copyQueue, _copyFence;
+        private long _copySubmissions, _copyWaits;
+        private nint _device, _queue, _fence, _root, _pipeline, _chain;
         private bool _disposed;
+        private long _submitted, _presented, _waitCount, _waitTicks, _submitTicks;
+        private int _uploadBytes;
 
-        public Nv12Presenter(nint window, int width, int height, TextWriter report, MediaGpuContext? sharedContext = null)
+        public Nv12Presenter(nint window, int width, int height, TextWriter report,
+            MediaGpuContext? sharedContext = null)
         {
             _sharedContext = sharedContext;
             _width = width;
@@ -49,7 +50,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                     throw new ArgumentOutOfRangeException(nameof(width), "Even positive NV12 dimensions required.");
                 }
 
-                if (window == 0 || R19IsWindow(window) == 0 || R19GetWindowThreadProcessId(window, out var process) == 0 ||
+                if (window == 0 || R19IsWindow(window) == 0 || R19GetWindowThreadProcessId(window, out var process) == 0
+                    ||
                     process != (uint)Environment.ProcessId)
                 {
                     throw new ArgumentException("An owned host window is required.", nameof(window));
@@ -63,6 +65,33 @@ public static unsafe partial class ConsoleGraphicsDevice
                 _completion.Dispose();
 
                 throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            CheckThread();
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            Wait(_nextFence);
+            try
+            {
+                var average = _submitted == 0 ? 0 : _submitTicks * 1000.0 / Stopwatch.Frequency / _submitted;
+                var wait = _waitTicks * 1000.0 / Stopwatch.Frequency;
+                _report.WriteLine($"[media] IRX-R43: submitted={_submitted}; presented={_presented}; " +
+                                  $"fence={_nextFence}; blockingWaits={_waitCount}; waitMs={wait:F3}; " +
+                                  $"meanSubmitWallMs={average:F3}; readbackBytes=0.");
+                _report.WriteLine($"[media] IRX-R49: copySubmissions={_copySubmissions}; gpuQueueWaits={_copyWaits}; " +
+                                  $"activePixelBytes={_copyBytes}; copyCpuWaits=0.");
+            }
+            finally
+            {
+                ReleaseObjects();
+                _completion.Dispose();
             }
         }
 
@@ -91,7 +120,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var queueDescription = default(D3D12_COMMAND_QUEUE_DESC);
                 var queueId = QueueId;
                 var queue = nint.Zero;
-                var createQueue = (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
+                var createQueue =
+                    (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
                 hr = createQueue(_device, &queueDescription, &queueId, &queue);
                 _queue = queue;
                 CheckHostResult(hr, "R43 queue");
@@ -122,7 +152,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var rows = stackalloc uint[2];
             var rowBytes = stackalloc ulong[2];
             var total = 0UL;
-            nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&description, 0, 2, 0, layouts, rows, rowBytes, &total);
+            nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&description, 0, 2, 0, layouts, rows, rowBytes,
+                &total);
             var yEnd = ValidateR42Footprint(layouts[0], rows[0], rowBytes[0], _width, _height);
             var uvEnd = ValidateR42Footprint(layouts[1], rows[1], rowBytes[1], _width, _height / 2);
             var upload = Math.Max(total, Math.Max(yEnd, uvEnd));
@@ -155,7 +186,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var shader = Nv12ConversionShader.Replace("(id.y * width + id.x) * 4",
-                FormattableString.Invariant($"id.y * {_colorLayout.Footprint.RowPitch}u + id.x * 4u"), StringComparison.Ordinal);
+                FormattableString.Invariant($"id.y * {_colorLayout.Footprint.RowPitch}u + id.x * 4u"),
+                StringComparison.Ordinal);
             if (_sharedContext is not null)
             {
                 _sharedContext.AcquirePipeline(shader, out _root, out _pipeline);
@@ -179,7 +211,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             _report.WriteLine($"[media] IRX-R49: copyQueue={_copyQueue != 0}; directQueue=1; slots={BufferCount}.");
             _report.WriteLine($"[media] IRX-R43: persistent device=1; queue=1; pipeline=1; slots={BufferCount}; " +
-                              $"size={_width}x{_height}; uploadBytesPerSlot={_uploadBytes}; colorBytesPerSlot={_colorBytes}; " +
+                              $"size={_width}x{_height}; uploadBytesPerSlot={_uploadBytes}; colorBytesPerSlot={_colorBytes}; "
+                              +
                               $"colorPitch={_colorLayout.Footprint.RowPitch}; readback=False.");
         }
 
@@ -189,7 +222,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             description.Type = (D3D12_COMMAND_LIST_TYPE)3; // COPY
             var queueId = QueueId;
             var queue = nint.Zero;
-            var createQueue = (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
+            var createQueue =
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(_device, 8);
             var hr = createQueue(_device, &description, &queueId, &queue);
             _copyQueue = queue;
             CheckHostResult(hr, "R49 copy queue");
@@ -216,12 +250,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var list = nint.Zero;
             var listId = HostListId;
-            var createList = (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(_device, 12);
+            var createList =
+                (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(_device, 12);
             hr = createList(_device, 0, 3, frame.CopyAllocator, 0, &listId, &list);
             frame.CopyList = list;
             CheckHostResult(hr, "R49 copy list");
             RequireR42Object(frame.CopyList, "copy list");
-            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(frame.CopyList, 9))(frame.CopyList), "R49 initial copy close");
+            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(frame.CopyList, 9))(frame.CopyList),
+                "R49 initial copy close");
         }
 
         private void RecordPlaneCopies(Frame frame, ID3D12GraphicsCommandList* commands)
@@ -238,11 +274,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         private void RecordCopyFrame(Frame frame)
         {
             var commands = (ID3D12GraphicsCommandList*)frame.CopyList;
-            CheckHostResult((int)((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(), "R49 copy allocator reset");
-            CheckHostResult((int)commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null), "R49 copy list reset");
+            CheckHostResult(((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(), "R49 copy allocator reset");
+            CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null), "R49 copy list reset");
             // COMMON -> COPY_DEST implicit promotion; COPY execution decays to COMMON.
             RecordPlaneCopies(frame, commands);
-            CheckHostResult((int)commands->Close(), "R49 copy close");
+            CheckHostResult(commands->Close(), "R49 copy close");
         }
 
         private void SubmitCopyFrame(Frame frame, ulong value)
@@ -285,7 +321,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                     Width = (uint)_width, Height = (uint)_height, Format = 87, SampleCount = 1,
                     BufferUsage = 0x20, BufferCount = BufferCount, Scaling = 0, SwapEffect = 4, AlphaMode = 3
                 };
-                var create = (delegate* unmanaged[Stdcall]<nint, nint, nint, R19SwapDescription*, void*, nint, nint*, int>)Slot(factory, 15);
+                var create =
+                    (delegate* unmanaged[Stdcall]<nint, nint, nint, R19SwapDescription*, void*, nint, nint*, int>)Slot(
+                        factory, 15);
                 CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain), "R43 swapchain");
                 RequireR42Object(baseChain, "swapchain");
                 var id = R19SwapChainId;
@@ -340,7 +378,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var heapDescription = new DescriptorHeapDescription { Kind = 0, Count = 2, Flags = 1 };
             var heapId = DescriptorHeapId;
             var heap = nint.Zero;
-            var createHeap = (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(_device, 14);
+            var createHeap =
+                (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(_device, 14);
             hr = createHeap(_device, &heapDescription, &heapId, &heap);
             frame.Heap = heap;
             CheckHostResult(hr, "R43 SRV heap");
@@ -358,9 +397,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var yView = new R42PlaneView { Format = 61, Dimension = 4, Mapping = 5768, MipLevels = 1 };
             var uvView = new R42PlaneView { Format = 49, Dimension = 4, Mapping = 5768, MipLevels = 1, PlaneSlice = 1 };
-            nativeDevice->CreateShaderResourceView((ID3D12Resource*)frame.Texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView, cpu);
+            nativeDevice->CreateShaderResourceView((ID3D12Resource*)frame.Texture,
+                (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView, cpu);
             cpu.ptr += increment;
-            nativeDevice->CreateShaderResourceView((ID3D12Resource*)frame.Texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView, cpu);
+            nativeDevice->CreateShaderResourceView((ID3D12Resource*)frame.Texture,
+                (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView, cpu);
 
             var allocator = nint.Zero;
             var allocatorId = AllocatorId;
@@ -372,12 +413,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var list = nint.Zero;
             var listId = HostListId;
-            var createList = (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(_device, 12);
+            var createList =
+                (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(_device, 12);
             hr = createList(_device, 0, 0, frame.Allocator, 0, &listId, &list);
             frame.List = list;
             CheckHostResult(hr, "R43 list");
             RequireR42Object(frame.List, "list");
-            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(frame.List, 9))(frame.List), "R43 initial close");
+            CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)Slot(frame.List, 9))(frame.List),
+                "R43 initial close");
         }
 
         /// <summary>Submit one packed NV12 frame. True means DXGI accepted a non-occluded present.</summary>
@@ -404,12 +447,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             // The initial mapping cleared all padding. Subsequent writes touch
             // only active pixels, never reading write-combined upload memory.
             var upload = new Span<byte>((void*)frame.UploadAddress, _uploadBytes);
+
             CopyR42Rows(nv12[..yBytes], _width, upload, _planes[0], _width, _height);
-            CopyR42Rows(nv12[yBytes..], _width, upload, _planes[1], _width, _height);
+            CopyR42Rows(nv12[yBytes..], _width, upload, _planes[1], _width, _height / 2);
 
             var commands = (ID3D12GraphicsCommandList*)frame.List;
-            CheckHostResult((int)((ID3D12CommandAllocator*)frame.Allocator)->Reset(), "R43 allocator reset");
-            CheckHostResult((int)commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null), "R43 command reset");
+            CheckHostResult(((ID3D12CommandAllocator*)frame.Allocator)->Reset(), "R43 allocator reset");
+            CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null), "R43 command reset");
             if (_copyQueue == 0)
             {
                 RecordPlaneCopies(frame, commands);
@@ -442,7 +486,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             TransitionHostResource(frame.List, frame.Buffer, CopyDestination, 0);
             TransitionHostResource(frame.List, frame.Output, CopySource, 8);
             TransitionHostResource(frame.List, frame.Texture, 0x40, _copyQueue == 0 ? CopyDestination : 0);
-            CheckHostResult((int)commands->Close(), "R43 close");
+            CheckHostResult(commands->Close(), "R43 close");
 
             if (_nextFence >= ulong.MaxValue - 1)
             {
@@ -545,33 +589,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        public void Dispose()
-        {
-            CheckThread();
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            Wait(_nextFence);
-            try
-            {
-                var average = _submitted == 0 ? 0 : _submitTicks * 1000.0 / Stopwatch.Frequency / _submitted;
-                var wait = _waitTicks * 1000.0 / Stopwatch.Frequency;
-                _report.WriteLine($"[media] IRX-R43: submitted={_submitted}; presented={_presented}; " +
-                                  $"fence={_nextFence}; blockingWaits={_waitCount}; waitMs={wait:F3}; " +
-                                  $"meanSubmitWallMs={average:F3}; readbackBytes=0.");
-                _report.WriteLine($"[media] IRX-R49: copySubmissions={_copySubmissions}; gpuQueueWaits={_copyWaits}; " +
-                                  $"activePixelBytes={_copyBytes}; copyCpuWaits=0.");
-            }
-            finally
-            {
-                ReleaseObjects();
-                _completion.Dispose();
-            }
-        }
-
         private void ReleaseObjects()
         {
             foreach (var frame in _frames)
@@ -608,11 +625,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         private sealed class Frame
         {
-            public nint Texture, Upload, Output, Heap, Buffer, Allocator, List;
             public nint CopyAllocator, CopyList;
+            public ulong FenceValue;
+            public nint Texture, Upload, Output, Heap, Buffer, Allocator, List;
             public nint UploadAddress;
             public bool UploadMapped;
-            public ulong FenceValue;
         }
     }
 }

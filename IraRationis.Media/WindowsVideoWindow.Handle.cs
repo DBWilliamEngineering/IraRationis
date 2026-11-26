@@ -2,7 +2,7 @@
 
 namespace IraRationis.Media;
 
-internal sealed unsafe partial class WindowsVideoWindow
+internal sealed partial class WindowsVideoWindow
 {
     internal nint Handle
     {

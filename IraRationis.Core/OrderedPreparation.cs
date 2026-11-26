@@ -3,9 +3,9 @@
 namespace IraRationis.Core;
 
 /// <summary>
-/// Bounded CPU-only preparation followed by ordered consumption on the calling thread.
-/// Inputs must be immutable or exclusively owned; preparation must not submit GPU work.
-/// Prepared results are managed snapshots, not borrowed pointers or GPU resource leases.
+///     Bounded CPU-only preparation followed by ordered consumption on the calling thread.
+///     Inputs must be immutable or exclusively owned; preparation must not submit GPU work.
+///     Prepared results are managed snapshots, not borrowed pointers or GPU resource leases.
 /// </summary>
 public static class OrderedPreparation
 {

@@ -6,8 +6,8 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Media;
 
 /// <summary>
-/// Bounded in-process Windows decoder for independently supplied local MP4 media.
-/// Returns the existing playback contract without launching a decoder process.
+///     Bounded in-process Windows decoder for independently supplied local MP4 media.
+///     Returns the existing playback contract without launching a decoder process.
 /// </summary>
 public static unsafe partial class MediaFoundationDecoder
 {
@@ -114,7 +114,8 @@ public static unsafe partial class MediaFoundationDecoder
         if (targetFrames <= 0 || audioFrames <= 0 || audio.Samples.Length % channels != 0 ||
             Math.Abs(startDeltaFrames) > maxCorrectionFrames || Math.Abs(endDeltaFrames) > maxCorrectionFrames)
         {
-            throw new InvalidDataException("Audio/video alignment exceeds the bounded 100 ms edge-correction contract.");
+            throw new InvalidDataException(
+                "Audio/video alignment exceeds the bounded 100 ms edge-correction contract.");
         }
 
         var offset = (int)startDeltaFrames;
@@ -160,7 +161,8 @@ public static unsafe partial class MediaFoundationDecoder
             {
                 var provisionalSize = GetUInt64(provisionalType, FrameSize);
 
-                Console.Error.WriteLine($"[media] IRX-R39: provisional video {provisionalSize >> 32}x{(uint)provisionalSize}.");
+                Console.Error.WriteLine(
+                    $"[media] IRX-R39: provisional video {provisionalSize >> 32}x{(uint)provisionalSize}.");
             }
             finally
             {
@@ -214,14 +216,15 @@ public static unsafe partial class MediaFoundationDecoder
                         }
                         else
                         {
-                            Console.Error.WriteLine($"[media] IRX-R39: compatible video format notification 0x{formatFlags:X}.");
+                            Console.Error.WriteLine(
+                                $"[media] IRX-R39: compatible video format notification 0x{formatFlags:X}.");
                         }
                     }
 
                     var expected = (double)start + count * TicksPerSecond / FramesPerSecond;
 
                     if (count >= 150 || output.Length + layout.VisibleBytes > MaxVideoBytes ||
-                        Math.Abs((double)timestamp - expected) > 166667)
+                        Math.Abs(timestamp - expected) > 166667)
                     {
                         throw new InvalidDataException("Video exceeds the bounded constant-rate playback contract.");
                     }
@@ -302,13 +305,14 @@ public static unsafe partial class MediaFoundationDecoder
 
                         if (formatFlags != 0)
                         {
-                            Console.Error.WriteLine($"[media] IRX-R39: compatible audio format notification 0x{formatFlags:X}.");
+                            Console.Error.WriteLine(
+                                $"[media] IRX-R39: compatible audio format notification 0x{formatFlags:X}.");
                         }
                     }
 
                     var expected = (double)start + output.Length / 4 * TicksPerSecond / 48000;
 
-                    if (Math.Abs((double)timestamp - expected) > 333334 || count >= 10000)
+                    if (Math.Abs(timestamp - expected) > 333334 || count >= 10000)
                     {
                         throw new InvalidDataException("Audio timeline is discontinuous.");
                     }
@@ -414,7 +418,8 @@ public static unsafe partial class MediaFoundationDecoder
                 (width & 1) != 0 || (height & 1) != 0 || denominator == 0 ||
                 numerator != (ulong)FramesPerSecond * denominator)
             {
-                throw new InvalidDataException("Unsupported coded dimensions or frame rate; expected even NV12 up to 1920x1088 at 30 FPS.");
+                throw new InvalidDataException(
+                    "Unsupported coded dimensions or frame rate; expected even NV12 up to 1920x1088 at 30 FPS.");
             }
 
             // Prefer the declared valid image area. Never infer a crop from padding alone.
@@ -603,7 +608,8 @@ public static unsafe partial class MediaFoundationDecoder
 
                 if (length != destination.Length)
                 {
-                    throw new InvalidDataException($"Unexpected contiguous NV12 extent: expected {destination.Length}, received {length}.");
+                    throw new InvalidDataException(
+                        $"Unexpected contiguous NV12 extent: expected {destination.Length}, received {length}.");
                 }
 
                 var copy = (delegate* unmanaged[Stdcall]<nint, byte*, uint, int>)Slot(plane, 8);
@@ -626,7 +632,8 @@ public static unsafe partial class MediaFoundationDecoder
                 {
                     if (length != destination.Length)
                     {
-                        throw new InvalidDataException($"Unexpected linear NV12 extent: expected {destination.Length}, received {length}.");
+                        throw new InvalidDataException(
+                            $"Unexpected linear NV12 extent: expected {destination.Length}, received {length}.");
                     }
 
                     new ReadOnlySpan<byte>(data, length).CopyTo(destination);

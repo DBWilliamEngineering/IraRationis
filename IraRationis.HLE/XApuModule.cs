@@ -523,9 +523,9 @@ public static unsafe partial class XApuModule
         public int Count;
         public uint Dequeued;
         public int Head;
-        public uint Submitted;
-        public uint PcmStream;
         public IPcmPacketSink? PcmSink;
+        public uint PcmStream;
+        public uint Submitted;
 
         public Connection(ConnectInput input, nint memory, EventWaitHandle? resultEvent)
         {

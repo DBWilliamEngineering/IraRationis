@@ -20,40 +20,6 @@ internal sealed class RuntimePcmObservation : IDisposable
         _registration = registration;
     }
 
-    internal static RuntimePcmObservation? Start()
-    {
-        var value = Environment.GetEnvironmentVariable("IRX_RUNTIME_PCM_STREAM");
-
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        if (!uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var stream) || stream >= 500)
-        {
-            throw new ArgumentException("IRX_RUNTIME_PCM_STREAM must be a voice index from 0 to 499.");
-        }
-
-        Console.Error.WriteLine($"[audio] IRX-R41: diagnostic PCM observer enabled for stream={stream}; single voice, not a mixer.");
-
-        var monitor = new WindowsPcmMonitor();
-        var sink = new CountingSink(monitor);
-
-        try
-        {
-            var registration = XApuModule.BeginPcmObservation(stream, sink);
-
-            return new RuntimePcmObservation(monitor, sink, registration);
-        }
-        catch
-        {
-            monitor.Dispose();
-            _ = monitor.WaitForCompletion(TimeSpan.FromSeconds(8));
-
-            throw;
-        }
-    }
-
     public void Dispose()
     {
         var registration = Interlocked.Exchange(ref _registration, null);
@@ -76,11 +42,46 @@ internal sealed class RuntimePcmObservation : IDisposable
             $"drained={drained}; faulted={_monitor.Faulted}.");
     }
 
+    internal static RuntimePcmObservation? Start()
+    {
+        var value = Environment.GetEnvironmentVariable("IRX_RUNTIME_PCM_STREAM");
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var stream) || stream >= 500)
+        {
+            throw new ArgumentException("IRX_RUNTIME_PCM_STREAM must be a voice index from 0 to 499.");
+        }
+
+        Console.Error.WriteLine(
+            $"[audio] IRX-R41: diagnostic PCM observer enabled for stream={stream}; single voice, not a mixer.");
+
+        var monitor = new WindowsPcmMonitor();
+        var sink = new CountingSink(monitor);
+
+        try
+        {
+            var registration = XApuModule.BeginPcmObservation(stream, sink);
+
+            return new RuntimePcmObservation(monitor, sink, registration);
+        }
+        catch
+        {
+            monitor.Dispose();
+            _ = monitor.WaitForCompletion(TimeSpan.FromSeconds(8));
+
+            throw;
+        }
+    }
+
     private sealed class CountingSink(WindowsPcmMonitor monitor) : IPcmPacketSink
     {
-        private long _observed;
-        private long _frames;
         private long _accepted;
+        private long _frames;
+        private long _observed;
 
         internal long Observed
         {

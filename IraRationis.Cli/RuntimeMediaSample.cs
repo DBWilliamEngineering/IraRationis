@@ -8,8 +8,10 @@ using IraRationis.Media;
 
 namespace IraRationis.Cli;
 
-/// <summary>Explicit opt-in host service for the original IRX native media sample ABI.
-/// Not a console movie ABI, and not an automatic intro or title replacement.</summary>
+/// <summary>
+///     Explicit opt-in host service for the original IRX native media sample ABI.
+///     Not a console movie ABI, and not an automatic intro or title replacement.
+/// </summary>
 internal sealed unsafe class RuntimeMediaSample : IDisposable
 {
     private static RuntimeMediaSample? _active;
@@ -19,6 +21,11 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     private RuntimeMediaSample(string clipPath)
     {
         _clipPath = clipPath;
+    }
+
+    public void Dispose()
+    {
+        _ = Interlocked.CompareExchange(ref _active, null, this);
     }
 
     internal static RuntimeMediaSample? Begin()
@@ -71,7 +78,8 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
             // No managed exception may unwind through the native sample ABI.
             try
             {
-                Console.Error.WriteLine($"[media] IRX-R44: sample failed: {exception.GetType().Name}: {exception.Message}");
+                Console.Error.WriteLine(
+                    $"[media] IRX-R44: sample failed: {exception.GetType().Name}: {exception.Message}");
             }
             catch (Exception)
             {
@@ -85,7 +93,7 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
     private int Run()
     {
         var clip = MediaFoundationDecoder.Decode(_clipPath);
-        using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, useRuntimeDevice: true);
+        using var context = new ConsoleGraphicsDevice.MediaGpuContext(Console.Out, true);
 
         // Two independent playback lifetimes prove that device and PSO reuse are real.
         // Each window, swapchain, frame ring and fence is disposed before the next begins.
@@ -106,11 +114,6 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
         }
 
         return 0;
-    }
-
-    public void Dispose()
-    {
-        _ = Interlocked.CompareExchange(ref _active, null, this);
     }
 
     private sealed class Presenter : IGpuVideoPresenter

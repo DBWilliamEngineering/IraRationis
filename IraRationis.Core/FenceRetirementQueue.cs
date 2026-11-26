@@ -3,17 +3,17 @@
 namespace IraRationis.Core;
 
 /// <summary>
-/// Bounded FIFO retirement for one monotonic GPU completion timeline. The creating
-/// thread owns this queue. Each admitted item transfers one unique resource lease;
-/// callers must not retire the same lease twice or mix independent fence timelines.
+///     Bounded FIFO retirement for one monotonic GPU completion timeline. The creating
+///     thread owns this queue. Each admitted item transfers one unique resource lease;
+///     callers must not retire the same lease twice or mix independent fence timelines.
 /// </summary>
 public sealed class FenceRetirementQueue<T> where T : class, IDisposable
 {
+    private readonly int _capacity;
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly Queue<Entry> _pending;
-    private readonly int _capacity;
-    private ulong _lastAdmitted;
     private ulong _completed;
+    private ulong _lastAdmitted;
 
     public FenceRetirementQueue(int capacity = 256)
     {
@@ -56,9 +56,9 @@ public sealed class FenceRetirementQueue<T> where T : class, IDisposable
     }
 
     /// <summary>
-    /// Release only leases covered by a genuine completed fence value. A removed
-    /// device sentinel must not be treated as normal completion. Lease disposal
-    /// must not throw or reenter this queue.
+    ///     Release only leases covered by a genuine completed fence value. A removed
+    ///     device sentinel must not be treated as normal completion. Lease disposal
+    ///     must not throw or reenter this queue.
     /// </summary>
     public int Collect(ulong completedFence)
     {

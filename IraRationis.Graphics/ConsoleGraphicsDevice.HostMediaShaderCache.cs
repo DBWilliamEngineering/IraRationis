@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
     // CPU bytecode only: no device pointers, root signatures, PSOs or guest shader
     // containers. The compiler profile and options are fixed by this host path.
@@ -11,7 +11,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     private const int R47MaximumSourceCharacters = 64 * 1024;
     private static readonly Lock R47ShaderGate = new();
     private static readonly Dictionary<string, R47ShaderEntry> R47Shaders = new(StringComparer.Ordinal);
-    private static readonly bool R47CacheEnabled = Environment.GetEnvironmentVariable("IRX_HOST_MEDIA_SHADER_CACHE") != "0";
+    private static readonly bool R47CacheEnabled =
+        Environment.GetEnvironmentVariable("IRX_HOST_MEDIA_SHADER_CACHE") != "0";
     private static long _r47ShaderUse;
     private static int _r47ShaderBytes;
 
@@ -149,8 +150,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         public readonly Lazy<byte[]> Bytecode = new(() => CompileR47Uncached(source, report),
             LazyThreadSafetyMode.ExecutionAndPublication);
-        public long LastUse = lastUse;
         public bool Accounted;
+        public long LastUse = lastUse;
         public int Size;
     }
 }

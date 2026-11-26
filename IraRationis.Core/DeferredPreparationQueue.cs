@@ -3,18 +3,18 @@
 namespace IraRationis.Core;
 
 /// <summary>
-/// Bounded, ordered preparation with overlapping CPU work. The creating thread owns
-/// admission, consumption and disposal. Workers operate only on immutable or owned
-/// managed snapshots; they must not submit GPU work or access borrowed native pointers.
+///     Bounded, ordered preparation with overlapping CPU work. The creating thread owns
+///     admission, consumption and disposal. Workers operate only on immutable or owned
+///     managed snapshots; they must not submit GPU work or access borrowed native pointers.
 /// </summary>
 public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
 {
-    private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly int _capacity;
-    private readonly Func<TInput, CancellationToken, TPrepared> _prepare;
+    private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly Queue<Task<TPrepared>> _pending;
-    private readonly SemaphoreSlim _workers;
+    private readonly Func<TInput, CancellationToken, TPrepared> _prepare;
     private readonly CancellationTokenSource _stop = new();
+    private readonly SemaphoreSlim _workers;
     private bool _disposed;
 
     public DeferredPreparationQueue(Func<TInput, CancellationToken, TPrepared> prepare,
@@ -39,6 +39,40 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
             CheckUsable();
 
             return _pending.Count;
+        }
+    }
+
+    public void Dispose()
+    {
+        CheckOwner();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        try
+        {
+            _stop.Cancel();
+        }
+        finally
+        {
+            // Join all admitted work before disposing the semaphore. Preparation must
+            // cooperate with cancellation. Unconsumed managed snapshots are discarded.
+            while (_pending.TryDequeue(out var task))
+            {
+                try
+                {
+                    _ = task.GetAwaiter().GetResult();
+                }
+                catch (Exception)
+                {
+                    // Observe abandoned preparation failures during shutdown only.
+                }
+            }
+
+            _workers.Dispose();
+            _stop.Dispose();
         }
     }
 
@@ -113,39 +147,5 @@ public sealed class DeferredPreparationQueue<TInput, TPrepared> : IDisposable
     {
         CheckOwner();
         ObjectDisposedException.ThrowIf(_disposed, this);
-    }
-
-    public void Dispose()
-    {
-        CheckOwner();
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        try
-        {
-            _stop.Cancel();
-        }
-        finally
-        {
-            // Join all admitted work before disposing the semaphore. Preparation must
-            // cooperate with cancellation. Unconsumed managed snapshots are discarded.
-            while (_pending.TryDequeue(out var task))
-            {
-                try
-                {
-                    _ = task.GetAwaiter().GetResult();
-                }
-                catch (Exception)
-                {
-                    // Observe abandoned preparation failures during shutdown only.
-                }
-            }
-
-            _workers.Dispose();
-            _stop.Dispose();
-        }
     }
 }

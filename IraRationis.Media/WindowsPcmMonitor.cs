@@ -7,8 +7,8 @@ using System.Threading.Channels;
 namespace IraRationis.Media;
 
 /// <summary>
-/// Diagnostic sink for one decoded voice. Copies PCM into a bounded queue and owns
-/// one native output device on a worker thread. It is not a final application mixer.
+///     Diagnostic sink for one decoded voice. Copies PCM into a bounded queue and owns
+///     one native output device on a worker thread. It is not a final application mixer.
 /// </summary>
 public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposable
 {
@@ -23,10 +23,26 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
     });
     private readonly Thread _worker;
     private long _accepted;
-    private long _dropped;
-    private long _completed;
     private int _closed;
+    private long _completed;
+    private long _dropped;
     private int _faulted;
+
+    public WindowsPcmMonitor()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException();
+        }
+
+        _worker = new Thread(Consume)
+        {
+            IsBackground = true,
+            Name = "irx PCM monitor"
+        };
+
+        _worker.Start();
+    }
 
     public long CompletedPackets
     {
@@ -44,20 +60,11 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
         }
     }
 
-    public WindowsPcmMonitor()
+    /// <summary>Stop accepting packets; the worker drains accepted audio without blocking the caller.</summary>
+    public void Dispose()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            throw new PlatformNotSupportedException();
-        }
-
-        _worker = new Thread(Consume)
-        {
-            IsBackground = true,
-            Name = "irx PCM monitor"
-        };
-
-        _worker.Start();
+        Interlocked.Exchange(ref _closed, 1);
+        _queue.Writer.TryComplete();
     }
 
     public bool TrySubmit(ReadOnlySpan<short> samples, int channels)
@@ -96,13 +103,6 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
         return true;
     }
 
-    /// <summary>Stop accepting packets; the worker drains accepted audio without blocking the caller.</summary>
-    public void Dispose()
-    {
-        Interlocked.Exchange(ref _closed, 1);
-        _queue.Writer.TryComplete();
-    }
-
     public bool WaitForCompletion(TimeSpan timeout)
     {
         return _worker.Join(timeout);
@@ -131,8 +131,8 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
 
             Check(WaveOutOpen(out device, uint.MaxValue, &format, 0, 0, 0), "open");
 
-            headers = (WaveHeader*)NativeMemory.AllocZeroed((nuint)NativeSlots, (nuint)sizeof(WaveHeader));
-            data = (short*)NativeMemory.Alloc((nuint)(NativeSlots * MaxFrames * 2), (nuint)sizeof(short));
+            headers = (WaveHeader*)NativeMemory.AllocZeroed(NativeSlots, (nuint)sizeof(WaveHeader));
+            data = (short*)NativeMemory.Alloc(NativeSlots * MaxFrames * 2, sizeof(short));
 
             Console.Error.WriteLine("[audio] IRX-R40-MONITOR: Windows PCM device opened; rate=48000; channels=2.");
 
@@ -229,7 +229,8 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
                 {
                     Interlocked.Exchange(ref _faulted, 1);
 
-                    Console.Error.WriteLine($"[audio] IRX-R40-MONITOR: cleanup reset={reset}; close={close}; buffersReleased={safeToFree}.");
+                    Console.Error.WriteLine(
+                        $"[audio] IRX-R40-MONITOR: cleanup reset={reset}; close={close}; buffersReleased={safeToFree}.");
                 }
             }
 
@@ -240,7 +241,8 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
                 NativeMemory.Free(data);
             }
 
-            Console.Error.WriteLine($"[audio] IRX-R40-MONITOR: accepted={Interlocked.Read(ref _accepted)}; completed={Interlocked.Read(ref _completed)}; dropped={Interlocked.Read(ref _dropped)}.");
+            Console.Error.WriteLine(
+                $"[audio] IRX-R40-MONITOR: accepted={Interlocked.Read(ref _accepted)}; completed={Interlocked.Read(ref _completed)}; dropped={Interlocked.Read(ref _dropped)}.");
         }
     }
 
@@ -251,6 +253,31 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
             throw new InvalidOperationException($"waveOut {operation} failed (MMRESULT {result}).");
         }
     }
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutOpen")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutOpen(out nint device, uint id, WaveFormat* format, nuint callback,
+        nuint instance, uint flags);
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutPrepareHeader")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutPrepareHeader(nint device, WaveHeader* header, uint size);
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutWrite")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutWrite(nint device, WaveHeader* header, uint size);
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutUnprepareHeader")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutUnprepareHeader(nint device, WaveHeader* header, uint size);
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutReset")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutReset(nint device);
+
+    [LibraryImport("winmm.dll", EntryPoint = "waveOutClose")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint WaveOutClose(nint device);
 
     [StructLayout(LayoutKind.Sequential, Pack = 2)]
     private struct WaveFormat
@@ -276,28 +303,4 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
         public nint Next;
         public nuint Reserved;
     }
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutOpen")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutOpen(out nint device, uint id, WaveFormat* format, nuint callback, nuint instance, uint flags);
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutPrepareHeader")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutPrepareHeader(nint device, WaveHeader* header, uint size);
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutWrite")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutWrite(nint device, WaveHeader* header, uint size);
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutUnprepareHeader")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutUnprepareHeader(nint device, WaveHeader* header, uint size);
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutReset")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutReset(nint device);
-
-    [LibraryImport("winmm.dll", EntryPoint = "waveOutClose")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint WaveOutClose(nint device);
 }

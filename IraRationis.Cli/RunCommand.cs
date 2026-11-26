@@ -18,6 +18,7 @@ internal static class RunCommand
             throw new PlatformNotSupportedException("Title execution requires Windows x64.");
         }
 
+        using var logSampling = RuntimeLogSampling.Begin();
         var path = Path.GetFullPath(executable);
         var titleDirectory =
             Path.GetDirectoryName(path) ?? throw new InvalidDataException("Title directory not found.");

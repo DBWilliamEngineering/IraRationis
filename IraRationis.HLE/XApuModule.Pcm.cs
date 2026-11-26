@@ -4,12 +4,14 @@ using IraRationis.Media;
 
 namespace IraRationis.HLE;
 
-public static unsafe partial class XApuModule
+public static partial class XApuModule
 {
     private static PcmObservation? _pcmObservation;
 
-    /// <summary>Registers a host-owned, nonblocking observer for one connection and voice.
-    /// Pass null to detach. The caller owns the sink's lifetime.</summary>
+    /// <summary>
+    ///     Registers a host-owned, nonblocking observer for one connection and voice.
+    ///     Pass null to detach. The caller owns the sink's lifetime.
+    /// </summary>
     public static bool AttachPcmSink(nint handle, uint stream, IPcmPacketSink? sink)
     {
         if (!Connections.TryGetValue(handle, out var connection))
@@ -32,9 +34,9 @@ public static unsafe partial class XApuModule
     }
 
     /// <summary>
-    /// Observes one explicitly selected stream on the first connection that supplies
-    /// valid PCM. This is a diagnostic voice tap, not a mixer. Dispose before
-    /// disposing the caller-owned sink. Do not re-enter XApu from sink callbacks.
+    ///     Observes one explicitly selected stream on the first connection that supplies
+    ///     valid PCM. This is a diagnostic voice tap, not a mixer. Dispose before
+    ///     disposing the caller-owned sink. Do not re-enter XApu from sink callbacks.
     /// </summary>
     public static IDisposable BeginPcmObservation(uint stream, IPcmPacketSink sink)
     {
@@ -86,8 +88,19 @@ public static unsafe partial class XApuModule
     private sealed class PcmObservation(uint stream, IPcmPacketSink sink) : IDisposable
     {
         private readonly Lock _gate = new();
-        private Connection? _selected;
         private bool _closed;
+        private Connection? _selected;
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _closed = true;
+                _selected = null;
+            }
+
+            _ = Interlocked.CompareExchange(ref _pcmObservation, null, this);
+        }
 
         internal void Observe(Connection connection, uint index, ReadOnlySpan<short> samples, int channels)
         {
@@ -121,17 +134,6 @@ public static unsafe partial class XApuModule
                     _selected = null;
                 }
             }
-        }
-
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                _closed = true;
-                _selected = null;
-            }
-
-            _ = Interlocked.CompareExchange(ref _pcmObservation, null, this);
         }
     }
 }

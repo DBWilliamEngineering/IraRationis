@@ -9,36 +9,36 @@ namespace IraRationis.Graphics;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private const string Nv12ConversionShader = """
-        Texture2D<float> Luma : register(t0);
-        Texture2D<float2> Chroma : register(t1);
-        RWByteAddressBuffer Output : register(u0);
+                                                Texture2D<float> Luma : register(t0);
+                                                Texture2D<float2> Chroma : register(t1);
+                                                RWByteAddressBuffer Output : register(u0);
 
-        [numthreads(8, 8, 1)]
-        void main(uint3 id : SV_DispatchThreadID)
-        {
-            uint width, height;
-            Luma.GetDimensions(width, height);
+                                                [numthreads(8, 8, 1)]
+                                                void main(uint3 id : SV_DispatchThreadID)
+                                                {
+                                                    uint width, height;
+                                                    Luma.GetDimensions(width, height);
 
-            if (id.x >= width || id.y >= height)
-            {
-                return;
-            }
+                                                    if (id.x >= width || id.y >= height)
+                                                    {
+                                                        return;
+                                                    }
 
-            int c = (int)round(Luma.Load(int3(id.xy, 0)) * 255.0) - 16;
-            int2 uv = (int2)round(Chroma.Load(int3(id.xy / 2, 0)) * 255.0) - 128;
+                                                    int c = (int)round(Luma.Load(int3(id.xy, 0)) * 255.0) - 16;
+                                                    int2 uv = (int2)round(Chroma.Load(int3(id.xy / 2, 0)) * 255.0) - 128;
 
-            uint b = (uint)clamp((298 * c + 541 * uv.x + 128) >> 8, 0, 255);
-            uint g = (uint)clamp((298 * c - 55 * uv.x - 136 * uv.y + 128) >> 8, 0, 255);
-            uint r = (uint)clamp((298 * c + 459 * uv.y + 128) >> 8, 0, 255);
+                                                    uint b = (uint)clamp((298 * c + 541 * uv.x + 128) >> 8, 0, 255);
+                                                    uint g = (uint)clamp((298 * c - 55 * uv.x - 136 * uv.y + 128) >> 8, 0, 255);
+                                                    uint r = (uint)clamp((298 * c + 459 * uv.y + 128) >> 8, 0, 255);
 
-            Output.Store((id.y * width + id.x) * 4, b | (g << 8) | (r << 16) | 0xFF000000u);
-        }
-        """;
+                                                    Output.Store((id.y * width + id.x) * 4, b | (g << 8) | (r << 16) | 0xFF000000u);
+                                                }
+                                                """;
 
     /// <summary>
-    /// Converts independently supplied, limited-range BT.709 NV12 using a real two-plane
-    /// D3D12 texture and a compute shader. This synchronous host diagnostic owns a separate
-    /// device and queue; it does not publish guest resource state or use a swapchain.
+    ///     Converts independently supplied, limited-range BT.709 NV12 using a real two-plane
+    ///     D3D12 texture and a compute shader. This synchronous host diagnostic owns a separate
+    ///     device and queue; it does not publish guest resource state or use a swapchain.
     /// </summary>
     public static void ConvertNv12FrameOnGpu(ReadOnlySpan<byte> luma, int lumaStride,
         ReadOnlySpan<byte> chroma, int chromaStride, int width, int height, Span<byte> bgra,
@@ -99,7 +99,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var nativeDevice = (ID3D12Device*)device;
             var queueDescription = default(D3D12_COMMAND_QUEUE_DESC);
             var queueId = QueueId;
-            var createQueue = (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(device, 8);
+            var createQueue =
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)Slot(device, 8);
 
             CheckHostResult(createQueue(device, &queueDescription, &queueId, &queue), "R42 direct queue");
             RequireR42Object(queue, "queue");
@@ -154,7 +155,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var heapDescription = new DescriptorHeapDescription { Kind = 0, Count = 2, Flags = 1 };
             var heapId = DescriptorHeapId;
-            var createHeap = (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14);
+            var createHeap =
+                (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14);
 
             CheckHostResult(createHeap(device, &heapDescription, &heapId, &heap), "R42 shader-visible SRV heap");
             RequireR42Object(heap, "descriptor heap");
@@ -173,9 +175,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var uvView = new R42PlaneView { Format = 49, Dimension = 4, Mapping = 5768, MipLevels = 1, PlaneSlice = 1 };
 
             // R8_UNORM for plane zero and R8G8_UNORM for plane one of the same resource.
-            nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView, cpu);
+            nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView,
+                cpu);
             cpu.ptr += increment;
-            nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView, cpu);
+            nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView,
+                cpu);
 
             var allocatorId = AllocatorId;
             var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot(device, 9);
@@ -184,7 +188,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             RequireR42Object(allocator, "allocator");
 
             var listId = HostListId;
-            var createList = (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12);
+            var createList =
+                (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12);
 
             CheckHostResult(createList(device, 0, 0, allocator, 0, &listId, &list), "R42 command list");
             RequireR42Object(list, "command list");
@@ -378,7 +383,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             fixed (byte* bytes = rootBytes)
             {
-                CheckHostResult((int)nativeDevice->CreateRootSignature(0, bytes, (nuint)rootBytes.Length, &rootId, &nativeRoot),
+                CheckHostResult(
+                    nativeDevice->CreateRootSignature(0, bytes, (nuint)rootBytes.Length, &rootId, &nativeRoot),
                     "R42 root signature");
             }
 
@@ -394,7 +400,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     CS = new D3D12_SHADER_BYTECODE { pShaderBytecode = bytes, BytecodeLength = (nuint)shader.Length }
                 };
 
-                CheckHostResult((int)nativeDevice->CreateComputePipelineState(&desc, &pipelineId, &nativePipeline),
+                CheckHostResult(nativeDevice->CreateComputePipelineState(&desc, &pipelineId, &nativePipeline),
                     "R42 compute pipeline");
             }
 
