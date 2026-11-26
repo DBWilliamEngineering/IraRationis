@@ -12,11 +12,13 @@ $memory = Join-Path $PSScriptRoot 'MemoryProbe.cpp'
 $presentation = Join-Path $PSScriptRoot 'PresentationProbe.cpp'
 $test = Join-Path $PSScriptRoot 'DecoderTests.cpp'
 $script = Join-Path $OutputDirectory 'build-native.cmd'
+# Embed compiler symbols in objects and link a self-contained PDB for profiling.
+# /DEBUG changes linker defaults, so retain release optimization explicitly.
 @"
 @echo off
 call "$vcvars" >nul || exit /b 1
 cd /d "$OutputDirectory" || exit /b 1
-cl /nologo /std:c++20 /W4 /WX /O2 /MT /EHsc /LD "$source" "$memory" "$presentation" /link d3d12.lib dxgi.lib d3dcompiler.lib user32.lib /OUT:irx-native.dll || exit /b 1
+cl /nologo /std:c++20 /W4 /WX /O2 /Z7 /MT /EHsc /LD "$source" "$memory" "$presentation" /link d3d12.lib dxgi.lib d3dcompiler.lib user32.lib /OUT:irx-native.dll /DEBUG:FULL /OPT:REF,ICF /INCREMENTAL:NO /PDB:irx-native.pdb || exit /b 1
 cl /nologo /std:c++20 /W4 /WX /O2 /MT /EHsc "$test" /Fe:decoder-tests.exe || exit /b 1
 decoder-tests.exe || exit /b 1
 "@ | Set-Content -Encoding ASCII $script

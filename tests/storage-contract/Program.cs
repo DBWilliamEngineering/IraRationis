@@ -1,5 +1,5 @@
+using IraRationis.HLE.Storage;
 using System.IO.Compression;
-using IraRationis.HLE;
 
 static void Require(bool condition, string name)
 {

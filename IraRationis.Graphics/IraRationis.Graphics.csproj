@@ -11,32 +11,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <InternalsVisibleTo Include="R50.Contracts" />
-        <InternalsVisibleTo Include="R51.Contracts" />
-        <InternalsVisibleTo Include="R52.Contracts" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <!-- Explicit membership for new graphics infrastructure. Remove SDK glob entries first. -->
-        <Compile Remove="ConsoleGraphicsDevice.HostCompletionFence.cs;ConsoleGraphicsDevice.HostValidation.cs;ConsoleGraphicsDevice.Presentation.cs;ConsoleGraphicsDevice.FenceAddress.cs;ConsoleGraphicsDevice.DrawEvidence.cs;ConsoleGraphicsDevice.VertexFetchTranslation.cs;ConsoleGraphicsDevice.VertexFetchExecutionProbe.cs;ConsoleGraphicsDevice.VertexFetchSourceProbe.cs;ConsoleGraphicsDevice.VertexFetchGuestDraw.cs;ConsoleGraphicsDevice.RectangleGuestDraw.cs;ConsoleGraphicsDevice.PageMappings.cs;ConsoleGraphicsDevice.TexturedRectangle.cs;ConsoleGraphicsDevice.GuestPreview.cs;ConsoleGraphicsDevice.ComputeEvidence.cs;ConsoleGraphicsDevice.ColorLutCompute.cs;ConsoleGraphicsDevice.SwapChainPresentation.cs;ConsoleGraphicsDevice.IndexedInput.cs;ConsoleGraphicsDevice.RuntimeMetrics.cs;ConsoleGraphicsDevice.TimingMetrics.cs" />
-        <Compile Include="ConsoleGraphicsDevice.HostCompletionFence.cs" />
-        <Compile Include="ConsoleGraphicsDevice.HostValidation.cs" />
-        <Compile Include="ConsoleGraphicsDevice.Presentation.cs" />
-        <Compile Include="ConsoleGraphicsDevice.FenceAddress.cs" />
-        <Compile Include="ConsoleGraphicsDevice.DrawEvidence.cs" />
-        <Compile Include="ConsoleGraphicsDevice.VertexFetchTranslation.cs" />
-        <Compile Include="ConsoleGraphicsDevice.VertexFetchExecutionProbe.cs" />
-        <Compile Include="ConsoleGraphicsDevice.VertexFetchSourceProbe.cs" />
-        <Compile Include="ConsoleGraphicsDevice.VertexFetchGuestDraw.cs" />
-        <Compile Include="ConsoleGraphicsDevice.RectangleGuestDraw.cs" />
-        <Compile Include="ConsoleGraphicsDevice.PageMappings.cs" />
-        <Compile Include="ConsoleGraphicsDevice.TexturedRectangle.cs" />
-        <Compile Include="ConsoleGraphicsDevice.GuestPreview.cs" />
-        <Compile Include="ConsoleGraphicsDevice.ComputeEvidence.cs" />
-        <Compile Include="ConsoleGraphicsDevice.ColorLutCompute.cs" />
-        <Compile Include="ConsoleGraphicsDevice.SwapChainPresentation.cs" />
-        <Compile Include="ConsoleGraphicsDevice.IndexedInput.cs" />
-        <Compile Include="ConsoleGraphicsDevice.RuntimeMetrics.cs" />
-        <Compile Include="ConsoleGraphicsDevice.TimingMetrics.cs" />
+        <InternalsVisibleTo Include="StartupEvidence.Contracts" />
+        <InternalsVisibleTo Include="VersionedUpload.Contracts" />
+        <InternalsVisibleTo Include="DescriptorBindings.Contracts" />
     </ItemGroup>
 </Project>

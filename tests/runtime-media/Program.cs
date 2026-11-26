@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
-using IraRationis.HLE;
-using IraRationis.Media;
+using IraRationis.HLE.Audio.Apu;
+using IraRationis.HLE.Runtime;
+using IraRationis.Media.Audio;
+using IraRationis.Media.Video;
 
 namespace IraRationis.RuntimeMedia.Tests;
 
@@ -31,13 +33,13 @@ internal static unsafe class Program
 
     private static void TestVideo()
     {
-        var y = new byte[] { 16, 16, 16, 16, 99, 99, 235, 235, 235, 235, 99, 99 };
-        var uv = new byte[] { 128, 128, 128, 128, 99, 99 };
-        var frame = Nv12UploadFrame.Capture(y, 6, uv, 6, 4, 2, 123);
+        var lumaPlane = new byte[] { 16, 16, 16, 16, 99, 99, 235, 235, 235, 235, 99, 99 };
+        var chromaPlane = new byte[] { 128, 128, 128, 128, 99, 99 };
+        var frame = Nv12UploadFrame.Capture(lumaPlane, 6, chromaPlane, 6, 4, 2, 123);
 
-        Array.Clear(y);
+        Array.Clear(lumaPlane);
 
-        Array.Clear(uv);
+        Array.Clear(chromaPlane);
 
         var upload = new byte[768];
 
@@ -78,7 +80,7 @@ internal static unsafe class Program
 
         using var monitor = play ? new WindowsPcmMonitor() : null;
 
-        var sink = new ProbeSink(monitor);
+        var sink = new ProgramProbeSink(monitor);
 
         try
         {
@@ -180,49 +182,6 @@ internal static unsafe class Program
         if (!condition)
         {
             throw new InvalidOperationException(message);
-        }
-    }
-
-    private sealed class ProbeSink(WindowsPcmMonitor? monitor) : IPcmPacketSink
-    {
-        public int Packets
-        {
-            get;
-            private set;
-        }
-
-        public int Frames
-        {
-            get;
-            private set;
-        }
-
-        public int Peak
-        {
-            get;
-            private set;
-        }
-
-        public short[] LastPacket
-        {
-            get;
-            private set;
-        } = [];
-
-        public bool TrySubmit(ReadOnlySpan<short> samples, int channels)
-        {
-            LastPacket = samples.ToArray();
-
-            Packets++;
-
-            Frames += samples.Length / channels;
-
-            foreach (var sample in samples)
-            {
-                Peak = Math.Max(Peak, Math.Abs((int)sample));
-            }
-
-            return monitor?.TrySubmit(samples, channels) ?? true;
         }
     }
 }

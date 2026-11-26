@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/BufferViewKind.cs" Link="BufferViewKind.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/DescriptorResourceIdentity.cs" Link="DescriptorResourceIdentity.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/BufferDescriptor.cs" Link="BufferDescriptor.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/ComputeBufferTable.cs" Link="ComputeBufferTable.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs" Link="DescriptorBindingCatalog.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/DescriptorBindingCatalogResourceEntry.cs" Link="DescriptorBindingCatalogResourceEntry.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs" Link="DescriptorTableCache.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/DescriptorTableCacheLease.cs" Link="DescriptorTableCacheLease.cs" />
+        <Compile Include="../../IraRationis.Graphics/Descriptors/Models/DescriptorTableCacheSlot.cs" Link="DescriptorTableCacheSlot.cs" />
+    </ItemGroup>
+</Project>

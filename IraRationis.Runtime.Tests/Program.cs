@@ -2,10 +2,18 @@
 // Tests adapted from upstream console_insn_decode.rs, registry.rs and runtime.rs.
 
 using System.Buffers.Binary;
-using IraRationis.Graphics;
-using IraRationis.HLE;
-using IraRationis.Loader;
-using IraRationis.PE;
+using IraRationis.Graphics.Device;
+using IraRationis.HLE.Input;
+using IraRationis.HLE.Input.Models;
+using IraRationis.HLE.Runtime;
+using IraRationis.HLE.Runtime.Models;
+using IraRationis.Loader.Imports.Models;
+using IraRationis.Loader.Instructions;
+using IraRationis.Loader.Instructions.Models;
+using IraRationis.Loader.Threads;
+using IraRationis.PE.Models;
+using IraRationis.Runtime.Tests.Contracts;
+using IraRationis.Runtime.Tests.Memory;
 
 namespace IraRationis.Runtime.Tests;
 
@@ -24,14 +32,19 @@ internal static class Program
         TestHostPolicy();
 
         FoundationTests.Run();
+
+        MappedViewIndexTests.Run();
+
+        PhysicalPageTests.Run();
+
         InteropTests.Run();
 
         GameInputModule.VerifyLayouts();
 
         Require(
             GameInputModule
-                .ConvertPad(0x1014, 255, 0, short.MinValue, short.MaxValue, 0, 0) 
-            == new GameInputModule.PadState(0x105, 1, 0, -1, 1, 0, 0), 
+                .ConvertPad(0x1014, 255, 0, short.MinValue, short.MaxValue, 0, 0)
+            == new GameInputPadState(0x105, 1, 0, -1, 1, 0, 0),
             "GameInput pad conversion");
 
         Require(new HleRegistry([GameInputModule.Create()]).Lookup("GameInput.dll", "#1") is not null,

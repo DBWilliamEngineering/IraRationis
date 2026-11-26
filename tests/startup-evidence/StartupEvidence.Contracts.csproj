@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs" Link="RuntimeLogSampling.cs" />
+        <Compile Include="../../IraRationis.Cli/Diagnostics/SamplingLogWriter.cs" Link="SamplingLogWriter.cs" />
+        <Compile Include="../../IraRationis.Media/Playback/HostFrameTimeline.cs" Link="HostFrameTimeline.cs" />
+    </ItemGroup>
+</Project>

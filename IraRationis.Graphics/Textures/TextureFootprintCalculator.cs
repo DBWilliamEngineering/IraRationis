@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics.Textures;
 
@@ -12,14 +14,14 @@ internal static class TextureFootprintCalculator
     private const uint MaximumExtent = 16384;
     private const uint MaximumMips = 16;
 
-    internal static uint SuggestMode(ConsoleGraphicsDevice.ResourceDescription description)
+    internal static uint SuggestMode(ResourceDescription description)
     {
         return description.Dimension == 2 ? 0U :
             (description.Flags & 2) != 0 ? 24U :
             (description.Flags & 1) != 0 ? 27U : 5U;
     }
 
-    internal static bool TryCalculate(ConsoleGraphicsDevice.ResourceDescription description, out ulong size,
+    internal static bool TryCalculate(ResourceDescription description, out ulong size,
         out ulong alignment)
     {
         size = 0;
@@ -57,7 +59,7 @@ internal static class TextureFootprintCalculator
         }
     }
 
-    internal static bool TryCreate(ConsoleGraphicsDevice.ResourceDescription description,
+    internal static bool TryCreate(ResourceDescription description,
         [NotNullWhen(true)] out TextureLayout? texture)
     {
         texture = null;
@@ -198,11 +200,11 @@ internal static class TextureFootprintCalculator
             }
 
             var wide = (sampleLog & 1) == 0 || (blockLog & 1) != 0;
-            var w = (elementsLog + (wide ? 1 : 0)) / 2;
+            var widthLog2 = (elementsLog + (wide ? 1 : 0)) / 2;
 
-            tileWidth = 1U << w;
+            tileWidth = 1U << widthLog2;
 
-            tileHeight = 1U << (elementsLog - w);
+            tileHeight = 1U << (elementsLog - widthLog2);
 
             tileDepth = 1;
         }
@@ -243,39 +245,39 @@ internal static class TextureFootprintCalculator
         var firstTail = mips;
         var chain = 0UL;
 
-        for (var i = 0U; i < mips; i++)
+        for (var index = 0U; index < mips; index++)
         {
-            var w = (uint)PaddedDimension(width, i, block);
-            var h = (uint)PaddedDimension(height, i, block);
+            var paddedWidth = (uint)PaddedDimension(width, index, block);
+            var paddedHeight = (uint)PaddedDimension(height, index, block);
 
-            if (blockLog != 0 && mips > 1 && w <= fixedWidth && h <= fixedHeight && mips - i <= (uint)maxTail)
+            if (blockLog != 0 && mips > 1 && paddedWidth <= fixedWidth && paddedHeight <= fixedHeight && mips - index <= (uint)maxTail)
             {
-                firstTail = i;
+                firstTail = index;
 
                 chain = checked(chain + alignment / tileDepth);
 
                 break;
             }
 
-            var pitch = (uint)RoundUp(w, tileWidth);
-            var rows = (uint)RoundUp(h, tileHeight);
+            var pitch = (uint)RoundUp(paddedWidth, tileWidth);
+            var rows = (uint)RoundUp(paddedHeight, tileHeight);
             var depthPitch = dimension != 4 ? 1U :
                 blockLog == 0 || mips == 1 ? paddedDepth :
-                thick ? (uint)RoundUp(PaddedDimension(depth, i, 1), tileDepth) : 1U;
+                thick ? (uint)RoundUp(PaddedDimension(depth, index, 1), tileDepth) : 1U;
 
-            entries[i] = new TextureMip(Dimension(width, i, block), Dimension(height, i, block),
-                dimension == 4 ? Dimension(depth, i, 1) : 1U, pitch, rows, depthPitch);
+            entries[index] = new TextureMip(Dimension(width, index, block), Dimension(height, index, block),
+                dimension == 4 ? Dimension(depth, index, 1) : 1U, pitch, rows, depthPitch);
 
             chain = checked(chain + (ulong)pitch * rows * bytes * samples);
         }
 
         var offset = firstTail < mips ? alignment : 0UL;
 
-        for (var i = (int)firstTail - 1; i >= 0; i--)
+        for (var index = (int)firstTail - 1; index >= 0; index--)
         {
-            var mip = entries[i];
+            var mip = entries[index];
 
-            entries[i] = mip with
+            entries[index] = mip with
             {
                 Offset = offset
             };
@@ -304,36 +306,36 @@ internal static class TextureFootprintCalculator
         var tailPitch = tailWidth;
         var tailRows = tailHeight;
 
-        for (var i = firstTail; i < mips; i++)
+        for (var index = firstTail; index < mips; index++)
         {
-            var m = maxTail - 1 - (int)(i - firstTail);
-            var tailOffset = (uint)(m > 6 ? 16 << m : m << 8);
+            var tailMipIndex = maxTail - 1 - (int)(index - firstTail);
+            var tailOffset = (uint)(tailMipIndex > 6 ? 16 << tailMipIndex : tailMipIndex << 8);
 
-            uint x = 0, y = 0;
+            uint coordinateX = 0, coordinateY = 0;
 
             for (var bit = 0; bit < 6; bit++)
             {
-                x |= ((tailOffset >> (9 + 2 * bit)) & 1) << bit;
+                coordinateX |= ((tailOffset >> (9 + 2 * bit)) & 1) << bit;
 
-                y |= ((tailOffset >> (8 + 2 * bit)) & 1) << bit;
+                coordinateY |= ((tailOffset >> (8 + 2 * bit)) & 1) << bit;
             }
 
             if ((blockLog & 1) != 0)
             {
-                (x, y) = (y, x);
+                (coordinateX, coordinateY) = (coordinateY, coordinateX);
 
                 if ((elementLog & 1) != 0)
                 {
-                    y = (y << 1) | (x & 1);
+                    coordinateY = (coordinateY << 1) | (coordinateX & 1);
 
-                    x >>= 1;
+                    coordinateX >>= 1;
                 }
             }
 
-            entries[i] = new TextureMip(Dimension(width, i, block), Dimension(height, i, block),
-                dimension == 4 ? Dimension(depth, i, 1) : 1U, tailPitch, tailRows,
-                thick ? (uint)RoundUp(PaddedDimension(depth, i, 1), microZ) : 1U, 0, true, tailOffset, x * microX,
-                y * microY);
+            entries[index] = new TextureMip(Dimension(width, index, block), Dimension(height, index, block),
+                dimension == 4 ? Dimension(depth, index, 1) : 1U, tailPitch, tailRows,
+                thick ? (uint)RoundUp(PaddedDimension(depth, index, 1), microZ) : 1U, 0, true, tailOffset, coordinateX * microX,
+                coordinateY * microY);
 
             tailPitch = Math.Max(tailPitch >> 1, microX);
 

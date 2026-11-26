@@ -53,25 +53,25 @@ Paths refer to the R52 repository inventory. Classifications are provisional unl
 | Component | Source | Current classification | Evidence / remaining audit |
 | --- | --- | --- | --- |
 | PE parsing and executable loading | [IraRationis.PE](../IraRationis.PE), [IraRationis.Loader](../IraRationis.Loader) | Mixed / unresolved | Compare against upstream loader, import binding and TLS implementations. |
-| Native CPU and exception handling | [IraRationis.Native](../IraRationis.Native), [instruction handler](../IraRationis.Loader/ConsoleInstructionHandler.cs) | Mixed / unresolved | Trace native bridge and subsequent instruction compatibility changes. |
+| Native CPU and exception handling | [IraRationis.Native](../IraRationis.Native), [instruction handler](../IraRationis.Loader/Instructions/ConsoleInstructionHandler.cs) | Mixed / unresolved | Trace native bridge and subsequent instruction compatibility changes. |
 | Platform HLE | [IraRationis.HLE](../IraRationis.HLE) | Mixed / unresolved | Audit module-level ancestry and ABI implementations. |
 | Managed graphics and COM dispatch | [IraRationis.Graphics](../IraRationis.Graphics) | Adapted foundation / documented IRX development | Audit individual methods; managed architecture is documented in [architecture notes](architecture.md). |
 | Compile-time ABI generation | [MissingGraphicsSlotGenerator.cs](../IraRationis.Generators/MissingGraphicsSlotGenerator.cs) | Documented IRX extension | Verify introduction commit and source lineage. |
-| Virtual Unified Memory research | [VirtualPageTable.cs](../IraRationis.Memory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/MemoryProbe.cs) | Documented IRX research extension | Isolated research, not a production guest memory manager. Verify introduction commit. |
+| Virtual Unified Memory research | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/Diagnostics/MemoryProbe.cs) | Documented IRX research extension | Isolated research, not a production guest memory manager. Verify introduction commit. |
 | Shader inspection and lowering | [IraRationis.Shaders](../IraRationis.Shaders) | Mixed / unresolved | Audit parsers, instruction semantics and lowering implementations separately. |
-| DirectStorage | [DirectStorageModule.cs](../IraRationis.HLE/DirectStorageModule.cs), [DirectStoragePayload.cs](../IraRationis.HLE/DirectStoragePayload.cs) | Mixed / documented IRX development | Trace queue and payload validation changes. |
-| Controller input | [GameInputModule.DualSense.cs](../IraRationis.HLE/GameInputModule.DualSense.cs) | Documented IRX development | R30 documentation describes native wired DualSense integration; verify source ancestry. |
-| Audio and PCM | [IraRationis.Media](../IraRationis.Media), [XApuModule.Pcm.cs](../IraRationis.HLE/XApuModule.Pcm.cs) | Mixed / documented IRX development | Distinguish adapted APU/DSP behavior from new host PCM contracts. |
-| Media decoding | [MediaFoundationDecoder.cs](../IraRationis.Media/MediaFoundationDecoder.cs) | Documented IRX extension | R37 commit and README record in-process Windows Media Foundation integration. |
-| Persistent GPU media | [GpuMediaPlaybackSession.cs](../IraRationis.Media/GpuMediaPlaybackSession.cs), [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice.Nv12Presenter.cs) | Documented IRX development / reference-inspired | [R43](R43-GPU-MEDIA.md), [R44](R44-RUNTIME-MEDIA-SAMPLE.md), [R45](R45-SHARED-DEVICE.md). |
-| Host shader cache | [HostMediaShaderCache.cs](../IraRationis.Graphics/ConsoleGraphicsDevice.HostMediaShaderCache.cs) | Documented IRX extension | [R47](R47-HOST-SHADER-CACHE.md). Host media bytecode, not general guest shader caching. |
-| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/DeferredPreparationQueue.cs), [OrderedPreparation.cs](../IraRationis.Core/OrderedPreparation.cs) | Documented IRX extension / reference-inspired | [R48](R48-DEFERRED-FOUNDATION.md). General guest dispatcher integration not established. |
-| Fence retirement | [FenceRetirementQueue.cs](../IraRationis.Core/FenceRetirementQueue.cs) | Documented IRX extension / reference-inspired | R48 notes identify a bounded owner-thread foundation. |
-| Host media transfer queue | [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice.Nv12Presenter.cs) | Documented IRX extension / reference-inspired | [R49](R49-HOST-COPY-QUEUE.md). Opt-in host media path. |
-| Startup evidence and timing | [HostFrameTimeline.cs](../IraRationis.Media/HostFrameTimeline.cs), [RuntimeLogSampling.cs](../IraRationis.Cli/RuntimeLogSampling.cs) | Documented IRX extension | [R50](R50-STARTUP-EVIDENCE.md). Does not prove commercial title startup. |
-| Versioned uploads | [VersionedUploadBuffer.cs](../IraRationis.Graphics/VersionedUploadBuffer.cs), [PitchedPlaneCopy.cs](../IraRationis.Graphics/PitchedPlaneCopy.cs) | Documented IRX extension | [R51](R51-VERSIONED-UPLOAD.md). Explicitly written host buffers and independent probe. |
-| Descriptor virtualization | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/DescriptorTableCache.cs) | Documented IRX extension | [R52](R52-DESCRIPTOR-TABLES.md). Independent authored host compute fixture; guest descriptor integration not established. |
-| Revision contract testing | [R50](../tests/r50-contracts), [R51](../tests/r51-contracts), [R52](../tests/r52-contracts) | Documented IRX development | Review fixture authorship and preserve any applicable notices. |
+| DirectStorage | [DirectStorageModule.cs](../IraRationis.HLE/Storage/DirectStorageModule.cs), [DirectStoragePayload.cs](../IraRationis.HLE/Storage/DirectStoragePayload.cs) | Mixed / documented IRX development | Trace queue and payload validation changes. |
+| Controller input | [GameInputModule.DualSense.cs](../IraRationis.HLE/Input/GameInputModule/DualSense.cs) | Documented IRX development | R30 documentation describes native wired DualSense integration; verify source ancestry. |
+| Audio and PCM | [IraRationis.Media](../IraRationis.Media), [XApuModule.Pcm.cs](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs) | Mixed / documented IRX development | Distinguish adapted APU/DSP behavior from new host PCM contracts. |
+| Media decoding | [MediaFoundationDecoder.cs](../IraRationis.Media/Decoding/MediaFoundationDecoder.cs) | Documented IRX extension | R37 commit and README record in-process Windows Media Foundation integration. |
+| Persistent GPU media | [GpuMediaPlaybackSession.cs](../IraRationis.Media/Playback/GpuMediaPlaybackSession.cs), [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs) | Documented IRX development / reference-inspired | [R43](R43-GPU-MEDIA.md), [R44](R44-RUNTIME-MEDIA-SAMPLE.md), [R45](R45-SHARED-DEVICE.md). |
+| Host shader cache | [HostMediaShaderCache.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/HostMediaShaderCache.cs) | Documented IRX extension | [R47](R47-HOST-SHADER-CACHE.md). Host media bytecode, not general guest shader caching. |
+| Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs), [OrderedPreparation.cs](../IraRationis.Core/Scheduling/OrderedPreparation.cs) | Documented IRX extension / reference-inspired | [R48](R48-DEFERRED-FOUNDATION.md). General guest dispatcher integration not established. |
+| Fence retirement | [FenceRetirementQueue.cs](../IraRationis.Core/Scheduling/FenceRetirementQueue.cs) | Documented IRX extension / reference-inspired | R48 notes identify a bounded owner-thread foundation. |
+| Host media transfer queue | [Nv12Presenter.cs](../IraRationis.Graphics/ConsoleGraphicsDevice/Media/Nv12Presenter.cs) | Documented IRX extension / reference-inspired | [R49](R49-HOST-COPY-QUEUE.md). Opt-in host media path. |
+| Startup evidence and timing | [HostFrameTimeline.cs](../IraRationis.Media/Playback/HostFrameTimeline.cs), [RuntimeLogSampling.cs](../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs) | Documented IRX extension | [R50](R50-STARTUP-EVIDENCE.md). Does not prove commercial title startup. |
+| Versioned uploads | [VersionedUploadBuffer.cs](../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs), [PitchedPlaneCopy.cs](../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs) | Documented IRX extension | [R51](R51-VERSIONED-UPLOAD.md). Explicitly written host buffers and independent probe. |
+| Descriptor virtualization | [DescriptorBindingCatalog.cs](../IraRationis.Graphics/Descriptors/DescriptorBindingCatalog.cs), [DescriptorTableCache.cs](../IraRationis.Graphics/Descriptors/DescriptorTableCache.cs) | Documented IRX extension | [R52](R52-DESCRIPTOR-TABLES.md). Independent authored host compute fixture; guest descriptor integration not established. |
+| Revision contract testing | [R50](../tests/startup-evidence), [R51](../tests/versioned-upload), [R52](../tests/descriptor-bindings) | Documented IRX development | Review fixture authorship and preserve any applicable notices. |
 | Build and release engineering | [GitHub Actions workflow](../.github/workflows/build.yml), [release procedure](RELEASING.md) | Documented IRX development | Audit inherited build files and third-party actions separately. |
 
 ## 5. Traceable architectural development
@@ -121,8 +121,8 @@ For each new component, record the introduction commit, upstream repository and 
 Useful local inspection commands:
 
 ```powershell
-git log --follow -- IraRationis.Graphics/DescriptorTableCache.cs
-git log --follow -- IraRationis.Memory/VirtualPageTable.cs
+git log --follow -- IraRationis.Graphics/Descriptors/DescriptorTableCache.cs
+git log --follow -- IraRationis.Memory/VirtualMemory/VirtualPageTable.cs
 git blame -- IraRationis.Generators/MissingGraphicsSlotGenerator.cs
 git show d18868543526c75005b12bad3fd1666037814340 --stat
 ```

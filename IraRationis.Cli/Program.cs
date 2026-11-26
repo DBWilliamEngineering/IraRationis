@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.ComponentModel;
-using IraRationis.Graphics;
-using IraRationis.Loader;
-using IraRationis.Memory;
+using IraRationis.Cli.Commands;
+using IraRationis.Cli.Diagnostics.Network;
+using IraRationis.Cli.Interop;
+using IraRationis.Graphics.Device;
+using IraRationis.Graphics.Diagnostics;
+using IraRationis.Graphics.Presentation;
+using IraRationis.Loader.Imports.Models;
+using IraRationis.Loader.Instructions;
+using IraRationis.Memory.Diagnostics;
 
 namespace IraRationis.Cli;
 
@@ -20,6 +26,11 @@ internal static class Program
 
         try
         {
+            if (args.Length > 0 && args[0] == "network-trace")
+            {
+                return NetworkTraceCommand.Execute(args[1..], Console.Out);
+            }
+
             if (args.Length > 0 && args[0] == "media-probe")
             {
                 return MediaProbeCommand.Execute(args[1..], Console.Out);
@@ -112,9 +123,9 @@ internal static class Program
         var policy = UnimplementedPolicy.Trap;
         var start = args.Length > 0 && args[0] == "run" ? 1 : 0;
 
-        for (var i = start; i < args.Length; i++)
+        for (var index = start; index < args.Length; index++)
         {
-            switch (args[i])
+            switch (args[index])
             {
                 case "--bind-only":
                     bindOnly = true;
@@ -129,8 +140,8 @@ internal static class Program
                 case "--execute":
                     break;
 
-                case "--console" when i + 1 < args.Length:
-                    console = args[++i] switch
+                case "--console" when index + 1 < args.Length:
+                    console = args[++index] switch
                     {
                         "series-x" => ConsoleModel.SeriesX,
                         "series-s" => ConsoleModel.SeriesS,
@@ -139,8 +150,8 @@ internal static class Program
 
                     break;
 
-                case "--unimplemented" when i + 1 < args.Length:
-                    policy = args[++i] switch
+                case "--unimplemented" when index + 1 < args.Length:
+                    policy = args[++index] switch
                     {
                         "trap" => UnimplementedPolicy.Trap,
                         "zero" => UnimplementedPolicy.ReturnZero,
@@ -150,12 +161,12 @@ internal static class Program
                     break;
 
                 default:
-                    if (path is not null || args[i].StartsWith('-'))
+                    if (path is not null || args[index].StartsWith('-'))
                     {
-                        throw new ArgumentException($"Unknown argument: {args[i]}");
+                        throw new ArgumentException($"Unknown argument: {args[index]}");
                     }
 
-                    path = args[i];
+                    path = args[index];
 
                     break;
             }
@@ -176,6 +187,8 @@ internal static class Program
             "Usage: irx [file] | irx run [file] [--bind-only] [--strict] [--console series-x|series-s] [--unimplemented trap|zero]");
 
         writer.WriteLine("       irx veh-probe");
+
+        writer.WriteLine("       irx network-trace <pid> <output.etl> [seconds:1..300] (elevated diagnostic terminal)");
 
         writer.WriteLine("       irx graphics-probe");
 

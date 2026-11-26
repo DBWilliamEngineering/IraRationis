@@ -2,7 +2,8 @@
 
 using System.Security.Cryptography;
 using IraRationis.Graphics;
-using IraRationis.Media;
+using IraRationis.Media.Decoding;
+using IraRationis.Media.Video;
 
 namespace IraRationis.GpuMedia.Tests;
 
@@ -40,37 +41,37 @@ internal static class Program
         // Padded source rows are intentional, distinct from D3D12's upload pitches.
         var yStride = width + 7;
         var uvStride = width + 13;
-        var y = new byte[checked(yStride * height)];
-        var uv = new byte[checked(uvStride * height / 2)];
+        var lumaPlane = new byte[checked(yStride * height)];
+        var chromaPlane = new byte[checked(uvStride * height / 2)];
         var random = new Random(42 + width);
 
-        random.NextBytes(y);
+        random.NextBytes(lumaPlane);
 
-        random.NextBytes(uv);
+        random.NextBytes(chromaPlane);
 
         // Explicit neutral black and white pixels, and a non-neutral chroma block.
-        y[0] = 16;
+        lumaPlane[0] = 16;
 
-        y[1] = 235;
+        lumaPlane[1] = 235;
 
-        y[yStride] = 81;
+        lumaPlane[yStride] = 81;
 
-        y[yStride + 1] = 145;
+        lumaPlane[yStride + 1] = 145;
 
-        uv[0] = 128;
+        chromaPlane[0] = 128;
 
-        uv[1] = 128;
+        chromaPlane[1] = 128;
 
         if (width >= 4)
         {
-            uv[2] = 16;
+            chromaPlane[2] = 16;
 
-            uv[3] = 240;
+            chromaPlane[3] = 240;
         }
 
-        var frame = Nv12UploadFrame.Capture(y, yStride, uv, uvStride, width, height, 0);
+        var frame = Nv12UploadFrame.Capture(lumaPlane, yStride, chromaPlane, uvStride, width, height, 0);
 
-        VerifyFrame(frame, y, yStride, uv, uvStride, "synthetic");
+        VerifyFrame(frame, lumaPlane, yStride, chromaPlane, uvStride, "synthetic");
     }
 
     private static void TestClip(string path)
@@ -82,17 +83,17 @@ internal static class Program
         foreach (var index in indexes.Distinct())
         {
             var pixels = clip.GetFrame(index);
-            var y = pixels[..yBytes];
-            var uv = pixels[yBytes..];
-            var frame = Nv12UploadFrame.Capture(y, clip.Width, uv, clip.Width,
+            var lumaPlane = pixels[..yBytes];
+            var chromaPlane = pixels[yBytes..];
+            var frame = Nv12UploadFrame.Capture(lumaPlane, clip.Width, chromaPlane, clip.Width,
                 clip.Width, clip.Height, index * 10_000_000L / 30);
 
-            VerifyFrame(frame, y, clip.Width, uv, clip.Width, $"clip frame {index}");
+            VerifyFrame(frame, lumaPlane, clip.Width, chromaPlane, clip.Width, $"clip frame {index}");
         }
     }
 
-    private static void VerifyFrame(Nv12UploadFrame frame, ReadOnlySpan<byte> y, int yStride,
-        ReadOnlySpan<byte> uv, int uvStride, string name)
+    private static void VerifyFrame(Nv12UploadFrame frame, ReadOnlySpan<byte> lumaPlane, int yStride,
+        ReadOnlySpan<byte> chromaPlane, int uvStride, string name)
     {
         var bytes = checked(frame.Width * frame.Height * 4);
         var expected = new byte[bytes];
@@ -102,16 +103,16 @@ internal static class Program
 
         actual.AsSpan().Fill(0xCD);
 
-        ConsoleGraphicsDevice.ConvertNv12FrameOnGpu(y, yStride, uv, uvStride,
+        ConsoleGraphicsDevice.ConvertNv12FrameOnGpu(lumaPlane, yStride, chromaPlane, uvStride,
             frame.Width, frame.Height, actual, Console.Out);
 
         var mismatches = 0;
         var maximumError = 0;
         var first = -1;
 
-        for (var i = 0; i < actual.Length; i++)
+        for (var index = 0; index < actual.Length; index++)
         {
-            var error = Math.Abs(actual[i] - expected[i]);
+            var error = Math.Abs(actual[index] - expected[index]);
 
             maximumError = Math.Max(maximumError, error);
 
@@ -119,7 +120,7 @@ internal static class Program
             {
                 if (first < 0)
                 {
-                    first = i;
+                    first = index;
                 }
 
                 mismatches++;

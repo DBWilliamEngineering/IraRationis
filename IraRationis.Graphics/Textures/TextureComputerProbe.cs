@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Synthetic tests adapted from upstream victory-hle/src/modules/xg.rs.
 
+using IraRationis.Graphics.Resources.Models;
+
 namespace IraRationis.Graphics.Textures;
 
 internal static unsafe class TextureComputerProbe
@@ -20,15 +22,15 @@ internal static unsafe class TextureComputerProbe
 
     internal static void Verify()
     {
-        Check(sizeof(ConsoleGraphicsDevice.ResourceDescription) == 56, "resource description ABI");
+        Check(sizeof(ResourceDescription) == 56, "resource description ABI");
 
         var suggest =
-            (delegate* unmanaged[Stdcall]<ConsoleGraphicsDevice.ResourceDescription*, uint, uint*, int>)TextureComputer
+            (delegate* unmanaged[Stdcall]<ResourceDescription*, uint, uint*, int>)TextureComputer
                 .SuggestAddress;
         var create =
-            (delegate* unmanaged[Stdcall]<ConsoleGraphicsDevice.ResourceDescription*, nint*, int>)TextureComputer
+            (delegate* unmanaged[Stdcall]<ResourceDescription*, nint*, int>)TextureComputer
                 .CreateAddress;
-        var desc = new ConsoleGraphicsDevice.ResourceDescription
+        var desc = new ResourceDescription
         {
             Dimension = 3,
             Width = 3840,
@@ -109,24 +111,24 @@ internal static unsafe class TextureComputerProbe
 
             fixed (byte* tile = tiled)
             {
-                for (var i = 0U; i < 9; i++)
+                for (var index = 0U; index < 9; index++)
                 {
-                    var m = mip + i * 0x70;
-                    var row = *(uint*)(m + 48) * 16;
-                    var height = *(uint*)(m + 52);
+                    var mipRecord = mip + index * 0x70;
+                    var row = *(uint*)(mipRecord + 48) * 16;
+                    var height = *(uint*)(mipRecord + 52);
                     var source = new byte[row * height];
                     var destination = new byte[source.Length];
 
-                    for (var b = 0; b < source.Length; b++)
+                    for (var byteIndex = 0; byteIndex < source.Length; byteIndex++)
                     {
-                        source[b] = (byte)((uint)b ^ i);
+                        source[byteIndex] = (byte)((uint)byteIndex ^ index);
                     }
 
-                    fixed (byte* a = source, b = destination)
+                    fixed (byte* sourcePointer = source, destinationPointer = destination)
                     {
-                        Check(into(self, tile, 0, i, a, row, 0) == 0, "tile mip");
+                        Check(into(self, tile, 0, index, sourcePointer, row, 0) == 0, "tile mip");
 
-                        Check(from(self, b, 0, i, 0, tile, row, 0) == 0, "detile mip");
+                        Check(from(self, destinationPointer, 0, index, 0, tile, row, 0) == 0, "detile mip");
 
                         Check(source.AsSpan().SequenceEqual(destination), "BC7 round trip");
                     }

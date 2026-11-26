@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../IraRationis.Graphics/Resources/VersionedUploadBuffer.cs" Link="VersionedUploadBuffer.cs" />
+        <Compile Include="../../IraRationis.Graphics/Resources/Models/VersionedUploadBufferSnapshot.cs" Link="VersionedUploadBufferSnapshot.cs" />
+        <Compile Include="../../IraRationis.Graphics/Textures/PitchedPlaneCopy.cs" Link="PitchedPlaneCopy.cs" />
+    </ItemGroup>
+</Project>

@@ -5,8 +5,10 @@
 #include <Windows.h>
 #include <intrin.h>
 #include <cstring>
+#include <atomic>
 #include "InstructionDecoder.h"
 #include "ClzeroBatch.h"
+#include "ImageRangeIndex.h"
 
 namespace
 {
@@ -20,7 +22,9 @@ namespace
     ImageRange ranges[MaxRanges]{};
     unsigned rangeCount = 0;
     PVOID registration = nullptr;
-    volatile LONG active = 0;
+    static_assert(std::atomic<bool>::is_always_lock_free);
+    std::atomic<bool> active{false};
+    irx::ImageRangeIndex<ImageRange, MaxRanges> imageIndex;
     volatile LONG breakpointReports = 0;
     bool batchClzero = false;
     bool profileInstructions = false;
@@ -158,16 +162,7 @@ namespace
     LONG Emulate(CONTEXT& ctx) noexcept
     {
         const auto rip = static_cast<ULONG_PTR>(ctx.Rip);
-        bool allowed = false;
-        for (unsigned i = 0; i < rangeCount; ++i)
-        {
-            if (rip >= ranges[i].start && rip < ranges[i].end)
-            {
-                allowed = true;
-                break;
-            }
-        }
-        if (!allowed)
+        if (!imageIndex.Contains(rip))
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
@@ -325,8 +320,7 @@ namespace
 
     LONG CALLBACK Handle(EXCEPTION_POINTERS* exception) noexcept
     {
-        if (!exception || !exception->ExceptionRecord || !exception->ContextRecord ||
-            InterlockedCompareExchange(&active, 0, 0) == 0)
+        if (!exception || !exception->ExceptionRecord || !exception->ContextRecord)
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
@@ -335,7 +329,7 @@ namespace
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
-        if (handling)
+        if (handling || !active.load(std::memory_order_acquire))
         {
             return EXCEPTION_CONTINUE_SEARCH;
         }
@@ -377,6 +371,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
         }
         ranges[i] = input[i];
     }
+    if (!imageIndex.Build(ranges, count))
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
+
     rangeCount = count;
     batchClzero = Enabled(L"IRX_VEH_BATCH_CLZERO");
     profileInstructions = Enabled(L"IRX_VEH_PROFILE");
@@ -386,7 +385,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
         const auto error = GetLastError();
         return error ? error : ERROR_GEN_FAILURE;
     }
-    InterlockedExchange(&active, 1);
+    active.store(true, std::memory_order_release);
     const char* message = batchClzero
                               ? "[performance] IRX-R28-VEH: CLZERO batching enabled (experimental).\r\n"
                               : "[performance] IRX-R28-VEH: CLZERO batching disabled.\r\n";
@@ -397,5 +396,5 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
 extern "C" __declspec(dllexport) void WINAPI IrxDisableHandler() noexcept
 {
     // Keep DLL and registration resident. A handler may already be in flight.
-    InterlockedExchange(&active, 0);
+    active.store(false, std::memory_order_release);
 }

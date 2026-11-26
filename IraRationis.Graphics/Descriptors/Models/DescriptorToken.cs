@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Console descriptor ABI adapted from Zettrox/ztrx crates/victory-gpu/src/descriptor.rs.
+
+using System.Runtime.InteropServices;
+
+namespace IraRationis.Graphics.Descriptors.Models;
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct DescriptorToken
+{
+    public uint Tag;
+    public uint Kind;
+    public ulong Id;
+}
