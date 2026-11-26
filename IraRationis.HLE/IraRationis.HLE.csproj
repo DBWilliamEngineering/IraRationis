@@ -7,6 +7,7 @@
     <ItemGroup>
         <PackageReference Include="Concentus" />
         <ProjectReference Include="../IraRationis.Graphics/IraRationis.Graphics.csproj" />
+        <ProjectReference Include="../IraRationis.Media/IraRationis.Media.csproj" />
         <ProjectReference Include="../IraRationis.PE/IraRationis.PE.csproj" />
         <ProjectReference Include="../IraRationis.Loader/IraRationis.Loader.csproj" />
     </ItemGroup>

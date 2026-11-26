@@ -5,10 +5,11 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Concentus.Structs;
+using IraRationis.Media;
 
 namespace IraRationis.HLE;
 
-public static unsafe class XApuModule
+public static unsafe partial class XApuModule
 {
     private const int InvalidArgument = unchecked((int)0x80070057);
     private const int OutOfMemory = unchecked((int)0x8007000E);
@@ -366,6 +367,8 @@ public static unsafe class XApuModule
 
         result.Frames = (uint)frames;
         result.OutputLength = (uint)(frames * channels * sizeof(float));
+
+        ObservePcm(connection, command.Id.Stream, source, channels);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -521,6 +524,8 @@ public static unsafe class XApuModule
         public uint Dequeued;
         public int Head;
         public uint Submitted;
+        public uint PcmStream;
+        public IPcmPacketSink? PcmSink;
 
         public Connection(ConnectInput input, nint memory, EventWaitHandle? resultEvent)
         {
@@ -544,6 +549,8 @@ public static unsafe class XApuModule
                 }
 
                 Closed = true;
+                PcmSink = null;
+
                 foreach (var voice in Voices)
                 {
                     voice?.Decoder.Dispose();

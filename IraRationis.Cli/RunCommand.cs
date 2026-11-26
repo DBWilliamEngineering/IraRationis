@@ -80,6 +80,8 @@ internal static class RunCommand
         using var timers = new ConsoleTimers();
         using var handler = new ConsoleInstructionHandler(dependencies.Ordered.Append(main));
         Console.WriteLine("[launch] Native CPU exception handler installed.");
+        using var audioObservation = RuntimePcmObservation.Start();
+
         var result = threads.RunMain(main, dependencies.Ordered);
         Console.WriteLine($"Title entry returned {result} (0x{result:X8}).");
 
