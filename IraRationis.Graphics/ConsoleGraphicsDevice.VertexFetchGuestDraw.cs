@@ -62,7 +62,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             return RefuseR13("host direct command list unavailable");
         }
 
-        if (vertices != 3 || instances != 1 || first != 0 || firstInstance != 0)
+        // Admit complete triangle lists; the existing submission-time extent check
+        // still enforces the fixed upload capacity for every referenced vertex.
+        if (vertices == 0 || vertices > 1023 || vertices % 3 != 0 ||
+            instances != 1 || first != 0 || firstInstance != 0)
         {
             return RefuseR13($"unsupported draw arguments: vertices={vertices}, instances={instances}, " +
                              $"first={first}, firstInstance={firstInstance}");

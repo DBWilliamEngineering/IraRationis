@@ -141,6 +141,11 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
             ConsoleGraphicsDevice.VerifyAuthoredScalarBatch(context);
         }
 
+        if (Environment.GetEnvironmentVariable("IRX_SAMPLE_PROGRAMMABLE_RASTER") == "1")
+        {
+            ConsoleGraphicsDevice.VerifyAuthoredRaster(context);
+        }
+
         var result = StreamingMediaSession.PlayGpu(decoder, _clipPath,
             (window, width, height) => new Presenter(window, width, height, context));
 
