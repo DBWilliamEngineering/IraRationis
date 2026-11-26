@@ -52,6 +52,10 @@ jobs:
               run: dotnet run --project IraRationis.Runtime.Tests -c Release --no-build
             - name: Test strict storage contracts
               run: dotnet run --project tests/storage-contract/StorageContract.csproj -c Release --no-build
+            - name: Test runtime media contracts (headless)
+              run: dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-build
+            - name: Build native runtime audio fixture
+              run: dotnet msbuild tests/native/runtime-audio/RuntimeAudio.proj -t:Build
             - name: Publish Native AOT executable
               run: dotnet publish IraRationis.Cli/IraRationis.Cli.csproj -c Release -r win-x64 -o artifacts/native
             - name: Test memory page table
@@ -66,6 +70,14 @@ jobs:
               run: ./tests/native/input-memory.ps1 artifacts/native/irx.exe
             - name: Test DirectStorage ABI and completion
               run: ./tests/native/storage.ps1 artifacts/native/irx.exe
+            - name: Test native audio ABI and external asset (headless)
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $PSNativeCommandUseErrorActionPreference = $false
+                  Remove-Item Env:IRX_RUNTIME_PCM_STREAM -ErrorAction SilentlyContinue
+                  & ./artifacts/native/irx.exe run ./artifacts/runtime-audio-r41/probe.exe
+                  if ($LASTEXITCODE -ne 42) { throw "Unexpected audio fixture exit: $LASTEXITCODE" }
+                  exit 0
             - name: Locate or install FFmpeg for synthetic media tests
               run: |
                   $ErrorActionPreference = 'Stop'

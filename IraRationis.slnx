@@ -42,6 +42,9 @@
         <Project Path="IraRationis.Runtime.Tests/IraRationis.Runtime.Tests.csproj" />
         <Project Path="tests/storage-contract/StorageContract.csproj" />
         <Project Path="tests/media-baseline/MediaBaseline.csproj" />
+        <Project Path="tests/runtime-media/RuntimeMedia.csproj" />
+        <Project Path="tests/gpu-media/GpuMedia.csproj" />
+        <File Path="tests/native/runtime-audio/RuntimeAudio.proj" />
         <File Path="tests/smoke.py" />
         <File Path="tests/native/input-memory.c" />
         <File Path="tests/native/input-memory.ps1" />

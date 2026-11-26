@@ -1,0 +1,28 @@
+<Project DefaultTargets="Build">
+    <PropertyGroup>
+        <OutputDirectory Condition="'$(OutputDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\..\artifacts\runtime-audio-r41</OutputDirectory>
+        <FixtureOutput>$([System.IO.Path]::GetFullPath('$(OutputDirectory)'))</FixtureOutput>
+        <VsWhere>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe</VsWhere>
+        <VisualStudioRoot Condition="'$(VisualStudioRoot)' == ''">$(VSINSTALLDIR)</VisualStudioRoot>
+    </PropertyGroup>
+    <Target Name="LocateToolchain">
+        <Error Condition="'$(OS)' != 'Windows_NT'" Text="Native fixture compilation requires Windows and MSVC." />
+        <Error Condition="'$(VisualStudioRoot)' == '' And !Exists('$(VsWhere)')" Text="vswhere.exe not found. Supply -p:VisualStudioRoot=&quot;path to Visual Studio&quot;." />
+        <Exec Condition="'$(VisualStudioRoot)' == ''" Command="&quot;$(VsWhere)&quot; -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+            <Output TaskParameter="ConsoleOutput" ItemName="_DetectedVisualStudio" />
+        </Exec>
+        <PropertyGroup>
+            <VisualStudioRoot Condition="'$(VisualStudioRoot)' == ''">@(_DetectedVisualStudio)</VisualStudioRoot>
+            <VcVars>$(VisualStudioRoot)\VC\Auxiliary\Build\vcvars64.bat</VcVars>
+        </PropertyGroup>
+        <Error Condition="'$(VisualStudioRoot)' == '' Or !Exists('$(VcVars)')" Text="MSVC x64 environment not found. Install the C++ x64 build tools or supply VisualStudioRoot." />
+    </Target>
+    <Target Name="Build" DependsOnTargets="LocateToolchain"
+            Inputs="$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)probe.c;$(MSBuildThisFileDirectory)xapu.def;$(MSBuildThisFileDirectory)tone.opuspacket"
+            Outputs="$(FixtureOutput)\probe.exe;$(FixtureOutput)\tone.opuspacket">
+        <MakeDir Directories="$(FixtureOutput)" />
+        <Exec WorkingDirectory="$(FixtureOutput)" Command="call &quot;$(VcVars)&quot; &amp;&amp; lib.exe /nologo /machine:x64 &quot;/def:$(MSBuildThisFileDirectory)xapu.def&quot; /out:xapu.lib &amp;&amp; cl.exe /nologo /W4 /WX /O2 /GS- /Zl &quot;$(MSBuildThisFileDirectory)probe.c&quot; /link /NODEFAULTLIB /ENTRY:ProbeEntry /SUBSYSTEM:CONSOLE /BASE:0x600000000 /DYNAMICBASE /FIXED:NO /OUT:probe.exe xapu.lib kernel32.lib" />
+        <Copy SourceFiles="$(MSBuildThisFileDirectory)tone.opuspacket" DestinationFolder="$(FixtureOutput)" />
+        <Message Importance="High" Text="Native audio fixture: $(FixtureOutput)\probe.exe" />
+    </Target>
+</Project>
