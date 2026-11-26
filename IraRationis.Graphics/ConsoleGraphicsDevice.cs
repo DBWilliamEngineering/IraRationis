@@ -843,7 +843,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             BindPipelineCore(child, pipeline);
         }
 
-        Console.Error.WriteLine($"[graphics] Command list type {kind} created.");
+        TraceR69ListCreation(kind);
 
         return FinishChild(child, iid, output);
     }

@@ -19,6 +19,27 @@ public static partial class ConsoleGraphicsDevice
     private static long _r24PreviousWaits, _r24PreviousTicks, _r24PreviousDraws, _r24PreviousDispatches;
     private static long _r24PreviousAttempts, _r24PreviousSuccesses, _r24PreviousPresentTicks;
 
+    private static readonly bool R69SourceListSampling =
+        Environment.GetEnvironmentVariable("IRX_SOURCE_LIST_SAMPLING") == "1";
+    private static readonly long[] R69ListCreations = new long[8];
+
+    private static void TraceR69ListCreation(uint kind)
+    {
+        if (!R69SourceListSampling || R24Verbose || kind >= (uint)R69ListCreations.Length)
+        {
+            Console.Error.WriteLine($"[graphics] Command list type {kind} created.");
+
+            return;
+        }
+
+        var count = Interlocked.Increment(ref R69ListCreations[(int)kind]);
+
+        if (count <= 4 || (count & (count - 1)) == 0)
+        {
+            Console.Error.WriteLine($"[graphics] IRX-R69-LIST: kind={kind}; created={count}.");
+        }
+    }
+
     // Only repetitive success messages use this method. Failures, first-use
     // markers and correctness evidence retain their original logging paths.
     private static void TraceR24(string message, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)

@@ -491,16 +491,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         TraceR24($"[graphics] IRX-GFX-DRAW-R13: UPLOADED {bytes} guest bytes after preceding GPU boundaries.");
     }
 
-    // Share immutable translated pipelines across command-list resets. The cache owns
-    // a separate COM reference; every recording owns its own reference until reset.
-    // Bounded, process-local cache; no guest addresses or mutable bindings are cached.
+    // Cache references are independent of recorded command-list references.
+    // Eviction cannot retire an object still owned by a recording.
+    // Only immutable native pipeline objects are cached; bindings remain per list.
     private sealed class R21PipelineCache<TKey, TValue> where TKey : class where TValue : class
     {
-        private readonly Dictionary<(nint Device, TKey Metadata), TValue> _entries = new();
+        private const int Capacity = 64;
+        private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<Entry>> _entries = new();
+        private readonly LinkedList<Entry> _recency = new();
         private readonly Lock _gate = new();
         private readonly Func<TValue, (nint Root, nint Pipeline)> _handles;
         private readonly string _name;
-        private int _hits;
+        private long _hits, _misses, _evictions;
 
         public R21PipelineCache(string name, Func<TValue, (nint Root, nint Pipeline)> handles)
         {
@@ -511,48 +513,132 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         public TValue? Acquire(TKey metadata, RecordedCommandState state)
         {
+            TValue? value = null;
+            long hits, misses, evictions;
+            int count;
+
             lock (_gate)
             {
-                if (!_entries.TryGetValue(((nint)_host, metadata), out var entry))
+                if (_entries.TryGetValue(((nint)_host, metadata), out var entry))
                 {
-                    return null;
+                    // Reserve recording storage before acquiring its two references.
+                    _ = state.HostViews.EnsureCapacity(checked(state.HostViews.Count + 2));
+
+                    var handles = _handles(entry.Value.Value);
+
+                    RetainR21Host(handles.Root);
+
+                    RetainR21Host(handles.Pipeline);
+
+                    state.HostViews.Add(handles.Root);
+
+                    state.HostViews.Add(handles.Pipeline);
+
+                    Touch(entry);
+
+                    value = entry.Value.Value;
+
+                    _hits++;
+                }
+                else
+                {
+                    _misses++;
                 }
 
-                var handles = _handles(entry);
-
-                RetainR21Host(handles.Root);
-
-                RetainR21Host(handles.Pipeline);
-
-                state.HostViews.Add(handles.Root);
-
-                state.HostViews.Add(handles.Pipeline);
-
-                var hits = ++_hits;
-
-                if (hits <= 2 || (hits & (hits - 1)) == 0)
-                {
-                    Console.Error.WriteLine($"[graphics] IRX-GFX-PSO-R21: {_name} cache hit #{hits}.");
-                }
-
-                return entry;
+                hits = _hits;
+                misses = _misses;
+                evictions = _evictions;
+                count = _entries.Count;
             }
+
+            // Never hold the native cache lock while writing diagnostics.
+            var observations = value is null ? misses : hits;
+
+            if (R24Verbose || observations <= 2 || (observations & (observations - 1)) == 0)
+            {
+                Console.Error.WriteLine($"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
+            }
+
+            return value;
         }
 
         public void Publish(TKey metadata, TValue value)
         {
             lock (_gate)
             {
-                if (_entries.Count >= 64 || !_entries.TryAdd(((nint)_host, metadata), value))
+                var key = ((nint)_host, metadata);
+
+                if (_entries.TryGetValue(key, out var existing))
                 {
+                    Touch(existing);
+
                     return;
                 }
 
+                var node = new LinkedListNode<Entry>(new Entry(key, value));
                 var handles = _handles(value);
 
                 RetainR21Host(handles.Root);
 
                 RetainR21Host(handles.Pipeline);
+
+                try
+                {
+                    _entries.Add(key, node);
+                }
+                catch
+                {
+                    _ = HostRelease(handles.Pipeline);
+
+                    _ = HostRelease(handles.Root);
+
+                    throw;
+                }
+
+                _recency.AddFirst(node);
+
+                if (_entries.Count > Capacity)
+                {
+                    var victim = _recency.Last!;
+                    var retired = _handles(victim.Value.Value);
+
+                    _ = _entries.Remove(victim.Value.Key);
+
+                    _recency.RemoveLast();
+
+                    _evictions++;
+
+                    // Release the cache's references only. Recording ownership
+                    // and existing completion boundaries remain unchanged.
+                    _ = HostRelease(retired.Pipeline);
+
+                    _ = HostRelease(retired.Root);
+                }
+            }
+        }
+
+        private void Touch(LinkedListNode<Entry> node)
+        {
+            if (ReferenceEquals(_recency.First, node))
+            {
+                return;
+            }
+
+            _recency.Remove(node);
+
+            _recency.AddFirst(node);
+        }
+
+        private sealed class Entry
+        {
+            internal readonly (nint Device, TKey Metadata) Key;
+            internal readonly TValue Value;
+
+            internal Entry((nint Device, TKey Metadata) key, TValue value)
+            {
+                Key = key;
+
+                Value = value;
             }
         }
     }
