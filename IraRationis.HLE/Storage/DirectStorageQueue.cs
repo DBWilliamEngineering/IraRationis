@@ -1,31 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx, crates/victory-hle/src/modules/dstorage.rs.
-// Ordered per-queue workers; weighted shared scheduling and BCPack are not yet ported.
+// Ordered per-queue workers.
 
 using System.Diagnostics;
 using IraRationis.HLE.Storage.Models;
 
 namespace IraRationis.HLE.Storage;
 
-internal sealed unsafe class DirectStorageQueue : IDisposable
+internal sealed class DirectStorageQueue : IDisposable
 {
     private readonly int _capacity;
+    private readonly bool _autoSubmit;
     private readonly object _gate = new();
     private readonly List<StorageCommand> _pending = [];
     private readonly long _storageQueueId = Interlocked.Increment(ref DirectStorageModule._nextStorageQueueId);
     private readonly Queue<StorageCommand> _submitted = new();
     private readonly Thread _worker;
     private bool _closed;
-    private int _firstFailure;
     private long _completedStorageRequests;
     private long _failedStorageRequests;
+    private int _firstFailure;
+    private bool _running;
     private long _storageOutputBytes;
     private long _storageStatusCount;
-    private bool _running;
 
-    public DirectStorageQueue(int capacity)
+    public DirectStorageQueue(int capacity, bool autoSubmit)
     {
         _capacity = Math.Max(2, capacity);
+        _autoSubmit = autoSubmit;
 
         _worker = new Thread(Work) { IsBackground = true, Name = "irx-storage" };
 
@@ -90,7 +92,10 @@ internal sealed unsafe class DirectStorageQueue : IDisposable
         {
             while (!_closed && _pending.Count + _submitted.Count + (_running ? 1 : 0) >= _capacity - 1)
             {
-                SubmitCore();
+                if (_autoSubmit)
+                {
+                    SubmitCore();
+                }
 
                 Monitor.Wait(_gate);
             }
@@ -104,7 +109,7 @@ internal sealed unsafe class DirectStorageQueue : IDisposable
 
             _pending.Add(command);
 
-            if (_pending.Count >= Math.Max(1, _capacity / 2))
+            if (_autoSubmit && _pending.Count >= Math.Max(1, _capacity / 2))
             {
                 SubmitCore();
             }
@@ -136,7 +141,7 @@ internal sealed unsafe class DirectStorageQueue : IDisposable
 
     private void Work()
     {
-        for(;;)
+        for (;;)
         {
             StorageCommand command;
 

@@ -71,7 +71,7 @@ internal static class Program
 
     private static void TestLogSampling()
     {
-        var sampling = new GraphicsLogSampling(sampleGraphics: true, sampleListKinds: false, verbose: false);
+        var sampling = new GraphicsLogSampling(true, false, false);
         var emittedResources = 0;
         var emittedLists = 0;
 
@@ -97,7 +97,7 @@ internal static class Program
                 "[performance] IRX-R50-LOG: resourceLines=4601; resourceEmitted=14; listLines=625; listEmitted=11.",
             "Sampling summary");
 
-        var perKind = new GraphicsLogSampling(sampleGraphics: false, sampleListKinds: true, verbose: false);
+        var perKind = new GraphicsLogSampling(false, true, false);
         for (var index = 1; index <= 4; index++)
         {
             Require(perKind.ShouldEmitCommandList(0, out var kindCount) && kindCount == index,
@@ -110,7 +110,7 @@ internal static class Program
         Require(perKind.ShouldEmitCommandList(uint.MaxValue, out var unknownKindCount) && unknownKindCount == 0,
             "Unknown command list kinds avoid the per-kind counter");
 
-        var verbose = new GraphicsLogSampling(sampleGraphics: true, sampleListKinds: true, verbose: true);
+        var verbose = new GraphicsLogSampling(true, true, true);
         Require(!verbose.Enabled, "Verbose logging disables success sampling");
         for (var index = 0; index < 9; index++)
         {

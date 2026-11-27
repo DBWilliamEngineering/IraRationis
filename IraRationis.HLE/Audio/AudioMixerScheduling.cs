@@ -19,16 +19,14 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
     private static bool _mixerEnabled;
     private static bool _movieEnabled;
     private static bool _endpointEnabled;
-    [ThreadStatic]
-    private static int _mixerObservationDepth;
-    [ThreadStatic]
-    private static int _endpointObservationDepth;
-    private bool _observesMixer;
-    private bool _observesEndpoint;
+    [ThreadStatic] private static int _mixerObservationDepth;
+    [ThreadStatic] private static int _endpointObservationDepth;
     private nint _endpointMixerState;
-    private int _previousPriority = int.MaxValue;
     private nint _mmcss;
+    private bool _observesEndpoint;
+    private bool _observesMixer;
     private nuint _previousAffinity;
+    private int _previousPriority = int.MaxValue;
 
     private AudioMixerScheduling(bool observesMixer, bool observesEndpoint)
     {
@@ -62,38 +60,84 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         }
     }
 
+    public void Dispose()
+    {
+        if (_endpointMixerState != 0)
+        {
+            MovieAudioImportTrace.DetachEndpointMixer(_endpointMixerState);
+            _endpointMixerState = 0;
+        }
+
+        if (_observesEndpoint)
+        {
+            _endpointObservationDepth--;
+            _observesEndpoint = false;
+        }
+
+        if (_observesMixer)
+        {
+            _mixerObservationDepth--;
+            _observesMixer = false;
+
+            if (_mixerObservationDepth == 0)
+            {
+                MovieMixerPreciseWait.Release();
+            }
+        }
+
+        if (_mmcss != 0)
+        {
+            _ = AvRevertMmThreadCharacteristics(_mmcss);
+            _mmcss = 0;
+        }
+
+        if (_previousAffinity != 0)
+        {
+            _ = SetThreadAffinityMask(-2, _previousAffinity);
+            _previousAffinity = 0;
+        }
+
+        if (_previousPriority != int.MaxValue)
+        {
+            _ = SetThreadPriority(-2, _previousPriority);
+            _previousPriority = int.MaxValue;
+        }
+    }
+
     public static void Configure(nuint image, string hash)
     {
         _mixerEnabled = Environment.GetEnvironmentVariable("IRX_AUDIO_MIXER_SCHEDULING") == "1";
         _movieEnabled = Environment.GetEnvironmentVariable("IRX_BINK_WORKER_SCHEDULING") == "1";
         _endpointEnabled = Environment.GetEnvironmentVariable("IRX_AUDIO_ENDPOINT_SCHEDULING") == "1";
         _image = (_mixerEnabled || _movieEnabled || _endpointEnabled || MovieAudioImportTrace.MixerWaitAuditRequested ||
-            MovieAudioImportTrace.EndpointProbeRequested) &&
-            string.Equals(hash, ObservedBuild, StringComparison.OrdinalIgnoreCase) ? image : 0;
+                  MovieAudioImportTrace.EndpointProbeRequested) &&
+                 string.Equals(hash, ObservedBuild, StringComparison.OrdinalIgnoreCase)
+            ? image
+            : 0;
 
         if (_mixerEnabled || _movieEnabled || _endpointEnabled)
         {
             Console.Error.WriteLine($"[audio-scheduling] profileMatched={_image != 0}; mixer={_mixerEnabled}; " +
-                $"movie={_movieEnabled}; endpoint={_endpointEnabled}.");
+                                    $"movie={_movieEnabled}; endpoint={_endpointEnabled}.");
         }
     }
 
     internal static bool Matches(nuint image, nuint wrapper, nuint entry)
     {
         return image != 0 && wrapper >= image && entry >= image && wrapper - image == ThreadWrapperRva &&
-            (entry - image == MixerThunkRva || entry - image == MixerRva);
+               (entry - image == MixerThunkRva || entry - image == MixerRva);
     }
 
     internal static bool MatchesMovie(nuint image, nuint wrapper, nuint entry)
     {
         return image != 0 && wrapper >= image && entry >= image && wrapper - image == ThreadWrapperRva &&
-            entry - image == MovieWorkerRva;
+               entry - image == MovieWorkerRva;
     }
 
     internal static bool MatchesEndpointWorker(nuint image, nuint wrapper, nuint entry)
     {
         return image != 0 && wrapper >= image && entry >= image && wrapper - image == ThreadWrapperRva &&
-            (entry - image == EndpointWorkerThunkRva || entry - image == EndpointWorkerRva);
+               (entry - image == EndpointWorkerThunkRva || entry - image == EndpointWorkerRva);
     }
 
     internal static AudioMixerScheduling? TryEnter(nint routine, nint parameter)
@@ -110,7 +154,6 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
 
         if (start >= image && start - image == ThreadWrapperRva && parameter != 0)
         {
-
             var read = (nuint)0;
             if (ReadProcessMemory(-1, (void*)parameter, &entry, (nuint)sizeof(nuint), &read) == 0 ||
                 read != (nuint)sizeof(nuint))
@@ -123,7 +166,7 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         var matchedEndpoint = MatchesEndpointWorker(image, start, entry);
         var observesMixer = matchedMixer && MovieAudioImportTrace.IsMixerWaitAuditBound;
         var observesEndpoint = (matchedMixer || matchedEndpoint) &&
-            MovieAudioImportTrace.IsEndpointProbeBound;
+                               MovieAudioImportTrace.IsEndpointProbeBound;
 
         var mixer = _mixerEnabled && matchedMixer;
         var endpoint = _endpointEnabled && matchedEndpoint;
@@ -147,7 +190,8 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         {
             if (matchedEndpoint && observesEndpoint)
             {
-                Console.Error.WriteLine($"[audio-scheduling] role=endpoint; thread={GetCurrentThreadId()}; observeOnly=True.");
+                Console.Error.WriteLine(
+                    $"[audio-scheduling] role=endpoint; thread={GetCurrentThreadId()}; observeOnly=True.");
             }
 
             return scope;
@@ -181,8 +225,9 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
             var role = mixer ? "mixer" : endpoint ? "endpoint" : "movie";
 
             Console.Error.WriteLine($"[audio-scheduling] role={role}; " +
-                $"thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; relativePrioritySet={priority}; " +
-                $"normalPriorityRestored={scope._previousPriority != int.MaxValue}; previousMask=0x{scope._previousAffinity:X}.");
+                                    $"thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; relativePrioritySet={priority}; "
+                                    +
+                                    $"normalPriorityRestored={scope._previousPriority != int.MaxValue}; previousMask=0x{scope._previousAffinity:X}.");
 
             return scope;
         }
@@ -193,48 +238,6 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
             Console.Error.WriteLine($"[audio-scheduling] unavailable ({exception.GetType().Name}).");
 
             return null;
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_endpointMixerState != 0)
-        {
-            MovieAudioImportTrace.DetachEndpointMixer(_endpointMixerState);
-            _endpointMixerState = 0;
-        }
-
-        if (_observesEndpoint)
-        {
-            _endpointObservationDepth--;
-            _observesEndpoint = false;
-        }
-
-        if (_observesMixer)
-        {
-            _mixerObservationDepth--;
-            _observesMixer = false;
-
-            if (_mixerObservationDepth == 0)
-            {
-                MovieMixerPreciseWait.Release();
-            }
-        }
-
-        if (_mmcss != 0)
-        {
-            _ = AvRevertMmThreadCharacteristics(_mmcss);
-            _mmcss = 0;
-        }
-        if (_previousAffinity != 0)
-        {
-            _ = SetThreadAffinityMask(-2, _previousAffinity);
-            _previousAffinity = 0;
-        }
-        if (_previousPriority != int.MaxValue)
-        {
-            _ = SetThreadPriority(-2, _previousPriority);
-            _previousPriority = int.MaxValue;
         }
     }
 
@@ -266,7 +269,8 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint GetCurrentThreadId();
 
-    [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW",
+        StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nint AvSetMmThreadCharacteristics(string taskName, uint* taskIndex);
 

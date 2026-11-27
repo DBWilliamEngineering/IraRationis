@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed unsafe record VertexInputElement(
+internal sealed record VertexInputElement(
     string Name,
     uint Index,
     uint Format,

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Dsp.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct DspHandle
+public struct DspHandle
 {
     public uint MaxStreams;
     public int Active;

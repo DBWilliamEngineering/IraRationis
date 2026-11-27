@@ -5,4 +5,4 @@
 
 namespace IraRationis.HLE.Storage.Models;
 
-internal sealed unsafe record StorageStatusArray(int[] Entries);
+internal sealed record StorageStatusArray(int[] Entries);

@@ -6,8 +6,8 @@ internal sealed class CpuCounter
 {
     public long Calls;
     public long Completed;
-    public long Failed;
     public long CpuTicks;
-    public long WallTicks;
+    public long Failed;
     public uint LastSampleThreadId;
+    public long WallTicks;
 }

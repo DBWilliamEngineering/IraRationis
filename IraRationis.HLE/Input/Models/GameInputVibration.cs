@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct GameInputVibration
+internal struct GameInputVibration
 {
     public ushort Left;
     public ushort Right;

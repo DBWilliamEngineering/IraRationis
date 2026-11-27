@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Device.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct GraphicsObjectHeader
+internal struct GraphicsObjectHeader
 {
     public nint Table;
     public uint Bits;

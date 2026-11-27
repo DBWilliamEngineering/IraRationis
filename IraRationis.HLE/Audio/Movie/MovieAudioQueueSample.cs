@@ -9,7 +9,7 @@ internal readonly record struct MovieAudioQueueSample(uint Capacity, uint Queued
         get
         {
             return Capacity != 0 && ReadOffset < Capacity && WriteOffset < Capacity &&
-                ((ulong)WriteOffset + Capacity - ReadOffset) % Capacity == Queued % Capacity;
+                   ((ulong)WriteOffset + Capacity - ReadOffset) % Capacity == Queued % Capacity;
         }
     }
 }

@@ -27,7 +27,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         ReadOnlySpan<byte> vertices, int vertexOffset, ReadOnlySpan<byte> constants)
     {
         if (upload.Variant is not (IndexedUiVariant.AlphaMask or IndexedUiVariant.DualAlphaMask) ||
-            upload.Plan.VertexStride != 20 || constants.Length < IndexedUiCompiler.VertexConstantBytes(upload.Variant) ||
+            upload.Plan.VertexStride != 20 || constants.Length < IndexedUiCompiler.VertexConstantBytes(upload.Variant)
+            ||
             upload.Textures.Length == 0)
         {
             return;
@@ -37,7 +38,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var resource = (ResourceObject*)source.Resource;
         var description = resource->Description;
         if (description.Format != HostTextureViewFormats.A8Unorm || description.DepthOrArraySize != 1 ||
-            description.MipLevels != 1 || (description.Flags & 7U) != 0 || GetResourceWriterQueue(source.Resource) != 0 ||
+            description.MipLevels != 1 || (description.Flags & 7U) != 0 || GetResourceWriterQueue(source.Resource) != 0
+            ||
             !TryGetTextureView(source, out var viewFormat) || viewFormat != HostTextureViewFormats.A8Unorm ||
             (source.Description is { } view && ReadDescriptorUInt32(view, 8) != 5768) ||
             !TryPlanTextureTexture(description, out var plan) || plan is null ||
@@ -60,7 +62,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var previous = GlyphCoverageReports.GetValueOrDefault(upload.Variant);
             var earlyShape = previous.Reports < EarlyGlyphCoverageReports &&
-                !GlyphCoverageShapes.Contains((upload.Variant, quadCount));
+                             !GlyphCoverageShapes.Contains((upload.Variant, quadCount));
             if (previous.Reports >= MaximumGlyphCoverageReports ||
                 (!earlyShape && present - previous.Present < MinimumGlyphSamplePresentGap))
             {
@@ -77,7 +79,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             var atlas = rented.AsSpan(0, (int)plan.Layout.Size);
             if (!TryReadGuestMemory(resource->Address, atlas))
             {
-                Console.Error.WriteLine($"[graphics] Indexed UI glyph coverage: presents={present}; atlas={source.Token}; snapshot=unreadable.");
+                Console.Error.WriteLine(
+                    $"[graphics] Indexed UI glyph coverage: presents={present}; atlas={source.Token}; snapshot=unreadable.");
+
                 return;
             }
 
@@ -94,21 +98,25 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 var quad = sampleCount == 1 ? 0 : sample * (quadCount - 1) / (sampleCount - 1);
                 if (!TryGetGlyphBounds(upload.Plan, indices.Slice(quad * quadBytes, quadBytes), indexBytes,
-                        vertices, vertexOffset, rows, positionRow, out var textureBounds, out var clipCenter, out var hasOpacity))
+                        vertices, vertexOffset, rows, positionRow, out var textureBounds, out var clipCenter,
+                        out var hasOpacity))
                 {
                     invalidBounds++;
+
                     continue;
                 }
 
                 if (clipCenter.X is < -1 or > 1 || clipCenter.Y is < -1 or > 1)
                 {
                     offscreen++;
+
                     continue;
                 }
 
                 if (!hasOpacity)
                 {
                     transparent++;
+
                     continue;
                 }
 
@@ -120,6 +128,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (width is <= 0 or > MaximumGlyphExtent || bottom - top is <= 0 or > MaximumGlyphExtent)
                 {
                     invalidBounds++;
+
                     continue;
                 }
 
@@ -128,6 +137,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 if (end > (ulong)atlas.Length)
                 {
                     invalidBounds++;
+
                     continue;
                 }
 
@@ -139,13 +149,16 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 if (empty == 0)
                 {
-                    firstEmpty = FormattableString.Invariant($"quad={quad},clip={clipCenter.X:F4}/{clipCenter.Y:F4},texels={left}/{top}/{width}/{bottom - top}");
+                    firstEmpty = FormattableString.Invariant(
+                        $"quad={quad},clip={clipCenter.X:F4}/{clipCenter.Y:F4},texels={left}/{top}/{width}/{bottom - top}");
                 }
 
                 empty++;
             }
 
-            Console.Error.WriteLine($"[graphics] Indexed UI glyph coverage: presents={present}; variant={upload.Variant}; atlas={source.Token}; " +
+            Console.Error.WriteLine(
+                $"[graphics] Indexed UI glyph coverage: presents={present}; variant={upload.Variant}; atlas={source.Token}; "
+                +
                 $"quads={quadCount}; sampled={sampleCount}; examined={examined}; transparent={transparent}; " +
                 $"offscreen={offscreen}; invalidBounds={invalidBounds}; empty={empty}; firstEmpty={firstEmpty}.");
         }
@@ -170,7 +183,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static bool TryGetGlyphBounds(IndexedUploadPlan plan, ReadOnlySpan<byte> indices, int indexBytes,
-        ReadOnlySpan<byte> vertices, int vertexOffset, ReadOnlySpan<Vector4> rows, int positionRow, out Vector4 textureBounds,
+        ReadOnlySpan<byte> vertices, int vertexOffset, ReadOnlySpan<Vector4> rows, int positionRow,
+        out Vector4 textureBounds,
         out Vector2 clipCenter, out bool hasOpacity)
     {
         textureBounds = default;
@@ -192,7 +206,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 continue;
             }
 
-            var offset = ((long)index + plan.BaseVertex) * plan.VertexStride - vertexOffset;
+            var offset = (index + plan.BaseVertex) * plan.VertexStride - vertexOffset;
             if (uniqueCount >= unique.Length || offset < 0 || offset > vertices.Length - 20)
             {
                 return false;
@@ -224,6 +238,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         clipCenter = new Vector2(TransformGlyphAxis(rows[positionRow], sourceCenter),
             TransformGlyphAxis(rows[positionRow + 1], sourceCenter));
         textureBounds = new Vector4(minimum.X, minimum.Y, maximum.X, maximum.Y);
+
         return float.IsFinite(clipCenter.X) && float.IsFinite(clipCenter.Y);
     }
 

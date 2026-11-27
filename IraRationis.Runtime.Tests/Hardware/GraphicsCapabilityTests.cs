@@ -48,10 +48,12 @@ internal static class GraphicsCapabilityTests
         var report = output.ToString();
 
         Require(report.Contains("dedicatedVideoMiB=24576.0;", StringComparison.Ordinal), "Physical capacity reported");
-        Require(report.Contains("gpuLocalBudget=unavailable;", StringComparison.Ordinal), "Failed query stays unavailable");
+        Require(report.Contains("gpuLocalBudget=unavailable;", StringComparison.Ordinal),
+            "Failed query stays unavailable");
         Require(report.Contains("queryHResult=0x80004002;", StringComparison.Ordinal), "Query failure preserved");
         Require(!report.Contains("gpuLocalHeadroomMiB=", StringComparison.Ordinal), "Capacity cannot replace headroom");
-        Require(report.Contains("shaderModelQueryCeiling=6.5;", StringComparison.Ordinal), "Bounded shader model probe");
+        Require(report.Contains("shaderModelQueryCeiling=6.5;", StringComparison.Ordinal),
+            "Bounded shader model probe");
     }
 
     private static void Require(bool condition, string message)

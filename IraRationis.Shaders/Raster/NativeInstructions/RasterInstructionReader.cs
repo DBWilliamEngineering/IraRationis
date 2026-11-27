@@ -198,8 +198,16 @@ internal ref struct RasterInstructionReader
 
     internal void Interpolate(uint destination, uint attribute, uint component, bool secondPhase)
     {
-        var phase = secondPhase ? 1U : 0U;
+        Interpolate(destination, attribute, component, secondPhase ? 1U : 0U);
+    }
 
+    internal void InterpolateProvokingVertex(uint destination, uint attribute, uint component)
+    {
+        Interpolate(destination, attribute, component, 2U);
+    }
+
+    private void Interpolate(uint destination, uint attribute, uint component, uint phase)
+    {
         Require(0xc8000000 | (destination << 18) | (phase << 16) | (attribute << 10) |
                 (component << 8) | phase, "V_INTERP_F32");
     }
@@ -260,7 +268,8 @@ internal ref struct RasterInstructionReader
 
         if (source == 255)
         {
-            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."), "scalar literal");
+            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."),
+                "scalar literal");
         }
     }
 
@@ -293,7 +302,7 @@ internal ref struct RasterInstructionReader
         if (actual != expected)
         {
             throw new NotSupportedException($"Raster {operation} differs at native offset 0x{offset:X}: " +
-                $"expected 0x{expected:X8}, received 0x{actual:X8}.");
+                                            $"expected 0x{expected:X8}, received 0x{actual:X8}.");
         }
     }
 
@@ -324,6 +333,7 @@ internal ref struct RasterInstructionReader
         {
             reader = new RasterInstructionReader(arithmetic);
             reader.FusedMultiplyAdd(7, 1, Vector(2), 3);
+
             throw new InvalidOperationException("Planar native register mutation was accepted.");
         }
         catch (NotSupportedException)
@@ -334,6 +344,7 @@ internal ref struct RasterInstructionReader
         {
             reader = new RasterInstructionReader(arithmetic.AsSpan(0, 4));
             reader.FusedMultiplyAdd(6, 1, Vector(2), 3);
+
             throw new InvalidOperationException("Planar truncated operand was accepted.");
         }
         catch (InvalidDataException)
@@ -357,6 +368,7 @@ internal ref struct RasterInstructionReader
         {
             reader = new RasterInstructionReader(header);
             reader.IdentityHeader();
+
             throw new InvalidOperationException("Planar non-NOP header was accepted.");
         }
         catch (NotSupportedException)

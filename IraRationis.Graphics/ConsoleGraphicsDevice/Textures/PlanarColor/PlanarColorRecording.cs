@@ -37,11 +37,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (!ExecuteGuestVertexFetch || _host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 ||
             vertices != 4 || instances != 1 || firstInstance != 0 || state.Topology != TriangleStripTopology ||
             state.Viewports is not { Length: 1 } || state.Scissors is not { Length: 1 } || state.Targets.Length != 1 ||
-            (state.Depth.HasValue && !srgbTexture) || state.Vertices.Count != 1 || !state.Vertices.TryGetValue(0, out var vertex) ||
+            (state.Depth.HasValue && !srgbTexture) || state.Vertices.Count != 1
+            || !state.Vertices.TryGetValue(0, out var vertex) ||
             state.Graphics.Tables.Count != 1 || !state.Graphics.Tables.TryGetValue(0, out var table) ||
             state.Graphics.Views.Count != 0 || state.Graphics.Constants.Count != 0)
         {
-            return RejectPlanarColorDraw("requires a supported four-vertex triangle strip, one vertex stream/table, and compatible depth state");
+            return RejectPlanarColorDraw(
+                "requires a supported four-vertex triangle strip, one vertex stream/table, and compatible depth state");
         }
 
         var start = (ulong)first * vertex.FormatOrStride;
@@ -66,13 +68,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             return RejectPlanarColorDraw("verified host shader pipeline unavailable");
         }
 
-        if (!TryGetPlanarColorSources(state, table, srgbTexture, out var transform, out var textures) || transform == null)
+        if (!TryGetPlanarColorSources(state, table, srgbTexture, out var transform, out var textures)
+            || transform == null)
         {
             return false;
         }
 
         if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var renderTargetView, out var colorFormat,
-                out var target, reportFailure: true))
+                out var target, true))
         {
             return RejectPlanarColorDraw("could not resolve a compatible native render target view");
         }
@@ -92,7 +95,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var targetDescription = ((ResourceObject*)target)->Description;
 
         TraceGraphicsSuccess($"[graphics] planar-color target RESOLVED: guestFormat={targetDescription.Format}; " +
-            $"hostFormat={HostTextureViewFormats.BackingFormat(targetDescription)}; viewFormat={colorFormat}.");
+                             $"hostFormat={HostTextureViewFormats.BackingFormat(targetDescription)}; viewFormat={colorFormat}.");
 
         return RecordPlanarColorBindings(self, state, pipeline, transform, textures, table,
             vertex.Address + start, (int)vertexBytes, (int)capacity, color, renderTargetView, target);
@@ -111,7 +114,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var heapId = DescriptorHeapId;
             var hostDevice = (nint)_host;
             var resultCode =
-                ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(hostDevice, 14))
+                ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(hostDevice,
+                    14))
                 (hostDevice, &heapDescription, &heapId, &heap);
 
             if (resultCode < 0 || heap == 0)
@@ -160,11 +164,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (pipeline.SrgbTexture)
             {
-                TraceGraphicsSuccess("[graphics] srgb-texture-strip RECORDED: vertices=4; textures=1; depthInactive=True; awaiting submission.");
+                TraceGraphicsSuccess(
+                    "[graphics] srgb-texture-strip RECORDED: vertices=4; textures=1; depthInactive=True; awaiting submission.");
             }
             else
             {
-                TraceGraphicsSuccess($"[graphics] planar-color RECORDED: vertices=4; planes=3; lookupView={textures.Length == 4}; awaiting submission.");
+                TraceGraphicsSuccess(
+                    $"[graphics] planar-color RECORDED: vertices=4; planes=3; lookupView={textures.Length == 4}; awaiting submission.");
             }
 
             return true;

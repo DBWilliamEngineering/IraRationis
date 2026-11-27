@@ -5,30 +5,39 @@ using System.Globalization;
 
 namespace IraRationis.HLE.Audio.Movie;
 
-internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, uint blockBytes, uint primeBytes, nint movie)
+internal sealed class MovieAudioTrack(
+    int id,
+    uint sampleRate,
+    uint channels,
+    uint blockBytes,
+    uint primeBytes,
+    nint movie)
 {
     private const int ReadyRefusalSampleMask = 63;
     private const int ReadySuccessSampleMask = 3;
     private const int ReadyRefusalSampleLimit = 16_384;
-    private readonly long[] _readinessSamples = new long[(int)MovieAudioReadinessObservation.Count];
     private readonly Lock _queueGate = new();
-    private long _readyCalls;
-    private long _readySuccesses;
-    private long _notReadyCalls;
-    private long _unlockCalls;
-    private long _rejectedUnlocks;
+    private readonly long[] _readinessSamples = new long[(int)MovieAudioReadinessObservation.Count];
     private long _acceptedBytes;
+    private long _cursorInconsistencies;
+    private long _emptyQueueSamples;
     private long _lastAcceptance;
-    private long _longestGap;
     private MovieAudioQueueSample _latestQueue;
     private long _latestQueueTimestamp;
+    private long _longestGap;
+    private long _notReadyCalls;
     private long _queueSamples;
-    private long _emptyQueueSamples;
-    private long _cursorInconsistencies;
+    private long _readyCalls;
+    private long _readySuccesses;
+    private long _rejectedUnlocks;
     private long _reportedReadyCalls = -1;
     private long _reportedUnlockCalls = -1;
+    private long _unlockCalls;
 
-    internal nint Movie { get; } = movie;
+    internal nint Movie
+    {
+        get;
+    } = movie;
 
     internal bool RecordReady(bool ready)
     {
@@ -38,7 +47,8 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
         {
             var succeeded = Interlocked.Increment(ref _readySuccesses);
 
-            return succeeded <= ReadyRefusalSampleLimit && (succeeded <= 4 || (succeeded & ReadySuccessSampleMask) == 0);
+            return succeeded <= ReadyRefusalSampleLimit
+                   && (succeeded <= 4 || (succeeded & ReadySuccessSampleMask) == 0);
         }
 
         var refused = Interlocked.Increment(ref _notReadyCalls);
@@ -131,7 +141,9 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
         _reportedUnlockCalls = unlocks;
 
         var lastAcceptance = Volatile.Read(ref _lastAcceptance);
-        var sinceLast = lastAcceptance == 0 ? 0 : Math.Max(0, Stopwatch.GetElapsedTime(lastAcceptance, now).TotalMilliseconds);
+        var sinceLast = lastAcceptance == 0
+            ? 0
+            : Math.Max(0, Stopwatch.GetElapsedTime(lastAcceptance, now).TotalMilliseconds);
         var longest = Stopwatch.GetElapsedTime(0, Volatile.Read(ref _longestGap)).TotalMilliseconds;
 
         MovieAudioQueueSample queue;
@@ -146,7 +158,9 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
             cursorInconsistencies = _cursorInconsistencies;
         }
 
-        var queueAge = queueTimestamp == 0 ? -1 : Math.Max(0, Stopwatch.GetElapsedTime(queueTimestamp, now).TotalMilliseconds);
+        var queueAge = queueTimestamp == 0
+            ? -1
+            : Math.Max(0, Stopwatch.GetElapsedTime(queueTimestamp, now).TotalMilliseconds);
         var unavailable = ReadObservationCount(MovieAudioReadinessObservation.Unavailable);
         var suspended = ReadObservationCount(MovieAudioReadinessObservation.Suspended);
         var disabled = ReadObservationCount(MovieAudioReadinessObservation.Disabled);
@@ -156,12 +170,14 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
         return string.Create(CultureInfo.InvariantCulture,
             $"track={id}; rate={sampleRate}; channels={channels}; blockBytes={blockBytes}; primeBytes={primeBytes}; " +
             $"readyCalls={ready}; notReadyCalls={Interlocked.Read(ref _notReadyCalls)}; unlocks={unlocks}; " +
-            $"rejectedUnlocks={Interlocked.Read(ref _rejectedUnlocks)}; acceptedBytes={Interlocked.Read(ref _acceptedBytes)}; " +
+            $"rejectedUnlocks={Interlocked.Read(ref _rejectedUnlocks)}; acceptedBytes={Interlocked.Read(ref _acceptedBytes)}; "
+            +
             $"longestGapMs={longest:F2}; sinceLastAcceptanceMs={sinceLast:F2}; " +
             $"refusalSamplesUnavailable={unavailable}; refusalSamplesSuspended={suspended}; " +
             $"refusalSamplesDisabled={disabled}; refusalSamplesInsufficientSpace={insufficientSpace}; " +
             $"refusalSamplesSpaceAvailableAfterReturn={spaceAvailable}; " +
-            $"queueSamples={queueSamples}; emptyQueueSamples={emptyQueueSamples}; cursorInconsistencies={cursorInconsistencies}; " +
+            $"queueSamples={queueSamples}; emptyQueueSamples={emptyQueueSamples}; cursorInconsistencies={cursorInconsistencies}; "
+            +
             $"lastQueuedBytes={queue.Queued}; lastQueueCapacityBytes={queue.Capacity}; lastQueueAgeMs={queueAge:F2}; " +
             $"lastQueueReadOffset={queue.ReadOffset}; lastQueueWriteOffset={queue.WriteOffset}; lastQueueCursorsCoherent={queue.HasCoherentCursors}");
     }

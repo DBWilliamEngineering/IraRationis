@@ -4,4 +4,4 @@
 
 namespace IraRationis.Graphics.Resources.Models;
 
-internal readonly unsafe record struct PageMappingRun(uint Kind, ulong Destination, ulong Source, ulong Bytes);
+internal readonly record struct PageMappingRun(uint Kind, ulong Destination, ulong Source, ulong Bytes);

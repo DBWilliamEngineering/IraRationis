@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Globalization;
-using IraRationis.HLE.Audio.Apu;
-using IraRationis.Media.Audio;
 using IraRationis.HLE.Audio.Apu.XApuModule;
+using IraRationis.Media.Audio;
 
 namespace IraRationis.Cli.Diagnostics;
 

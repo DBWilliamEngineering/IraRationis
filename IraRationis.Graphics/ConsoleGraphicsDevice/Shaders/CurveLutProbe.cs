@@ -23,13 +23,15 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var width = segments == 2 ? 17U : 29U;
         const uint bytes = 256;
+        const double maximumAllowedTexelAbsoluteError = 0.0002;
         nint root = 0, pipeline = 0, texture = 0, readback = 0;
 
         try
         {
             var code = CompileHostShader(CurveLutCompiler.CreateHostSource(41, segments), "cs_5_1", Console.Out)
                        ?? throw new InvalidOperationException("Curve LUT probe shader failed.");
-            var rootBytes = SerializeColorLutRoot() ?? throw new InvalidOperationException("Curve LUT probe root failed.");
+            var rootBytes = SerializeColorLutRoot()
+                            ?? throw new InvalidOperationException("Curve LUT probe root failed.");
             var rootId = RootSignatureId;
             var pipelineId = PipelineId;
             void* native = null;
@@ -63,11 +65,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                 MipLevels = 1, Format = 41, SampleCount = 1, Flags = 4
             };
             CheckHostResult(CreateHostResource(output, 1, 0, &texture), "Curve LUT probe Texture1D");
-            CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback), "Curve LUT probe readback");
+            CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback),
+                "Curve LUT probe readback");
             RequireHostObject(texture, "Curve LUT probe Texture1D");
             RequireHostObject(readback, "Curve LUT probe readback");
 
-            using var utility = AcquireUtilityContext(CurveUploadBytes, 2, versioned: true);
+            using var utility = AcquireUtilityContext(CurveUploadBytes, 2, true);
             var data = new byte[CurveUploadBytes];
             var parameters = MemoryMarshal.Cast<byte, uint>(data.AsSpan(0, 16));
             parameters[0] = BitConverter.SingleToUInt32Bits(0.25f);
@@ -80,7 +83,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             utility.PrepareVersionedUpload(data);
             RecordCurveLutDispatch(utility, texture, root, pipeline, 41, 1);
             TransitionHostResource(utility.List, texture, 0, CopySource);
-            RecordHostTextureTransfer(utility.List, texture, readback, bytes, new HostTextureTransferFootprint(0, 41, width, 1, bytes, 0), upload: false);
+            RecordHostTextureTransfer(utility.List, texture, readback, bytes,
+                new HostTextureTransferFootprint(0, 41, width, 1, bytes, 0), false);
             TransitionHostResource(utility.List, texture, CopySource, 0);
             utility.SubmitAndWait(queue);
 
@@ -90,6 +94,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(readback, 8);
             var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9);
             CheckHostResult(map(readback, 0, &read, &mapped), "Curve LUT probe map");
+
+            var maximumObservedTexelAbsoluteError = 0.0;
 
             try
             {
@@ -106,10 +112,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                     var expected = x < 1.0 ? 3.0 * Math.Cbrt(x) :
                         segments == 3 && x >= 4.0 ? x + 1.0 : 2.0 + 3.0 * Math.Sqrt((x - 1.0) / 3.0);
 
-                    if (!float.IsFinite(result[index]) || Math.Abs(result[index] - expected) > 0.0002)
+                    var actual = result[index];
+                    var absoluteError = Math.Abs(actual - expected);
+
+                    if (!float.IsFinite(actual) || absoluteError > maximumAllowedTexelAbsoluteError)
                     {
-                        throw new InvalidOperationException($"Curve LUT probe ({segments} segments) texel {index}: expected {expected:R}; actual {result[index]:R}.");
+                        throw new InvalidOperationException(
+                            $"Curve LUT probe ({segments} segments) texel {index} expected {expected:R} and read {actual:R}. " +
+                            $"Absolute error {absoluteError:R} has a limit of {maximumAllowedTexelAbsoluteError:R}.");
                     }
+
+                    maximumObservedTexelAbsoluteError = Math.Max(maximumObservedTexelAbsoluteError, absoluteError);
                 }
             }
             finally
@@ -117,7 +130,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 unmap(readback, 0, &noWrite);
             }
 
-            Console.WriteLine($"[graphics-probe] Curve LUT GPU readback passed: {segments} segments, {width} texels.");
+            Console.WriteLine(
+                $"[graphics-probe] Curve LUT GPU readback passed: {segments} segments, {width} texels. " +
+                $"Maximum texel absolute error {maximumObservedTexelAbsoluteError:R} with limit {maximumAllowedTexelAbsoluteError:R}.");
         }
         finally
         {

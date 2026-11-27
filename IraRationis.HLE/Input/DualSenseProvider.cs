@@ -4,7 +4,7 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
-using GameInput = global::IraRationis.HLE.Input.GameInputModule.GameInputModule;
+using GameInput = IraRationis.HLE.Input.GameInputModule.GameInputModule;
 
 namespace IraRationis.HLE.Input;
 
@@ -30,7 +30,7 @@ internal sealed unsafe class DualSenseProvider
 
     private void Run()
     {
-        for(;;)
+        for (;;)
         {
             try
             {

@@ -2,7 +2,7 @@
 
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Drawing.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Drawing;
 
@@ -13,11 +13,12 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
     where TValue : class
 {
     private const int Capacity = 64;
-    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>> _entries = new();
-    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
+    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>>
+        _entries = new();
     private readonly Lock _gate = new();
     private readonly Func<TValue, (nint Root, nint Pipeline)> _handles;
     private readonly string _name;
+    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
     private long _hits, _misses, _evictions;
 
     public NativePipelineCache(string name, Func<TValue, (nint Root, nint Pipeline)> handles)
@@ -72,7 +73,8 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
 
         if (GraphicsDevice.EnableVerboseGraphics || observations <= 2 || (observations & (observations - 1)) == 0)
         {
-            Console.Error.WriteLine($"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
+            Console.Error.WriteLine(
+                $"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
         }
 
         return value;
@@ -91,7 +93,8 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
                 return;
             }
 
-            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(new NativePipelineCacheEntry<TKey, TValue>(key, value));
+            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(
+                new NativePipelineCacheEntry<TKey, TValue>(key, value));
             var handles = _handles(value);
 
             GraphicsDevice.RetainHostObject(handles.Root);

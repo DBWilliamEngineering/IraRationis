@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Media.Models;
 using IraRationis.Graphics.Presentation.Models;
 using IraRationis.Graphics.Resources.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using TerraFX.Interop.DirectX;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Media;
 
@@ -57,9 +57,10 @@ public sealed unsafe class Nv12Presenter : IDisposable
                 throw new ArgumentOutOfRangeException(nameof(width), "Even positive NV12 dimensions required.");
             }
 
-            if (window == 0 || GraphicsDevice.IsPresentationWindow(window) == 0 || GraphicsDevice.GetWindowThreadProcessId(window, out var process) == 0
-                ||
-                process != (uint)Environment.ProcessId)
+            if (window == 0 || GraphicsDevice.IsPresentationWindow(window) == 0
+                            || GraphicsDevice.GetWindowThreadProcessId(window, out var process) == 0
+                            ||
+                            process != (uint)Environment.ProcessId)
             {
                 throw new ArgumentException("An owned host window is required.", nameof(window));
             }
@@ -138,7 +139,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
             var queueId = GraphicsDevice.QueueId;
             var queue = nint.Zero;
             var createQueue =
-                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(
+                    _device, 8);
 
             resultCode = createQueue(_device, &queueDescription, &queueId, &queue);
 
@@ -220,7 +222,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
             &colorLayout, &colorRows, &colorRowBytes, &colorTotal);
 
         var colorEnd =
-            GraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4), _height);
+            GraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4),
+                _height);
 
         _colorLayout = colorLayout;
 
@@ -272,7 +275,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var queueId = GraphicsDevice.QueueId;
         var queue = nint.Zero;
         var createQueue =
-            (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
+            (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(
+                _device, 8);
         var resultCode = createQueue(_device, &description, &queueId, &queue);
 
         _copyQueue = queue;
@@ -282,7 +286,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         var fenceId = GraphicsDevice.FenceId;
         var fence = nint.Zero;
-        var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
+        var createFence =
+            (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
 
         resultCode = createFence(_device, 0, 0, &fenceId, &fence);
 
@@ -310,7 +315,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var list = nint.Zero;
         var listId = GraphicsDevice.HostListId;
         var createList =
-            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 12);
+            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device,
+                12);
 
         resultCode = createList(_device, 0, 3, frame.CopyAllocator, 0, &listId, &list);
 
@@ -318,7 +324,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         GraphicsDevice.CheckHostResult(resultCode, "R49 copy list");
         GraphicsDevice.RequireHostObject(frame.CopyList, "copy list");
-        GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.CopyList, 9))(frame.CopyList),
+        GraphicsDevice.CheckHostResult(
+            ((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.CopyList, 9))(frame.CopyList),
             "R49 initial copy close");
     }
 
@@ -338,8 +345,10 @@ public sealed unsafe class Nv12Presenter : IDisposable
     {
         var commands = (ID3D12GraphicsCommandList*)frame.CopyList;
 
-        GraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(), "R49 copy allocator reset");
-        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null), "R49 copy list reset");
+        GraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(),
+            "R49 copy allocator reset");
+        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null),
+            "R49 copy list reset");
         // COMMON -> COPY_DEST implicit promotion; COPY execution decays to COMMON.
         RecordPlaneCopies(frame, commands);
 
@@ -386,7 +395,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         {
             var factoryId = GraphicsDevice.FactoryId;
 
-            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory), "R43 DXGI factory");
+            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory),
+                "R43 DXGI factory");
 
             GraphicsDevice.RequireHostObject(factory, "DXGI factory");
 
@@ -404,10 +414,12 @@ public sealed unsafe class Nv12Presenter : IDisposable
             };
 
             var create =
-                (delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)GraphicsDevice.Slot(
+                (delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)
+                GraphicsDevice.Slot(
                     factory, 15);
 
-            GraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain), "R43 SwapChain");
+            GraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain),
+                "R43 SwapChain");
             GraphicsDevice.RequireHostObject(baseChain, "SwapChain");
 
             var id = GraphicsDevice.SwapChainId;
@@ -428,19 +440,22 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
     private void InitializeFrame(Nv12Frame frame, uint index, ResourceDescription description)
     {
-        frame.Texture = GraphicsDevice.CreateHostTransferResource(_device, description, 1, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
+        frame.Texture = GraphicsDevice.CreateHostTransferResource(_device, description, 1,
+            _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
 
         if (_copyQueue != 0)
         {
             InitializeCopyFrame(frame);
         }
 
-        frame.Upload = GraphicsDevice.CreateHostTransferResource(_device, GraphicsDevice.HostBufferDescription((ulong)_uploadBytes), 2, GraphicsDevice.GenericRead);
+        frame.Upload = GraphicsDevice.CreateHostTransferResource(_device,
+            GraphicsDevice.HostBufferDescription((ulong)_uploadBytes), 2, GraphicsDevice.GenericRead);
         // Upload heaps may remain mapped for their entire lifetime. Each slot
         // is written only after its previous GPU submission has completed.
         var range = default(HostRange);
         var mapped = (void*)null;
-        var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)GraphicsDevice.Slot(frame.Upload, 8);
+        var map =
+            (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)GraphicsDevice.Slot(frame.Upload, 8);
 
         GraphicsDevice.CheckHostResult(map(frame.Upload, 0, &range, &mapped), "R46 persistent upload map");
 
@@ -475,7 +490,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var heapId = GraphicsDevice.DescriptorHeapId;
         var heap = nint.Zero;
         var createHeap =
-            (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 14);
+            (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)GraphicsDevice.Slot(
+                _device, 14);
 
         resultCode = createHeap(_device, &heapDescription, &heapId, &heap);
 
@@ -508,7 +524,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         var allocator = nint.Zero;
         var allocatorId = GraphicsDevice.AllocatorId;
-        var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
+        var createAllocator =
+            (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
 
         resultCode = createAllocator(_device, 0, &allocatorId, &allocator);
 
@@ -520,7 +537,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var list = nint.Zero;
         var listId = GraphicsDevice.HostListId;
         var createList =
-            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 12);
+            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device,
+                12);
 
         resultCode = createList(_device, 0, 0, frame.Allocator, 0, &listId, &list);
 
@@ -528,7 +546,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         GraphicsDevice.CheckHostResult(resultCode, "R43 list");
         GraphicsDevice.RequireHostObject(frame.List, "list");
-        GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.List, 9))(frame.List),
+        GraphicsDevice.CheckHostResult(
+            ((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.List, 9))(frame.List),
             "R43 initial close");
     }
 
@@ -573,7 +592,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var commands = (ID3D12GraphicsCommandList*)frame.List;
 
         GraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.Allocator)->Reset(), "R43 allocator reset");
-        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null), "R43 command reset");
+        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null),
+            "R43 command reset");
 
         if (_copyQueue == 0)
         {
@@ -584,7 +604,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
             RecordCopyFrame(frame);
         }
 
-        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0, 0x40);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture,
+            _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0, 0x40);
 
         var heap = (ID3D12DescriptorHeap*)frame.Heap;
 
@@ -614,7 +635,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         GraphicsDevice.TransitionHostResource(frame.List, frame.Buffer, GraphicsDevice.CopyDestination, 0);
         GraphicsDevice.TransitionHostResource(frame.List, frame.Output, GraphicsDevice.CopySource, 8);
-        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture, 0x40, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture, 0x40,
+            _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
         GraphicsDevice.CheckHostResult(commands->Close(), "R43 close");
 
         if (_nextFence >= ulong.MaxValue - 1)
@@ -670,7 +692,6 @@ public sealed unsafe class Nv12Presenter : IDisposable
         _presented++;
 
         return true;
-
     }
 
     private void Wait(ulong value)

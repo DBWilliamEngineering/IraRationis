@@ -85,7 +85,8 @@ internal static unsafe partial class RuntimeBridgeCallbacks
 
         incoming.Restore();
 
-        var result = ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
+        var result =
+            ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
         var outgoing = NativeErrorState.Capture();
 
         try

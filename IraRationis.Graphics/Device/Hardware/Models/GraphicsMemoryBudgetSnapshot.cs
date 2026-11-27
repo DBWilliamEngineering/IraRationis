@@ -4,9 +4,21 @@ namespace IraRationis.Graphics.Device.Hardware.Models;
 
 public sealed record GraphicsMemoryBudgetSnapshot
 {
-    public ulong BudgetBytes { get; }
+    public GraphicsMemoryBudgetSnapshot(ulong budgetBytes, ulong currentUsageBytes)
+    {
+        BudgetBytes = budgetBytes;
+        CurrentUsageBytes = currentUsageBytes;
+    }
 
-    public ulong CurrentUsageBytes { get; }
+    public ulong BudgetBytes
+    {
+        get;
+    }
+
+    public ulong CurrentUsageBytes
+    {
+        get;
+    }
 
     public ulong HeadroomBytes
     {
@@ -14,11 +26,5 @@ public sealed record GraphicsMemoryBudgetSnapshot
         {
             return CurrentUsageBytes >= BudgetBytes ? 0 : BudgetBytes - CurrentUsageBytes;
         }
-    }
-
-    public GraphicsMemoryBudgetSnapshot(ulong budgetBytes, ulong currentUsageBytes)
-    {
-        BudgetBytes = budgetBytes;
-        CurrentUsageBytes = currentUsageBytes;
     }
 }

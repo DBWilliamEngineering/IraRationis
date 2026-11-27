@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from Zettrox/ztrx crates/victory-core/src/config.rs.
 
+using IraRationis.Core.Configuration.Models;
 using Tomlyn;
 using Tomlyn.Serialization;
-using IraRationis.Core.Configuration.Models;
 
 namespace IraRationis.Core.Configuration;
 

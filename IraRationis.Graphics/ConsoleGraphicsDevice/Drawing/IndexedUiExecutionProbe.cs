@@ -26,7 +26,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var (name, vertexSource, pixelSource, elements) = IndexedUiProbeProgram(variant);
         var vertex = CompileHostShader(vertexSource, "vs_5_1", Console.Out);
         var pixel = CompileHostShader(pixelSource, "ps_5_1", Console.Out);
-        var rootBytes = SerializeIndexedUiRoot(twoTextures: IndexedUiCompiler.TextureCount(variant) == 2);
+        var rootBytes = SerializeIndexedUiRoot(IndexedUiCompiler.TextureCount(variant) == 2);
         if (vertex == null || pixel == null || rootBytes == null)
         {
             throw new InvalidOperationException($"{name} shader or root compilation failed.");
@@ -46,6 +46,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             alphaBlend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
             blend = CreateVertexFetchProbeRecord(8, alphaBlend);
         }
+
         var state = new GraphicsPipelineMetadata(0, [],
         [
             .. template.State.Where(static record => record.Kind is not (8 or 15 or 16 or 21)),
@@ -58,7 +59,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 FrontFace = RasterStencil(),
                 BackFace = RasterStencil()
             })
-        ], IsStream: true, CompleteStream: true, InputLayout: elements);
+        ], true, true, InputLayout: elements);
 
         if (!TryPrepareIndexedUiHostState(state, variant, out var hostState, out var colorFormat) ||
             colorFormat != (uint)formats.RTFormats[0])
@@ -95,23 +96,35 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static (string Name, string Vertex, string Pixel, VertexInputElement[] Elements) IndexedUiProbeProgram(IndexedUiVariant variant)
+    private static (string Name, string Vertex, string Pixel, VertexInputElement[] Elements) IndexedUiProbeProgram(
+        IndexedUiVariant variant)
     {
         return variant switch
         {
             IndexedUiVariant.Dithered => ("dithered indexed UI A8", IndexedUiCompiler.VertexSource,
-                IndexedUiCompiler.PixelSource, [new("COLOR", 0, 28, 0, 0, 0, 0), new("POSITION", 0, 16, 0, 4, 0, 0)]),
+                IndexedUiCompiler.PixelSource,
+                [
+                    new VertexInputElement("COLOR", 0, 28, 0, 0, 0, 0),
+                    new VertexInputElement("POSITION", 0, 16, 0, 4, 0, 0)
+                ]),
             IndexedUiVariant.DualAlphaMask => ("dual-alpha indexed UI", IndexedUiCompiler.DualAlphaVertexSource,
-                IndexedUiCompiler.DualAlphaPixelSource, [new("COLOR", 0, 28, 0, 0, 0, 0), new("TEXCOORD", 0, 16, 0, 4, 0, 0),
-                    new("POSITION", 0, 16, 0, 12, 0, 0)]),
+                IndexedUiCompiler.DualAlphaPixelSource, [
+                    new VertexInputElement("COLOR", 0, 28, 0, 0, 0, 0),
+                    new VertexInputElement("TEXCOORD", 0, 16, 0, 4, 0, 0),
+                    new VertexInputElement("POSITION", 0, 16, 0, 12, 0, 0)
+                ]),
             IndexedUiVariant.BatchedMask => ("batched indexed UI", IndexedUiCompiler.BatchedMaskVertexSource,
-                IndexedUiCompiler.BatchedMaskPixelSource, [new("COLOR", 0, 28, 0, 0, 0, 0), new("COLOR", 1, 28, 0, 4, 0, 0),
-                    new("POSITION", 0, 16, 0, 8, 0, 0)]),
+                IndexedUiCompiler.BatchedMaskPixelSource, [
+                    new VertexInputElement("COLOR", 0, 28, 0, 0, 0, 0),
+                    new VertexInputElement("COLOR", 1, 28, 0, 4, 0, 0),
+                    new VertexInputElement("POSITION", 0, 16, 0, 8, 0, 0)
+                ]),
             _ => throw new ArgumentOutOfRangeException(nameof(variant))
         };
     }
 
-    private static void RunIndexedUiGpuDraw(nint queue, nint root, nint pipeline, IndexedUiVariant variant, uint colorFormat)
+    private static void RunIndexedUiGpuDraw(nint queue, nint root, nint pipeline, IndexedUiVariant variant,
+        uint colorFormat)
     {
         const int width = 8;
         const int height = 4;
@@ -122,7 +135,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var alphaOnly = colorFormat == HostTextureViewFormats.A8Unorm;
         var dualMask = variant == IndexedUiVariant.DualAlphaMask;
         var textureFormat = dualMask ? HostTextureViewFormats.A8Unorm : (uint)DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-        var secondaryTextureFormat = dualMask ? HostTextureViewFormats.A8Unorm : (uint)DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+        var secondaryTextureFormat =
+            dualMask ? HostTextureViewFormats.A8Unorm : (uint)DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
         var stride = (int)IndexedUiCompiler.VertexStride(variant);
         var indexOffset = vertexOffset + 8 * stride;
         ReadOnlySpan<ushort> indices = [0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7];
@@ -151,9 +165,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         else
         {
-            WriteIndexedUiProbeBatch(constants.Slice(24, 24), -0.5f, multiplyColor: true);
-            WriteIndexedUiProbeBatch(constants.Slice(48, 24), 0.5f, multiplyColor: false);
+            WriteIndexedUiProbeBatch(constants.Slice(24, 24), -0.5f, true);
+            WriteIndexedUiProbeBatch(constants.Slice(48, 24), 0.5f, false);
         }
+
         for (var vertex = 0; vertex < 8; vertex++)
         {
             var destination = upload.AsSpan(vertexOffset + vertex * stride, stride);
@@ -172,6 +187,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 destination[6] = vertex < 4 ? (byte)1 : (byte)2;
                 destination[7] = vertex < 4 ? (byte)255 : (byte)128;
             }
+
             var position = MemoryMarshal.Cast<byte, float>(destination[(dualMask ? 12 : alphaOnly ? 4 : 8)..]);
             var rightEdge = (vertex & 2) != 0;
             position[0] = rightEdge ? 1 : -1;
@@ -180,6 +196,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var halfCenter = vertex < 4 ? -0.5f : 0.5f;
                 position[0] = position[0] * 0.5f + halfCenter;
             }
+
             position[1] = (vertex & 1) == 0 ? -1 : 1;
         }
 
@@ -212,9 +229,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var secondaryDescription = alphaOnly ? RasterTexture(width, height, 0) : RasterTexture(2, 1, 0);
                 secondaryDescription.Format = secondaryTextureFormat;
                 secondaryDescription.DepthOrArraySize = alphaOnly ? (ushort)2 : (ushort)1;
-                CheckHostResult(CreateHostResource(secondaryDescription, 1, 0, &secondaryTexture), "indexed UI secondary texture");
+                CheckHostResult(CreateHostResource(secondaryDescription, 1, 0, &secondaryTexture),
+                    "indexed UI secondary texture");
                 RequireHostObject(secondaryTexture, "indexed UI secondary texture");
             }
+
             CheckHostResult(CreateHostResource(HostBufferDescription(rowPitch * height), 3, CopyDestination, &readback),
                 "batched indexed UI readback");
             RequireHostObject(texture, "batched indexed UI texture");
@@ -227,8 +246,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Batched indexed UI sampler heap creation failed.");
             }
 
-            using var utility = AcquireUtilityContext((ulong)upload.Length, (uint)IndexedUiCompiler.TextureCount(variant),
-                versioned: true);
+            using var utility = AcquireUtilityContext((ulong)upload.Length,
+                (uint)IndexedUiCompiler.TextureCount(variant),
+                true);
             utility.PrepareVersionedUpload(upload);
             var commands = (ID3D12GraphicsCommandList*)utility.List;
             var textureHeap = (ID3D12DescriptorHeap*)utility.Heap;
@@ -255,7 +275,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (secondaryTexture != 0)
             {
                 var secondaryHandle = textureHandle;
-                var descriptorSize = _host->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                var descriptorSize =
+                    _host->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE
+                        .D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                 if (alphaOnly)
                 {
                     var noiseView = new D3D12_SHADER_RESOURCE_VIEW_DESC
@@ -278,13 +300,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                 TransitionHostResource(utility.List, secondaryTexture, 0, CopyDestination);
                 RecordHostTextureTransfer(utility.List, secondaryTexture, utility.Upload, (ulong)upload.Length,
                     new HostTextureTransferFootprint(0, secondaryTextureFormat, alphaOnly ? width : 2U,
-                        alphaOnly ? height : 1U, rowPitch, secondaryTextureOffset), upload: true);
+                        alphaOnly ? height : 1U, rowPitch, secondaryTextureOffset), true);
                 TransitionHostResource(utility.List, secondaryTexture, CopyDestination, 0x80);
             }
+
             _host->CreateShaderResourceView((ID3D12Resource*)texture, null, textureHandle);
             TransitionHostResource(utility.List, texture, 0, CopyDestination);
             RecordHostTextureTransfer(utility.List, texture, utility.Upload, (ulong)upload.Length,
-                new HostTextureTransferFootprint(0, textureFormat, 2, 1, rowPitch, textureOffset), upload: true);
+                new HostTextureTransferFootprint(0, textureFormat, 2, 1, rowPitch, textureOffset), true);
             TransitionHostResource(utility.List, texture, CopyDestination, 0x80);
             TransitionHostResource(utility.List, output, 0, 4);
 
@@ -292,8 +315,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             var heaps = stackalloc nint[2] { utility.Heap, samplerHeap };
             var viewport = new D3D12_VIEWPORT { Width = width, Height = height, MaxDepth = 1 };
             var scissor = new RECT { right = width, bottom = height };
-            var vertices = new D3D12_VERTEX_BUFFER_VIEW { BufferLocation = gpu + vertexOffset, SizeInBytes = (uint)(8 * stride), StrideInBytes = (uint)stride };
-            var indexView = new D3D12_INDEX_BUFFER_VIEW { BufferLocation = gpu + (uint)indexOffset, SizeInBytes = (uint)indices.Length * 2, Format = DXGI_FORMAT.DXGI_FORMAT_R16_UINT };
+            var vertices = new D3D12_VERTEX_BUFFER_VIEW
+                { BufferLocation = gpu + vertexOffset, SizeInBytes = (uint)(8 * stride), StrideInBytes = (uint)stride };
+            var indexView = new D3D12_INDEX_BUFFER_VIEW
+            {
+                BufferLocation = gpu + (uint)indexOffset, SizeInBytes = (uint)indices.Length * 2,
+                Format = DXGI_FORMAT.DXGI_FORMAT_R16_UINT
+            };
 
             commands->ClearRenderTargetView(rtv, clear, 0, null);
             commands->SetPipelineState((ID3D12PipelineState*)pipeline);
@@ -314,29 +342,32 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(utility.List, output, 4, CopySource);
             RecordHostTextureTransfer(utility.List, output, readback, rowPitch * height,
-                new HostTextureTransferFootprint(0, colorFormat, width, height, rowPitch, 0), upload: false);
+                new HostTextureTransferFootprint(0, colorFormat, width, height, rowPitch, 0), false);
             utility.SubmitAndWait(queue);
 
             if (alphaOnly)
             {
-                var pixels = ReadRasterPixels(readback, width, height, rowPitch, bytesPerPixel: 1);
+                var pixels = ReadRasterPixels(readback, width, height, rowPitch, 1);
                 VerifyIndexedUiProbePixel(pixels.AsSpan(width + 1, 1), [64]);
                 VerifyIndexedUiProbePixel(pixels.AsSpan(width + 5, 1), [96]);
-                Console.WriteLine("[graphics-probe] Dithered indexed UI A8 GPU readback passed (two blended alpha values).");
+                Console.WriteLine(
+                    "[graphics-probe] Dithered indexed UI A8 GPU readback passed (two blended alpha values).");
             }
             else if (dualMask)
             {
                 var pixels = ReadRasterPixels(readback, width, height, rowPitch);
                 VerifyIndexedUiProbePixel(pixels.AsSpan((width + 1) * 4, 4), [64, 128, 192, 192]);
                 VerifyIndexedUiProbePixel(pixels.AsSpan((width + 5) * 4, 4), [64, 128, 192, 32]);
-                Console.WriteLine("[graphics-probe] Dual-alpha indexed UI transform rows and mask binding passed GPU readback.");
+                Console.WriteLine(
+                    "[graphics-probe] Dual-alpha indexed UI transform rows and mask binding passed GPU readback.");
             }
             else
             {
                 var pixels = ReadRasterPixels(readback, width, height, rowPitch);
                 VerifyIndexedUiProbePixel(pixels.AsSpan((width + 1) * 4, 4), [64, 128, 192, 64]);
                 VerifyIndexedUiProbePixel(pixels.AsSpan((width + 5) * 4, 4), [255, 64, 128, 96]);
-                Console.WriteLine("[graphics-probe] Batched indexed UI GPU readback passed (two batch selectors and two mask alphas).");
+                Console.WriteLine(
+                    "[graphics-probe] Batched indexed UI GPU readback passed (two batch selectors and two mask alphas).");
             }
         }
         finally

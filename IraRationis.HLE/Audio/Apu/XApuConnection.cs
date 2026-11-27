@@ -4,7 +4,7 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Audio.Apu.Models;
 using IraRationis.Media.Audio;
-using XApu = global::IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
+using XApu = IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
 
 namespace IraRationis.HLE.Audio.Apu;
 

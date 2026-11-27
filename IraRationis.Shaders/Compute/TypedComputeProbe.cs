@@ -20,21 +20,21 @@ public static class TypedComputeProbe
         ];
         ComputeBlock[] blocks =
         [
-            new ComputeBlock(
+            new(
             [
                 new ComputeInstruction(ComputeOperation.Constant, 1, Literal: new ComputeVector(1, 2, 3, 4)),
                 new ComputeInstruction(ComputeOperation.Constant, 6, Literal: FloatVector(2, 2, 0.5f, 4)),
                 new ComputeInstruction(ComputeOperation.Constant, 10, Literal: new ComputeVector(255, 255, 255, 255))
             ], new ComputeTerminator(ComputeTransfer.Jump, 1)),
-            new ComputeBlock(
+            new(
             [
                 new ComputeInstruction(ComputeOperation.LessThan, 3, 0, 2)
             ], new ComputeTerminator(ComputeTransfer.Branch, 2, 3, 3)),
-            new ComputeBlock(
+            new(
             [
                 new ComputeInstruction(ComputeOperation.Add, 0, 0, 1)
             ], new ComputeTerminator(ComputeTransfer.Jump, 1)),
-            new ComputeBlock(
+            new(
             [
                 new ComputeInstruction(ComputeOperation.Multiply, 7, 5, 6),
                 new ComputeInstruction(ComputeOperation.Add, 7, 7, 5),
@@ -115,7 +115,8 @@ public static class TypedComputeProbe
         var end = new ComputeTerminator(ComputeTransfer.Return);
         var valid = new ComputeBlock([], end);
 
-        Reject(() => new TypedComputeProgram(kinds, [new ComputeBlock([], new ComputeTerminator(ComputeTransfer.Jump, 1))], [], [], 1));
+        Reject(() => new TypedComputeProgram(kinds,
+            [new ComputeBlock([], new ComputeTerminator(ComputeTransfer.Jump, 1))], [], [], 1));
         Reject(() => new TypedComputeProgram(kinds, [valid, valid], [], [], 1));
         Reject(() => new TypedComputeProgram(kinds, [valid], [0, 0], [], 1));
         Reject(() => new TypedComputeProgram(kinds, [valid], [], [2], 1));
@@ -123,12 +124,16 @@ public static class TypedComputeProbe
         Reject(() => new TypedComputeProgram(kinds,
             [new ComputeBlock([new ComputeInstruction(ComputeOperation.Add, 0, 0, 1)], end)], [], [], 1));
         Reject(() => new TypedComputeProgram(kinds,
-            [new ComputeBlock([new ComputeInstruction(ComputeOperation.Swizzle, 0, 0, Literal: new ComputeVector(0, 1, 2, 4))], end)], [], [], 1));
+        [
+            new ComputeBlock(
+                [new ComputeInstruction(ComputeOperation.Swizzle, 0, 0, Literal: new ComputeVector(0, 1, 2, 4))], end)
+        ], [], [], 1));
         Reject(() => new TypedComputeProgram(kinds,
             [new ComputeBlock([], new ComputeTerminator(ComputeTransfer.Branch, 1, 1, 1)), valid], [], [], 1));
         Reject(() => program.Evaluate(new uint[TypedComputeProgram.StateWords - 1]));
 
-        Console.WriteLine("[runtime] IRX-R66-CPU: states=64; blocks=4; vectorTypes=2; invalidCases=9; loopBudget=verified; branch=verified; reference=verified.");
+        Console.WriteLine(
+            "[runtime] IRX-R66-CPU: states=64; blocks=4; vectorTypes=2; invalidCases=9; loopBudget=verified; branch=verified; reference=verified.");
     }
 
     private static void Reject(Action action)
@@ -147,7 +152,8 @@ public static class TypedComputeProbe
 
     private static ComputeVector FloatVector(float coordinateX, float coordinateY, float coordinateZ, float coordinateW)
     {
-        return new ComputeVector(BitConverter.SingleToUInt32Bits(coordinateX), BitConverter.SingleToUInt32Bits(coordinateY),
+        return new ComputeVector(BitConverter.SingleToUInt32Bits(coordinateX),
+            BitConverter.SingleToUInt32Bits(coordinateY),
             BitConverter.SingleToUInt32Bits(coordinateZ), BitConverter.SingleToUInt32Bits(coordinateW));
     }
 

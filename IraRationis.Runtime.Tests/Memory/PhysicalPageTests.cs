@@ -2,6 +2,7 @@
 
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Memory;
+using IraRationis.HLE.Memory.Models;
 using IraRationis.HLE.Runtime;
 
 namespace IraRationis.Runtime.Tests.Memory;
@@ -23,7 +24,7 @@ internal static unsafe partial class PhysicalPageTests
         nuint Export(string name)
         {
             return registry.Lookup("xmem.dll", name)
-                ?? throw new InvalidOperationException($"Missing physical page export {name}.");
+                   ?? throw new InvalidOperationException($"Missing physical page export {name}.");
         }
 
         var allocate = (delegate* unmanaged[Stdcall]<ulong, nuint*, nuint*, int>)Export("XMemAllocatePhysicalPages");
@@ -51,6 +52,8 @@ internal static unsafe partial class PhysicalPageTests
                 *(int*)(reservation + page * PageSize) = (page + 1) * 10;
             }
 
+            VerifyLatePagePublication(reservation, pages);
+
             var address = (ulong)(nuint)reservation;
 
             Require(PhysicalPageModule.MapAlias(address + 4 * PageSize, address + PageSize, 2 * PageSize),
@@ -72,7 +75,8 @@ internal static unsafe partial class PhysicalPageTests
             Require(PhysicalPageModule.MapAlias(address + PageSize, address, 3 * PageSize),
                 "Overlapping alias captures source before destination changes");
             Require(*(int*)reservation == 10 && *(int*)(reservation + PageSize) == 10
-                && *(int*)(reservation + 2 * PageSize) == 21 && *(int*)(reservation + 3 * PageSize) == 30,
+                                             && *(int*)(reservation + 2 * PageSize) == 21
+                                             && *(int*)(reservation + 3 * PageSize) == 30,
                 "Overlapping alias retains original source identities after physical IDs are freed");
 
             Require(map(reservation + 2 * PageSize, 1, null) == reservation + 2 * PageSize,
@@ -101,6 +105,38 @@ internal static unsafe partial class PhysicalPageTests
             {
                 Console.Error.WriteLine("[physical-page-tests] Cleanup incomplete after the original failure.");
             }
+        }
+    }
+
+    private static void VerifyLatePagePublication(nint address, nuint* pages)
+    {
+        const int boundaryOffset = PageSize - 1;
+        var boundary = new Span<byte>((void*)(address + boundaryOffset), 3);
+        Span<byte> original = stackalloc byte[boundary.Length];
+        boundary.CopyTo(original);
+
+        var destination = stackalloc nuint[2] { pages[0], 0 };
+        ReadOnlySpan<byte> payload = [0x4D, 0xA1, 0xB2];
+
+        try
+        {
+            Require(!PhysicalPageModule.WritePhysical(destination, boundaryOffset, payload, out var failure) &&
+                    failure == PhysicalPageWriteFailure.UnpublishedPage && boundary.SequenceEqual(original),
+                "An unpublished destination page leaves preceding pages untouched");
+
+            destination[1] = nuint.MaxValue;
+            Require(!PhysicalPageModule.WritePhysical(destination, boundaryOffset, payload, out failure) &&
+                    failure == PhysicalPageWriteFailure.UnknownPage && boundary.SequenceEqual(original),
+                "An unknown destination page leaves preceding pages untouched");
+
+            destination[1] = pages[1];
+            Require(PhysicalPageModule.WritePhysical(destination, boundaryOffset, payload, out failure) &&
+                    failure == PhysicalPageWriteFailure.None && boundary.SequenceEqual(payload),
+                "A published destination accepts a write across a page boundary");
+        }
+        finally
+        {
+            original.CopyTo(boundary);
         }
     }
 

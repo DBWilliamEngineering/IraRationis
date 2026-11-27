@@ -5,19 +5,19 @@ using IraRationis.HLE.Interop;
 using IraRationis.HLE.Runtime.Diagnostics.Models;
 using IraRationis.Loader.Images;
 using IraRationis.PE.Models;
-using BridgeCallbacks = global::IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks.RuntimeBridgeCallbacks;
-using BridgeTrace = global::IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeTrace.RuntimeBridgeTrace;
+using BridgeCallbacks = IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks.RuntimeBridgeCallbacks;
+using BridgeTrace = IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeTrace.RuntimeBridgeTrace;
 
 namespace IraRationis.HLE.Runtime.Diagnostics;
 
 public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposable
 {
     private static RuntimeBridgeDiagnostics? _active;
-    private readonly BridgeTrace _trace;
     private readonly RuntimeBridgeAbiPolicy _abi;
     private readonly Func<string> _captureCaller;
-    private RuntimeBridgeImage[] _images = [];
+    private readonly BridgeTrace _trace;
     private int _disposed;
+    private RuntimeBridgeImage[] _images = [];
     private int _unverifiedRuntimeReported;
 
     private RuntimeBridgeDiagnostics(TextWriter writer, RuntimeBridgeOptions options)
@@ -33,6 +33,35 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         {
             return Volatile.Read(ref _active);
         }
+    }
+
+    public void Dispose()
+    {
+        var errorState = NativeErrorState.Capture();
+
+        try
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                Interlocked.CompareExchange(ref _active, null, this);
+
+                _trace.WriteSummary();
+            }
+        }
+        finally
+        {
+            errorState.Restore();
+        }
+    }
+
+    public nuint Observe(string library, ImportSymbol symbol, nuint address)
+    {
+        if (Active != this || address == 0 || symbol.Name is not { } name)
+        {
+            return address;
+        }
+
+        return (nuint)BridgeCallbacks.ObserveHostFunction(library, name, (nint)address);
     }
 
     public static RuntimeBridgeDiagnostics? Begin(TextWriter writer, RuntimeBridgeOptions? options = null)
@@ -66,7 +95,8 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         session._trace.Note(
             $"enabled=True; perOperationLimit={options.PerOperationLimit}; scope=title-import-and-observed-loader-calls; runtimeCalls=InitializeApiImpl,InitializeApiImplEx,InitializeApiImplEx2,QueryApiImpl; optionsContents=opaque; returnedInterfaces=unwrapped");
 
-        session._trace.Note($"privateAbiVerified={session._abi.Verified}; runtimeFileSha256={session._abi.Fingerprint}; exportRvaChecks=True");
+        session._trace.Note(
+            $"privateAbiVerified={session._abi.Verified}; runtimeFileSha256={session._abi.Fingerprint}; exportRvaChecks=True");
 
         return session;
     }
@@ -95,16 +125,6 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         {
             errorState.Restore();
         }
-    }
-
-    public nuint Observe(string library, ImportSymbol symbol, nuint address)
-    {
-        if (Active != this || address == 0 || symbol.Name is not { } name)
-        {
-            return address;
-        }
-
-        return (nuint)BridgeCallbacks.ObserveHostFunction(library, name, (nint)address);
     }
 
     internal static RuntimeBridgeCall BeginLoad(nint name, bool unicode, uint flags)
@@ -153,7 +173,9 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
 
             var requested = (nuint)name <= ushort.MaxValue
                 ? $"ordinal:{(nuint)name}"
-                : RuntimeBridgeMemoryReader.TryReadAnsi(name, 256, out var export) ? Escape(export) : "unreadable";
+                : RuntimeBridgeMemoryReader.TryReadAnsi(name, 256, out var export)
+                    ? Escape(export)
+                    : "unreadable";
 
             return session.BeginCall(RuntimeBridgeOperation.ExportLookup,
                 $"module=0x{module:X}; modulePath={Escape(path)}; export={requested}");
@@ -170,7 +192,8 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         try
         {
             return Active?.BeginCall(operation,
-                $"version1=0x{firstVersion:X16}; version2=0x{secondVersion:X16}; flags=0x{flags:X16}; options=0x{options:X}") ?? default;
+                       $"version1=0x{firstVersion:X16}; version2=0x{secondVersion:X16}; flags=0x{flags:X16}; options=0x{options:X}")
+                   ?? default;
         }
         catch
         {
@@ -190,8 +213,10 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
             }
 
             var providerReadable = RuntimeBridgeMemoryReader.TryReadGuid(provider, out var providerIdentifier);
-            var interfaceReadable = RuntimeBridgeMemoryReader.TryReadGuid(requestedInterface, out var interfaceIdentifier);
-            var key = new RuntimeBridgeQueryKey(providerIdentifier, interfaceIdentifier, providerReadable, interfaceReadable);
+            var interfaceReadable =
+                RuntimeBridgeMemoryReader.TryReadGuid(requestedInterface, out var interfaceIdentifier);
+            var key = new RuntimeBridgeQueryKey(providerIdentifier, interfaceIdentifier, providerReadable,
+                interfaceReadable);
             var observation = session._trace.BeginQuery(key, output, session._captureCaller);
 
             return new RuntimeBridgeCall(session, RuntimeBridgeOperation.QueryApi, observation.Id, observation);
@@ -244,7 +269,8 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
                     else if (RuntimeBridgeAbiPolicy.ExportRva(export) != 0 &&
                              Interlocked.Exchange(ref session._unverifiedRuntimeReported, 1) == 0)
                     {
-                        session._trace.Note("privateAbi=unverified; privateCalls=unwrapped; loaderAndExportObservation=True");
+                        session._trace.Note(
+                            "privateAbi=unverified; privateCalls=unwrapped; loaderAndExportObservation=True");
                     }
                 }
             }
@@ -281,7 +307,8 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
             if (call.Operation == RuntimeBridgeOperation.QueryApi && result >= 0)
             {
                 returnedObject = RuntimeBridgeMemoryReader.TryReadPointer(output, out var value)
-                    ? $"0x{value:X}" : "unreadable";
+                    ? $"0x{value:X}"
+                    : "unreadable";
             }
 
             session._trace.End(call.Operation, call.Id,
@@ -294,7 +321,8 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
 
     internal static void NoteBinding(string name, nint target, nint returned)
     {
-        Active?._trace.Note($"binding={Escape(name)}; target=0x{target:X}; returned=0x{returned:X}; wrapped={target != returned}");
+        Active?._trace.Note(
+            $"binding={Escape(name)}; target=0x{target:X}; returned=0x{returned:X}; wrapped={target != returned}");
     }
 
     internal static bool IsRuntimeModule(string path)
@@ -317,24 +345,5 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
             .Replace(";", "\\u003B", StringComparison.Ordinal)
             .Replace("\r", "\\r", StringComparison.Ordinal)
             .Replace("\n", "\\n", StringComparison.Ordinal);
-    }
-
-    public void Dispose()
-    {
-        var errorState = NativeErrorState.Capture();
-
-        try
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-            {
-                Interlocked.CompareExchange(ref _active, null, this);
-
-                _trace.WriteSummary();
-            }
-        }
-        finally
-        {
-            errorState.Restore();
-        }
     }
 }

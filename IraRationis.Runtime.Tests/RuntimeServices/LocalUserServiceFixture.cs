@@ -3,15 +3,14 @@
 using IraRationis.HLE.Runtime.Services;
 using IraRationis.HLE.Runtime.Services.Async;
 using IraRationis.HLE.Runtime.Services.Async.Models;
-using IraRationis.HLE.Runtime.Services.Users;
-using IraRationis.HLE.Runtime.Services.Users.Models;
 using IraRationis.HLE.Runtime.Services.Users.LocalUserService;
+using IraRationis.HLE.Runtime.Services.Users.Models;
 
 namespace IraRationis.Runtime.Tests.RuntimeServices;
 
 internal sealed unsafe class LocalUserServiceFixture : IDisposable
 {
-    internal static readonly LocalUserProfile Profile = new(0xFEDCBA9876543210UL, 0x9123456789ABCDEFUL, "Damon");
+    internal static readonly LocalUserProfile Profile = new(0xFEDCBA9876543210UL, 0x9123456789ABCDEFUL, "Damon William");
 
     internal LocalUserServiceFixture()
     {
@@ -30,30 +29,29 @@ internal sealed unsafe class LocalUserServiceFixture : IDisposable
         AuthoredLocalUserCallbacks.Reset();
     }
 
-    internal AuthoredRuntimeAsyncHost Host { get; }
-    internal HostRuntimeAsyncService Async { get; }
-    internal LocalUserService Service { get; }
-    internal nint UserInterface { get; }
-    internal nint GamertagInterface { get; }
-
-    internal nint Method(int offset)
+    internal AuthoredRuntimeAsyncHost Host
     {
-        return (*(nint**)UserInterface)[offset / sizeof(nint)];
+        get;
     }
 
-    internal int Add(XAsyncBlock* block, uint options = 0)
+    internal HostRuntimeAsyncService Async
     {
-        return ((delegate* unmanaged[Stdcall]<nint, uint, XAsyncBlock*, int>)Method(0x38))(UserInterface, options, block);
+        get;
     }
 
-    internal int TakeResult(XAsyncBlock* block, nint* handle)
+    internal LocalUserService Service
     {
-        return ((delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint*, int>)Method(0x40))(UserInterface, block, handle);
+        get;
     }
 
-    internal void Close(nint handle)
+    internal nint UserInterface
     {
-        ((delegate* unmanaged[Stdcall]<nint, nint, void>)Method(0x20))(UserInterface, handle);
+        get;
+    }
+
+    internal nint GamertagInterface
+    {
+        get;
     }
 
     public void Dispose()
@@ -65,5 +63,27 @@ internal sealed unsafe class LocalUserServiceFixture : IDisposable
 
         Async.Dispose();
         Host.Dispose();
+    }
+
+    internal nint Method(int offset)
+    {
+        return (*(nint**)UserInterface)[offset / sizeof(nint)];
+    }
+
+    internal int Add(XAsyncBlock* block, uint options = 0)
+    {
+        return ((delegate* unmanaged[Stdcall]<nint, uint, XAsyncBlock*, int>)Method(0x38))(UserInterface, options,
+            block);
+    }
+
+    internal int TakeResult(XAsyncBlock* block, nint* handle)
+    {
+        return ((delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint*, int>)Method(0x40))(UserInterface, block,
+            handle);
+    }
+
+    internal void Close(nint handle)
+    {
+        ((delegate* unmanaged[Stdcall]<nint, nint, void>)Method(0x20))(UserInterface, handle);
     }
 }

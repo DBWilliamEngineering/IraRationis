@@ -90,46 +90,46 @@ public static class Rdna2RectangleCompiler
                                      float4 Multiplier;
                                  };
                                  """ + "\n" + PixelArithmetic + "\n" + """
-                                 float4 main(Varyings input) : SV_Target0
-                                 {
-                                     return float4(HalfRtz(LegacyMul(input.Color.x, Multiplier.x)),
-                                                   HalfRtz(LegacyMul(input.Color.y, Multiplier.y)),
-                                                   HalfRtz(LegacyMul(input.Color.z, Multiplier.z)),
-                                                   HalfRtz(LegacyMul(input.Color.w, Multiplier.w)));
-                                 }
-                                 """;
+                                                                       float4 main(Varyings input) : SV_Target0
+                                                                       {
+                                                                           return float4(HalfRtz(LegacyMul(input.Color.x, Multiplier.x)),
+                                                                                         HalfRtz(LegacyMul(input.Color.y, Multiplier.y)),
+                                                                                         HalfRtz(LegacyMul(input.Color.z, Multiplier.z)),
+                                                                                         HalfRtz(LegacyMul(input.Color.w, Multiplier.w)));
+                                                                       }
+                                                                       """;
 
     private const string PixelArithmetic = """
-                                 float HalfRtz(float value)
-                                 {
-                                     uint bits = asuint(value);
-                                     uint sign = (bits >> 16) & 0x8000u;
-                                     uint exponent = (bits >> 23) & 255u;
-                                     uint mantissa = bits & 0x7fffffu;
-                                     uint halfBits = sign;
-                                     if (exponent == 255u)
-                                     {
-                                         halfBits |= 0x7c00u | (mantissa == 0u ? 0u : ((mantissa >> 13) | 0x0200u));
-                                     }
-                                     else if (exponent >= 143u)
-                                     {
-                                         halfBits |= 0x7bffu;
-                                     }
-                                     else if (exponent >= 113u)
-                                     {
-                                         halfBits |= ((exponent - 112u) << 10) | (mantissa >> 13);
-                                     }
-                                     else if (exponent >= 103u)
-                                     {
-                                         halfBits |= (mantissa | 0x800000u) >> (126u - exponent);
-                                     }
-                                     return f16tof32(halfBits);
-                                 }
-                                 float LegacyMul(float a, float b)
-                                 {
-                                     return a == 0.0f || b == 0.0f ? 0.0f : a * b;
-                                 }
-                                 """;
+                                           float HalfRtz(float value)
+                                           {
+                                               uint bits = asuint(value);
+                                               uint sign = (bits >> 16) & 0x8000u;
+                                               uint exponent = (bits >> 23) & 255u;
+                                               uint mantissa = bits & 0x7fffffu;
+                                               uint halfBits = sign;
+                                               if (exponent == 255u)
+                                               {
+                                                   halfBits |= 0x7c00u | (mantissa == 0u ? 0u : ((mantissa >> 13) | 0x0200u));
+                                               }
+                                               else if (exponent >= 143u)
+                                               {
+                                                   halfBits |= 0x7bffu;
+                                               }
+                                               else if (exponent >= 113u)
+                                               {
+                                                   halfBits |= ((exponent - 112u) << 10) | (mantissa >> 13);
+                                               }
+                                               else if (exponent >= 103u)
+                                               {
+                                                   halfBits |= (mantissa | 0x800000u) >> (126u - exponent);
+                                               }
+                                               return f16tof32(halfBits);
+                                           }
+                                           float LegacyMul(float a, float b)
+                                           {
+                                               return a == 0.0f || b == 0.0f ? 0.0f : a * b;
+                                           }
+                                           """;
 
     // COLOR1.z is RGBA8 UNORM. For each of its 256 values, truncating the
     // captured multiply-add with offsets 0.1, 1.1, 2.1, 3.1 gives 4*byte + offset.
@@ -230,40 +230,40 @@ public static class Rdna2RectangleCompiler
                                              """;
 
     private const string IndexedTransformVaryings = """
-        struct Varyings
-        {
-            float4 Position : SV_Position;
-            float4 Color : COLOR0;
-            float Opacity : COLOR1;
-        };
-        """;
+                                                    struct Varyings
+                                                    {
+                                                        float4 Position : SV_Position;
+                                                        float4 Color : COLOR0;
+                                                        float Opacity : COLOR1;
+                                                    };
+                                                    """;
 
     private const string IndexedTransformVertex = """
-        cbuffer VertexConstants : register(b5, space1)
-        {
-            float4 TransformX;
-            float4 TransformY;
-        };
+                                                  cbuffer VertexConstants : register(b5, space1)
+                                                  {
+                                                      float4 TransformX;
+                                                      float4 TransformY;
+                                                  };
 
-        Varyings main(float4 color : COLOR0, float4 opacity : COLOR1, float2 position : POSITION0)
-        {
-            Varyings result;
-            precise float x = mad(TransformX.x, position.x, mad(TransformX.y, position.y, TransformX.w));
-            precise float y = mad(TransformY.x, position.x, mad(TransformY.y, position.y, TransformY.w));
-            result.Position = float4(x, y, 0.0f, 1.0f);
-            result.Color = color;
-            result.Opacity = opacity.a;
-            return result;
-        }
-        """;
+                                                  Varyings main(float4 color : COLOR0, float4 opacity : COLOR1, float2 position : POSITION0)
+                                                  {
+                                                      Varyings result;
+                                                      precise float x = mad(TransformX.x, position.x, mad(TransformX.y, position.y, TransformX.w));
+                                                      precise float y = mad(TransformY.x, position.x, mad(TransformY.y, position.y, TransformY.w));
+                                                      result.Position = float4(x, y, 0.0f, 1.0f);
+                                                      result.Color = color;
+                                                      result.Opacity = opacity.a;
+                                                      return result;
+                                                  }
+                                                  """;
 
     private const string IndexedTransformPixel = """
-        float4 main(Varyings input) : SV_Target0
-        {
-            return float4(HalfRtz(input.Color.r), HalfRtz(input.Color.g), HalfRtz(input.Color.b),
-                HalfRtz(LegacyMul(input.Color.a, input.Opacity)));
-        }
-        """;
+                                                 float4 main(Varyings input) : SV_Target0
+                                                 {
+                                                     return float4(HalfRtz(input.Color.r), HalfRtz(input.Color.g), HalfRtz(input.Color.b),
+                                                         HalfRtz(LegacyMul(input.Color.a, input.Opacity)));
+                                                 }
+                                                 """;
 
     private const string TexturedVertex = """
                                           cbuffer TransformA : register(b0)
@@ -318,35 +318,35 @@ public static class Rdna2RectangleCompiler
     {
         var helpers = PixelArithmetic + "\n";
         const string transfer = """
-            Texture2D<float4> GuestTexture : register(t0);
-            SamplerState GuestSampler : register(s0);
+                                Texture2D<float4> GuestTexture : register(t0);
+                                SamplerState GuestSampler : register(s0);
 
-            float EncodeRgb(float value)
-            {
-                precise float result = 0.0f;
-                if (value > asfloat(0x3b4d2e1cu))
-                {
-                    precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
-                    result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
-                }
-                else
-                {
-                    result = LegacyMul(value, asfloat(0x414eb852u));
-                }
+                                float EncodeRgb(float value)
+                                {
+                                    precise float result = 0.0f;
+                                    if (value > asfloat(0x3b4d2e1cu))
+                                    {
+                                        precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
+                                        result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
+                                    }
+                                    else
+                                    {
+                                        result = LegacyMul(value, asfloat(0x414eb852u));
+                                    }
 
-                return result;
-            }
+                                    return result;
+                                }
 
-            float4 main(Varyings input) : SV_Target0
-            {
-                float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
-                precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
-                    LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
-                    LegacyMul(texel.w, input.Color.w));
-                return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
-                    HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
-            }
-            """;
+                                float4 main(Varyings input) : SV_Target0
+                                {
+                                    float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
+                                    precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
+                                        LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
+                                        LegacyMul(texel.w, input.Color.w));
+                                    return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
+                                        HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
+                                }
+                                """;
 
         return new PlanarColorShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + helpers + transfer);
     }
@@ -386,6 +386,7 @@ public static class Rdna2RectangleCompiler
         if (transformOnly)
         {
             RecognizeIndexedTransform(vertexShader.Code, pixelShader.Code);
+
             return new RectangleShaderPair(IndexedTransformVaryings + "\n" + IndexedTransformVertex, string.Empty,
                 IndexedTransformVaryings + "\n" + PixelArithmetic + "\n" + IndexedTransformPixel, register, 1)
             {
@@ -420,7 +421,7 @@ public static class Rdna2RectangleCompiler
         position.FusedMultiplyAdd(3, 5, RasterInstructionReader.Vector(13), 7);
         position.Accumulate(2, 0, 12);
         position.Accumulate(3, 4, 12);
-        position.Export(12, 2, 3, 0, 1, done: true);
+        position.Export(12, 2, 3, 0, 1, true);
         position.Export(32, 4, 5, 6, 7);
         position.Export(33, 8, 9, 10, 11);
         position.End();
@@ -430,22 +431,22 @@ public static class Rdna2RectangleCompiler
         color.IdentityHeader();
         color.Prefetch(3);
         color.Move32(124, 12);
-        color.Interpolate(2, 1, 3, secondPhase: false);
-        color.Interpolate(3, 0, 3, secondPhase: false);
-        color.Interpolate(4, 0, 0, secondPhase: false);
-        color.Interpolate(5, 0, 1, secondPhase: false);
-        color.Interpolate(6, 0, 2, secondPhase: false);
-        color.Interpolate(2, 1, 3, secondPhase: true);
-        color.Interpolate(3, 0, 3, secondPhase: true);
-        color.Interpolate(4, 0, 0, secondPhase: true);
-        color.Interpolate(5, 0, 1, secondPhase: true);
-        color.Interpolate(6, 0, 2, secondPhase: true);
+        color.Interpolate(2, 1, 3, false);
+        color.Interpolate(3, 0, 3, false);
+        color.Interpolate(4, 0, 0, false);
+        color.Interpolate(5, 0, 1, false);
+        color.Interpolate(6, 0, 2, false);
+        color.Interpolate(2, 1, 3, true);
+        color.Interpolate(3, 0, 3, true);
+        color.Interpolate(4, 0, 0, true);
+        color.Interpolate(5, 0, 1, true);
+        color.Interpolate(6, 0, 2, true);
         color.MultiplyLegacy(3, RasterInstructionReader.Vector(3), 2);
         color.ScalarNoOperation();
         color.ScalarNoOperation();
         color.PackHalfTowardZero(0, RasterInstructionReader.Vector(4), 5);
         color.PackHalfTowardZero(1, RasterInstructionReader.Vector(6), 3);
-        color.Export(0, 0, 1, 0, 0, done: true, compressed: true, validMask: true);
+        color.Export(0, 0, 1, 0, 0, true, true, true);
         color.End();
         color.Padding();
     }
@@ -507,7 +508,6 @@ public static class Rdna2RectangleCompiler
         ]);
 
         ValidateSignature(pixelShader, "OSG1", [("SV_Target", 64U, 0U, 15U)]);
-
     }
 
     private static NativeProgram ReadProgram(ShaderContainer container, NativeShaderStage stage)
@@ -547,8 +547,10 @@ public static class Rdna2RectangleCompiler
             var end = name.IndexOf((byte)0);
 
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(expectedElement.Name)) ||
-                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0 || Word(data, byteOffset + 12) != expectedElement.System ||
-                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register || data[byteOffset + 24] != expectedElement.Mask ||
+                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0
+                || Word(data, byteOffset + 12) != expectedElement.System ||
+                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register
+                || data[byteOffset + 24] != expectedElement.Mask ||
                 Word(data, byteOffset + 28) != 0)
             {
                 throw new NotSupportedException($"R14 unsupported {tag} semantic {index}.");
@@ -699,6 +701,7 @@ public static class Rdna2RectangleCompiler
         var geometry = Geometry.Replace("if (corner == 3u)",
             "if (corner == 3u || input[0].Position.w != input[1].Position.w || input[0].Position.w != input[2].Position.w)",
             StringComparison.Ordinal);
+
         return new RectangleShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + geometry,
             Varyings + "\n" + PixelArithmetic + "\n" + TexturedPixel, 0, 0);
     }

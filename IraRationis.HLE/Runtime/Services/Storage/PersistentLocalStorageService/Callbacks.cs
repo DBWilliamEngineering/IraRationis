@@ -60,7 +60,8 @@ internal sealed unsafe partial class PersistentLocalStorageService
 
             if (capacity < (nuint)required)
             {
-                service._trace.Write("PersistentStorage.GetPath", $"capacity={capacity}; required={required}; hresult=0x80004005");
+                service._trace.Write("PersistentStorage.GetPath",
+                    $"capacity={capacity}; required={required}; hresult=0x80004005");
 
                 return RuntimeServiceResult.Failure;
             }
@@ -75,7 +76,8 @@ internal sealed unsafe partial class PersistentLocalStorageService
                     *used = (nuint)required;
                 }
 
-                service._trace.Write("PersistentStorage.GetPath", $"bytes={required}; backedByHostDirectory=True; hresult=0x00000000");
+                service._trace.Write("PersistentStorage.GetPath",
+                    $"bytes={required}; backedByHostDirectory=True; hresult=0x00000000");
 
                 return RuntimeServiceResult.Success;
             }

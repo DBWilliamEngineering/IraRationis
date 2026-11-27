@@ -209,17 +209,21 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 return;
             }
+
             case TriangleStripTopology:
             {
-                report.WriteLine("[graphics] Triangle-strip shader contract unsupported; R10 vertex-fetch probe is not applicable.");
+                report.WriteLine(
+                    "[graphics] Triangle-strip shader contract unsupported; R10 vertex-fetch probe is not applicable.");
 
                 if (directory == null)
                 {
-                    report.WriteLine("[graphics] Set IRX_DRAW_CAPTURE_DIR to retain the blocked shaders, root and PSO records.");
+                    report.WriteLine(
+                        "[graphics] Set IRX_DRAW_CAPTURE_DIR to retain the blocked shaders, root and PSO records.");
                 }
 
                 return;
             }
+
             default:
                 PrepareVertexFetchTranslation(report, state, pipeline, directory, draw);
 
@@ -446,9 +450,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             report.WriteLine($"    element[{index}]: {name}{BinaryPrimitives.ReadUInt32LittleEndian(entry[8..])}; " +
-                $"stream={BinaryPrimitives.ReadUInt32LittleEndian(entry)}; system={BinaryPrimitives.ReadUInt32LittleEndian(entry[12..])}; " +
-                $"component={BinaryPrimitives.ReadUInt32LittleEndian(entry[16..])}; register={BinaryPrimitives.ReadUInt32LittleEndian(entry[20..])}; " +
-                $"mask=0x{entry[24]:X2}; used=0x{entry[25]:X2}; precision={BinaryPrimitives.ReadUInt32LittleEndian(entry[28..])}.");
+                             $"stream={BinaryPrimitives.ReadUInt32LittleEndian(entry)}; system={BinaryPrimitives.ReadUInt32LittleEndian(entry[12..])}; "
+                             +
+                             $"component={BinaryPrimitives.ReadUInt32LittleEndian(entry[16..])}; register={BinaryPrimitives.ReadUInt32LittleEndian(entry[20..])}; "
+                             +
+                             $"mask=0x{entry[24]:X2}; used=0x{entry[25]:X2}; precision={BinaryPrimitives.ReadUInt32LittleEndian(entry[28..])}.");
         }
     }
 
@@ -463,10 +469,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         else if (record.Kind == 21 && bytes.Length == 64)
         {
             report.WriteLine($"  depthEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}; " +
-                $"depthWriteMask={BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..])}; " +
-                $"depthFunc={BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..])}; " +
-                $"stencilEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..])}; " +
-                $"depthBoundsEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..])}.");
+                             $"depthWriteMask={BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..])}; " +
+                             $"depthFunc={BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..])}; " +
+                             $"stencilEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..])}; " +
+                             $"depthBoundsEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..])}.");
         }
     }
 

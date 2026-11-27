@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Numerics;
-using TerraFX.Interop.DirectX;
+using System.Text;
 using IraRationis.Graphics.Drawing;
 using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Media;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.Raster.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
-
     internal static ResourceDescription RasterTexture(int width, int height, uint flags)
     {
         return new ResourceDescription
@@ -69,9 +69,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         pipeline = 0;
 
         var vertexShader = CompileHostShader(program.EmitVertex(), "vs_5_1", Console.Error)
-                 ?? throw new InvalidOperationException("R67 vertex compilation failed.");
+                           ?? throw new InvalidOperationException("R67 vertex compilation failed.");
         var pixelShader = CompileHostShader(program.EmitPixel(), "ps_5_1", Console.Error)
-                 ?? throw new InvalidOperationException("R67 pixel compilation failed.");
+                          ?? throw new InvalidOperationException("R67 pixel compilation failed.");
         var range = new D3D12_DESCRIPTOR_RANGE1 { RangeType = 0, NumDescriptors = 1 };
         var parameter = new D3D12_ROOT_PARAMETER1 { ParameterType = 0, ShaderVisibility = (D3D12_SHADER_VISIBILITY)5 };
 
@@ -112,7 +112,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (errors != 0)
             {
-                Console.Error.WriteLine(System.Text.Encoding.UTF8.GetString(ReadShaderBlob(errors, 1024 * 1024)).TrimEnd('\0'));
+                Console.Error.WriteLine(Encoding.UTF8.GetString(ReadShaderBlob(errors, 1024 * 1024)).TrimEnd('\0'));
             }
 
             CheckHostResult(resultCode, "R67 root serialization");
@@ -145,8 +145,10 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var state = new D3D12_GRAPHICS_PIPELINE_STATE_DESC
                 {
                     pRootSignature = (ID3D12RootSignature*)nativeRoot,
-                    VS = new D3D12_SHADER_BYTECODE { pShaderBytecode = vertex, BytecodeLength = (nuint)vertexShader.Length },
-                    PS = new D3D12_SHADER_BYTECODE { pShaderBytecode = pixel, BytecodeLength = (nuint)pixelShader.Length },
+                    VS = new D3D12_SHADER_BYTECODE
+                        { pShaderBytecode = vertex, BytecodeLength = (nuint)vertexShader.Length },
+                    PS = new D3D12_SHADER_BYTECODE
+                        { pShaderBytecode = pixel, BytecodeLength = (nuint)pixelShader.Length },
                     InputLayout = new D3D12_INPUT_LAYOUT_DESC { pInputElementDescs = elements, NumElements = 3 },
                     SampleMask = uint.MaxValue,
                     PrimitiveTopologyType = (D3D12_PRIMITIVE_TOPOLOGY_TYPE)3,
@@ -224,10 +226,16 @@ public static unsafe partial class ConsoleGraphicsDevice
     public static void VerifyAuthoredRaster(MediaGpuContext context)
     {
         var program = new ProgrammableRasterProgram(
-            [new(RasterExpression.Position), new(RasterExpression.Color), new(RasterExpression.TexCoord)],
+            [
+                new RasterNode(RasterExpression.Position), new RasterNode(RasterExpression.Color),
+                new RasterNode(RasterExpression.TexCoord)
+            ],
             0, 1, 2,
-            [new(RasterExpression.TexCoord), new(RasterExpression.Sample, 0), new(RasterExpression.Color),
-                new(RasterExpression.Multiply, 1, 2), new(RasterExpression.Saturate, 3)], 4);
+            [
+                new RasterNode(RasterExpression.TexCoord), new RasterNode(RasterExpression.Sample),
+                new RasterNode(RasterExpression.Color),
+                new RasterNode(RasterExpression.Multiply, 1, 2), new RasterNode(RasterExpression.Saturate, 3)
+            ], 4);
 
         using var renderer = new ProgrammableRasterPipeline(context, program);
 
@@ -252,17 +260,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             for (var coordinateX = 0; coordinateX < 8; coordinateX++)
             {
-                var expected = texture.AsSpan(((coordinateY / 4) * 2 + coordinateX / 4) * 4, 4);
+                var expected = texture.AsSpan((coordinateY / 4 * 2 + coordinateX / 4) * 4, 4);
                 var offset = (coordinateY * 8 + coordinateX) * 4;
 
                 if (!first.AsSpan(offset, 4).SequenceEqual(expected) || second[offset] != 0 ||
                     !second.AsSpan(offset + 1, 3).SequenceEqual(expected[1..]))
                 {
-                    throw new InvalidOperationException($"R67 raster readback mismatch at ({coordinateX},{coordinateY}).");
+                    throw new InvalidOperationException(
+                        $"R67 raster readback mismatch at ({coordinateX},{coordinateY}).");
                 }
             }
         }
 
-        Console.WriteLine("[runtime] IRX-R67: draws=2; pixels=128; textureSampling=verified; tint=verified; pipelineReuse=verified; readback=verified.");
+        Console.WriteLine(
+            "[runtime] IRX-R67: draws=2; pixels=128; textureSampling=verified; tint=verified; pipelineReuse=verified; readback=verified.");
     }
 }

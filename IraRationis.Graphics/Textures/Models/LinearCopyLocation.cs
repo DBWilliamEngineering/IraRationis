@@ -6,10 +6,11 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Textures.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 48)]
-internal unsafe struct LinearCopyLocation
+internal struct LinearCopyLocation
 {
     [FieldOffset(0)] public nint Resource;
     [FieldOffset(8)] public uint Kind;
+    [FieldOffset(16)] public uint SubresourceIndex;
     [FieldOffset(16)] public ulong Offset;
     [FieldOffset(24)] public uint Format;
     [FieldOffset(28)] public uint Width;

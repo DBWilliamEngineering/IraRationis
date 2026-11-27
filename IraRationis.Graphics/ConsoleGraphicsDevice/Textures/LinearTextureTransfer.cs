@@ -3,10 +3,10 @@
 
 using System.Buffers;
 using System.Runtime.InteropServices;
-using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
@@ -20,7 +20,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Opt-in for authorized, authored callers using the documented PC copy-location ABI.
     // A console-specific encoding must not be inferred from a matching method name.
-    private static bool TryRecordLinearTextureTransfer(nint self, nint destination, uint coordinateX, uint coordinateY, uint coordinateZ,
+    private static bool TryRecordLinearTextureTransfer(nint self, nint destination, uint coordinateX, uint coordinateY,
+        uint coordinateZ,
         nint source, nint box)
     {
         if (coordinateZ != 0 || !TryReadLinearCopyLocation(destination, out var to) ||
@@ -70,7 +71,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return false;
             }
 
-            if (wholeResource && (sourceSurface.Width != destinationSurface.Width ||
+            if (wholeResource && (!IsSingleSubresourceTexture(from.Resource) ||
+                                  !IsSingleSubresourceTexture(destination.Resource) ||
+                                  sourceSurface.Width != destinationSurface.Width ||
                                   sourceSurface.Height != destinationSurface.Height))
             {
                 return false;
@@ -94,7 +97,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.RetainObject(from.Resource);
             state.RetainObject(destination.Resource);
 
-            transfer = new LinearTextureTransfer(from, destination, sourceSurface, destinationSurface, region, coordinateX, coordinateY, plan);
+            transfer = new LinearTextureTransfer(from, destination, sourceSurface, destinationSurface, region,
+                coordinateX, coordinateY, plan);
         }
 
         // Capture the descriptors at recording time, not the pixel bytes. The copy
@@ -110,7 +114,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         nuint transferred = 0;
 
         var success = address != 0 &&
-                      ReadProcessMemory(-1, (void*)address, &value, (nuint)sizeof(LinearCopyLocation), &transferred) != 0 &&
+                      ReadProcessMemory(-1, (void*)address, &value, (nuint)sizeof(LinearCopyLocation), &transferred)
+                      != 0 &&
                       transferred == (nuint)sizeof(LinearCopyLocation);
 
         location = value;
@@ -146,7 +151,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // No external allocator, placed-resource alias, raw address view, host
         // backing, or GPU-writable resource is eligible for this first slice.
         if (resource->OwnedMemory == 0 || resource->FreeHook != 0 || resource->OwningHeap != 0 ||
-            resource->Address != (ulong)(nuint)resource->OwnedMemory || resource->HostResource != 0 ||
+            resource->Address != (nuint)resource->OwnedMemory || resource->HostResource != 0 ||
             description.Flags != 0 || resource->Address == 0 || resource->Address > (ulong)nint.MaxValue)
         {
             return false;
@@ -164,9 +169,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 location.Width, location.Height, location.Format, bytes, location.Pitch, out surface);
         }
 
-        if (location.Kind != 0 || (uint)location.Offset != 0 || description.Dimension != 3 ||
-            description.Layout != 1 || description.SampleCount != 1 || description.MipLevels != 1 ||
-            description.DepthOrArraySize != 1 || !TryLinearPixelBytes(description.Format, out var pixelBytes) ||
+        if (location.Kind != 0 || description.Dimension != 3 || description.Layout != 1 ||
+            description.SampleCount != 1 || !TryLinearPixelBytes(description.Format, out var pixelBytes) ||
             !TextureFootprintCalculator.TryCreate(description, out var layout) || layout.Planes.Length != 1)
         {
             return false;
@@ -174,15 +178,38 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var plane = layout.Planes[0];
 
-        if (plane.Mode != 0 || plane.Bytes != pixelBytes || plane.Mips.Length != 1 || plane.Slices != 1)
+        var mipCount = (uint)plane.Mips.Length;
+        if (plane.Mode != 0 || plane.Bytes != pixelBytes || mipCount == 0 ||
+            plane.Slices != description.DepthOrArraySize || layout.Size > (ulong)nint.MaxValue - resource->Address)
         {
             return false;
         }
 
-        var mip = plane.Mips[0];
+        var arraySlice = location.SubresourceIndex / mipCount;
+        if (arraySlice >= plane.Slices)
+        {
+            return false;
+        }
 
-        return TryCreateLinearSurface(resource->Address, layout.Size, resource->Generation, plane.Offset + mip.Offset,
-            mip.Width, mip.Height, description.Format, pixelBytes, (ulong)mip.Pitch * pixelBytes, out surface);
+        var mip = plane.Mips[location.SubresourceIndex % mipCount];
+        var pitch = (ulong)mip.Pitch * pixelBytes;
+        var mipBytes = pitch * mip.Rows;
+        var offset = plane.Offset + arraySlice * plane.SliceSize + mip.Offset;
+        if (mip.Offset > plane.SliceSize || mipBytes > plane.SliceSize - mip.Offset ||
+            offset > layout.Size || mipBytes > layout.Size - offset)
+        {
+            return false;
+        }
+
+        return TryCreateLinearSurface(resource->Address + offset, mipBytes, resource->Generation, 0,
+            mip.Width, mip.Height, description.Format, pixelBytes, pitch, out surface);
+    }
+
+    private static bool IsSingleSubresourceTexture(nint resource)
+    {
+        var description = ((ResourceObject*)resource)->Description;
+
+        return description.Dimension == 3 && description.MipLevels == 1 && description.DepthOrArraySize == 1;
     }
 
     private static bool TryLinearPixelBytes(uint format, out uint bytes)
@@ -217,7 +244,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var rowBytes = (ulong)width * pixelBytes;
 
         if (pitch < rowBytes || rowBytes > capacity - offset ||
-            (ulong)(height - 1) > (capacity - offset - rowBytes) / pitch)
+            height - 1 > (capacity - offset - rowBytes) / pitch)
         {
             return false;
         }
@@ -251,7 +278,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var from = source.Address + region.Top * source.Pitch + (ulong)region.Left * source.PixelBytes;
-        var destinationPath = destination.Address + coordinateY * destination.Pitch + (ulong)coordinateX * destination.PixelBytes;
+        var destinationPath = destination.Address + coordinateY * destination.Pitch
+                                                  + (ulong)coordinateX * destination.PixelBytes;
 
         plan = new LinearCopyPlan(from, destinationPath, source.Pitch, destination.Pitch, (int)rowBytes, (int)height);
 
@@ -277,7 +305,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         TraceGraphicsSuccess($"[graphics] IRX-R55-LINEAR-COPY: rows={transfer.Plan.Rows}; " +
-                 $"rowBytes={transfer.Plan.RowBytes}; bytes={(long)transfer.Plan.Rows * transfer.Plan.RowBytes}; CPU-only.");
+                             $"rowBytes={transfer.Plan.RowBytes}; bytes={(long)transfer.Plan.Rows * transfer.Plan.RowBytes}; CPU-only.");
     }
 
     private static void CopyLinearRows(LinearCopyPlan plan)
@@ -318,7 +346,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(scratch, clearArray: true);
+            ArrayPool<byte>.Shared.Return(scratch, true);
         }
     }
 
@@ -349,9 +377,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         try
         {
-            buffer = CreateLinearProbeResource(HostBufferDescription(2048));
-            texture = CreateLinearProbeResource(textureDescription);
-            duplicate = CreateLinearProbeResource(textureDescription);
+            buffer = CreateTransferProbeResource(HostBufferDescription(2048));
+            texture = CreateTransferProbeResource(textureDescription);
+            duplicate = CreateTransferProbeResource(textureDescription);
             list = (nint)NativeMemory.AllocZeroed(0x980);
 
             if (list == 0)
@@ -481,6 +509,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 throw new InvalidOperationException("R55 recorded resource references were not retired.");
             }
+
+            VerifyLinearTextureSubresources(list, textureDescription);
         }
         finally
         {
@@ -498,11 +528,105 @@ public static unsafe partial class ConsoleGraphicsDevice
             ReleaseProbe(ref buffer);
         }
 
-        Console.WriteLine("[graphics-probe] IRX-R55: region upload, whole texture copy, buffer readback, " +
+        Console.WriteLine("[graphics-probe] IRX-R55: region upload, whole texture copy, mip and array slice readback, "
+                          +
                           "bounds, padding, deferred ordering and resource retirement verified (CPU only).");
     }
 
-    private static nint CreateLinearProbeResource(ResourceDescription description)
+    private static void VerifyLinearTextureSubresources(nint list, ResourceDescription description)
+    {
+        description.Width = 8;
+        description.MipLevels = 2;
+        description.DepthOrArraySize = 2;
+
+        const int rowPitch = 256;
+        const int rowBytes = 16;
+        const int mipBytes = rowPitch * 2;
+        const int sliceBytes = rowPitch * 6;
+
+        if (!ResourceFootprint(description, out var footprint) || footprint.Size != sliceBytes * 2)
+        {
+            throw new InvalidOperationException("Linear texture mip and array fixture footprint mismatch.");
+        }
+
+        var texture = nint.Zero;
+        var buffer = nint.Zero;
+
+        try
+        {
+            texture = CreateTransferProbeResource(description);
+            buffer = CreateTransferProbeResource(HostBufferDescription(mipBytes * 2));
+
+            var selected = new LinearCopyLocation { Resource = texture, SubresourceIndex = 3 };
+            var invalid = new LinearCopyLocation { Resource = texture, SubresourceIndex = 4 };
+            var upload = new LinearCopyLocation
+            {
+                Resource = buffer,
+                Kind = 1,
+                Format = description.Format,
+                Width = 4,
+                Height = 2,
+                Depth = 1,
+                Pitch = rowPitch
+            };
+            var readback = upload;
+            readback.Offset = mipBytes;
+
+            var textureAddress = ((ResourceObject*)texture)->Address;
+            var textureBytes = new Span<byte>((void*)(nuint)textureAddress, sliceBytes * 2);
+            var bufferBytes = new Span<byte>((void*)(nuint)((ResourceObject*)buffer)->Address, mipBytes * 2);
+            textureBytes.Fill(0xCD);
+            bufferBytes.Fill(0xCE);
+            bufferBytes[..rowBytes].Fill(0x31);
+            bufferBytes.Slice(rowPitch, rowBytes).Fill(0x62);
+
+            // The linear footprint stores the smallest mip first within each array slice.
+            if (!TryResolveLinearSurface(selected, out var surface) || surface.Address != textureAddress + sliceBytes ||
+                surface.Width != 4 || surface.Height != 2 || surface.Pitch != rowPitch ||
+                TryRecordLinearTextureTransfer(list, (nint)(&invalid), 0, 0, 0, (nint)(&upload), 0) ||
+                !TryRecordLinearTextureTransfer(list, (nint)(&selected), 0, 0, 0, (nint)(&upload), 0) ||
+                !TryRecordLinearTextureTransfer(list, (nint)(&readback), 0, 0, 0, (nint)(&selected), 0) ||
+                StateFor(list).MemoryBoundaries is not [{ Copy: { } uploadCopy }, { Copy: { } readbackCopy }])
+            {
+                throw new InvalidOperationException("Linear texture mip and array fixture recording mismatch.");
+            }
+
+            ExecuteDeferredCopy(uploadCopy);
+            ExecuteDeferredCopy(readbackCopy);
+
+            var selectedBytes = textureBytes.Slice(sliceBytes, mipBytes);
+            var readbackBytes = bufferBytes[mipBytes..];
+
+            if (textureBytes[..sliceBytes].IndexOfAnyExcept((byte)0xCD) >= 0 ||
+                textureBytes[(sliceBytes + mipBytes)..].IndexOfAnyExcept((byte)0xCD) >= 0)
+            {
+                throw new InvalidOperationException("Linear texture copy touched an unselected subresource.");
+            }
+
+            for (var row = 0; row < 2; row++)
+            {
+                var rowOffset = row * rowPitch;
+                var expected = bufferBytes.Slice(rowOffset, rowBytes);
+                var paddingOffset = rowOffset + rowBytes;
+                var paddingLength = rowPitch - rowBytes;
+
+                if (!selectedBytes.Slice(rowOffset, rowBytes).SequenceEqual(expected) ||
+                    !readbackBytes.Slice(rowOffset, rowBytes).SequenceEqual(expected) ||
+                    selectedBytes.Slice(paddingOffset, paddingLength).IndexOfAnyExcept((byte)0xCD) >= 0 ||
+                    readbackBytes.Slice(paddingOffset, paddingLength).IndexOfAnyExcept((byte)0xCE) >= 0)
+                {
+                    throw new InvalidOperationException("Linear texture mip and array copy or padding mismatch.");
+                }
+            }
+        }
+        finally
+        {
+            ReleaseProbe(ref buffer);
+            ReleaseProbe(ref texture);
+        }
+    }
+
+    private static nint CreateTransferProbeResource(ResourceDescription description)
     {
         if (!ResourceFootprint(description, out var footprint))
         {
@@ -521,7 +645,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var properties = new GraphicsHeapProperties { Kind = 1, CreationNodes = 1, VisibleNodes = 1 };
 
         // NewResource owns the backing, including on its error paths.
-        CheckHostResult(NewResource(description, properties, 0, (ulong)(nuint)memory, 0, memory, &id, &resource),
+        CheckHostResult(NewResource(description, properties, 0, (nuint)memory, 0, memory, &id, &resource),
             "R55 fixture resource");
 
         return resource;

@@ -5,8 +5,8 @@ using IraRationis.HLE.Memory.Models;
 namespace IraRationis.HLE.Memory;
 
 /// <summary>
-/// Indexes disjoint, half-open mapped views. The owner serializes all access.
-/// Values remain owned by the caller; removing a view does not dispose its value.
+///     Indexes disjoint, half-open mapped views. The owner serializes all access.
+///     Values remain owned by the caller; removing a view does not dispose its value.
 /// </summary>
 internal sealed class MappedViewIndex<T> where T : class
 {

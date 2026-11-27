@@ -11,10 +11,10 @@ namespace IraRationis.Shaders.Scalar;
 /// </summary>
 public sealed class ScalarValueGraph
 {
-    private readonly List<ScalarValueNode> _nodes = new();
     private readonly Dictionary<ScalarValueNode, int> _interned = new();
-    private readonly int[] _outputs = new int[ScalarReferenceExecutor.StateWords];
     private readonly bool[] _live;
+    private readonly List<ScalarValueNode> _nodes = new();
+    private readonly int[] _outputs = new int[ScalarReferenceExecutor.StateWords];
 
     private ScalarValueGraph(IReadOnlyList<ScalarInstruction> instructions)
     {
@@ -158,7 +158,7 @@ public sealed class ScalarValueGraph
     public string EmitTypedCompute()
     {
         var source = new StringBuilder("Buffer<uint> Input : register(t0);\n" +
-            "RWBuffer<uint> Output : register(u0);\n[numthreads(1,1,1)]\nvoid main()\n{\n");
+                                       "RWBuffer<uint> Output : register(u0);\n[numthreads(1,1,1)]\nvoid main()\n{\n");
 
         for (var index = 0; index < _nodes.Count; index++)
         {
@@ -210,7 +210,8 @@ public sealed class ScalarValueGraph
             return Constant(Calculate(kind, leftNode.Value, rightNode.Value));
         }
 
-        if ((kind is ScalarValueKind.Add or ScalarValueKind.And or ScalarValueKind.Or or ScalarValueKind.Xor or ScalarValueKind.NotEqual) && left > right)
+        if (kind is ScalarValueKind.Add or ScalarValueKind.And or ScalarValueKind.Or or ScalarValueKind.Xor
+                or ScalarValueKind.NotEqual && left > right)
         {
             (left, right) = (right, left);
         }

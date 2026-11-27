@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using IraRationis.Shaders.Containers;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
     // Only locally generated host bytecode. This directory is a trusted per-user
     // cache, not a boundary for accepting untrusted shader binaries.
@@ -78,7 +79,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return SHA256.HashData(stream);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                              System.Security.SecurityException)
+                                              SecurityException)
         {
             return null;
         }
@@ -91,7 +92,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
                 FileShare.Read | FileShare.Delete);
 
-            if (stream.Length <= PersistentShaderHeaderBytes || stream.Length > PersistentShaderHeaderBytes + MaximumPersistentShaderEntryBytes)
+            if (stream.Length <= PersistentShaderHeaderBytes
+                || stream.Length > PersistentShaderHeaderBytes + MaximumPersistentShaderEntryBytes)
             {
                 return null;
             }
@@ -103,7 +105,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var length = BinaryPrimitives.ReadInt32LittleEndian(header[72..]);
 
             if (!header[..8].SequenceEqual("IRXBC001"u8) || !header.Slice(8, 32).SequenceEqual(key) ||
-                length <= 0 || length > MaximumPersistentShaderEntryBytes || stream.Length != PersistentShaderHeaderBytes + (long)length)
+                length <= 0 || length > MaximumPersistentShaderEntryBytes
+                || stream.Length != PersistentShaderHeaderBytes + (long)length)
             {
                 return null;
             }
@@ -124,7 +127,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                                               InvalidDataException or ArgumentException or OverflowException or
-                                              System.Security.SecurityException)
+                                              SecurityException)
         {
             return null;
         }
@@ -205,7 +208,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                              ArgumentException or System.Security.SecurityException)
+                                              ArgumentException or SecurityException)
         {
             return false;
         }
@@ -218,7 +221,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     File.Delete(temporary);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                                      System.Security.SecurityException)
+                                                      SecurityException)
                 {
                     // Best-effort temporary-file cleanup.
                 }

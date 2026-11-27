@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 48)]
-internal unsafe struct XMemMemoryInformation
+internal struct XMemMemoryInformation
 {
     [FieldOffset(32)] public uint State;
 }

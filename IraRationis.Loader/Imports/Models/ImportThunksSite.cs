@@ -4,7 +4,7 @@
 
 namespace IraRationis.Loader.Imports.Models;
 
-internal sealed unsafe class ImportThunksSite(MissingImport import, UnimplementedPolicy policy)
+internal sealed class ImportThunksSite(MissingImport import, UnimplementedPolicy policy)
 {
     public int Calls;
 

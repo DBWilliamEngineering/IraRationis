@@ -11,5 +11,9 @@ public sealed record RectangleShaderPair(
     bool IndexedArray = false,
     bool SamplesDualMasks = false)
 {
-    public int IndexedVertexConstantBytes { get; init; } = 64;
+    public int IndexedVertexConstantBytes
+    {
+        get;
+        init;
+    } = 64;
 }

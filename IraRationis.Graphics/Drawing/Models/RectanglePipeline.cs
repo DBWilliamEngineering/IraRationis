@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed unsafe record RectanglePipeline(
+internal sealed record RectanglePipeline(
     nint Root,
     nint Pipeline,
     VertexInputElement[] Elements,

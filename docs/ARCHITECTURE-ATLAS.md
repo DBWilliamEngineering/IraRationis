@@ -4,7 +4,7 @@
 > *Nullius in verba · Non impone opinionem*  
 > Managed-first native compatibility research for Windows x64.
 
-**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and storage-contract results on November 26. These results do not establish new game, GPU, performance, or CI acceptance. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
+**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon William supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and storage-contract results on November 26. These results do not establish new game, GPU, performance, or CI acceptance. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
 
 ## Contents
 

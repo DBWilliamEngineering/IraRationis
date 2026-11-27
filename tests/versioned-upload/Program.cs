@@ -165,9 +165,11 @@ internal static class Program
 
         var before = upload.ToArray();
 
-        Expect<ArgumentException>(() => PitchedPlaneCopy.Copy(chroma, width, upload, chromaOffset, pitch, width, lumaRows));
+        Expect<ArgumentException>(() =>
+            PitchedPlaneCopy.Copy(chroma, width, upload, chromaOffset, pitch, width, lumaRows));
 
-        Expect<ArgumentException>(() => PitchedPlaneCopy.Copy(chroma, width, upload, upload.Length, pitch, width, chromaRows));
+        Expect<ArgumentException>(() =>
+            PitchedPlaneCopy.Copy(chroma, width, upload, upload.Length, pitch, width, chromaRows));
 
         Require(upload.AsSpan().SequenceEqual(before), "Invalid copies do not partially modify upload memory");
     }

@@ -10,9 +10,9 @@ namespace IraRationis.Runtime.Tests.RuntimeServices;
 
 internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
 {
+    private readonly Queue<AuthoredRuntimeAsyncOperation> _completions = [];
     private readonly Dictionary<nint, AuthoredRuntimeAsyncOperation> _operations = [];
     private readonly Queue<AuthoredRuntimeAsyncOperation> _work = [];
-    private readonly Queue<AuthoredRuntimeAsyncOperation> _completions = [];
     private AuthoredRuntimeAsyncHeader* _header;
     private int _references = 1;
 
@@ -25,7 +25,8 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
         methods[7] = (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nint, byte*, nint, int>)&Begin;
         methods[9] = (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int>)&Schedule;
         methods[10] = (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void>)&Complete;
-        methods[11] = (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)&GetResult;
+        methods[11] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)&GetResult;
         methods[18] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, int>)&SubmitCallback;
 
         _header = (AuthoredRuntimeAsyncHeader*)NativeMemory.Alloc((nuint)sizeof(AuthoredRuntimeAsyncHeader));
@@ -41,19 +42,83 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
         }
     }
 
-    internal int BeginResult { get; set; }
-    internal int ScheduleResult { get; set; }
-    internal int BeginCalls { get; private set; }
-    internal int WorkCalls { get; private set; }
-    internal int CompleteCalls { get; private set; }
-    internal int ResultCalls { get; private set; }
-    internal int CancelCalls { get; private set; }
-    internal int CleanupCalls { get; private set; }
-    internal int CompletionCallbacks { get; private set; }
-    internal int BoundaryFailures { get; private set; }
-    internal nint LastIdentity { get; private set; }
-    internal int LastCompletedResult { get; private set; }
-    internal nuint LastCompletedSize { get; private set; }
+    internal int BeginResult
+    {
+        get;
+        set;
+    }
+
+    internal int ScheduleResult
+    {
+        get;
+        set;
+    }
+
+    internal int BeginCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int WorkCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int CompleteCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int ResultCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int CancelCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int CleanupCalls
+    {
+        get;
+        private set;
+    }
+
+    internal int CompletionCallbacks
+    {
+        get;
+        private set;
+    }
+
+    internal int BoundaryFailures
+    {
+        get;
+        private set;
+    }
+
+    internal nint LastIdentity
+    {
+        get;
+        private set;
+    }
+
+    internal int LastCompletedResult
+    {
+        get;
+        private set;
+    }
+
+    internal nuint LastCompletedSize
+    {
+        get;
+        private set;
+    }
 
     internal int QueuedWork
     {
@@ -69,6 +134,19 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
         {
             return _completions.Count;
         }
+    }
+
+    public void Dispose()
+    {
+        if (_header == null)
+        {
+            return;
+        }
+
+        GCHandle.FromIntPtr(_header->Owner).Free();
+        NativeMemory.Free((void*)_header->Methods);
+        NativeMemory.Free(_header);
+        _header = null;
     }
 
     internal bool DispatchWork()
@@ -137,19 +215,6 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
         _completions.Clear();
     }
 
-    public void Dispose()
-    {
-        if (_header == null)
-        {
-            return;
-        }
-
-        GCHandle.FromIntPtr(_header->Owner).Free();
-        NativeMemory.Free((void*)_header->Methods);
-        NativeMemory.Free(_header);
-        _header = null;
-    }
-
     private static AuthoredRuntimeAsyncHost FromObject(nint self)
     {
         return (AuthoredRuntimeAsyncHost)GCHandle.FromIntPtr(((AuthoredRuntimeAsyncHeader*)self)->Owner).Target!;
@@ -168,7 +233,8 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int Begin(nint self, XAsyncBlock* block, nint context, nint identity, byte* identityName, nint provider)
+    private static int Begin(nint self, XAsyncBlock* block, nint context, nint identity, byte* identityName,
+        nint provider)
     {
         var instance = FromObject(self);
 
@@ -195,7 +261,7 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
 
         if (block == null || provider == 0 ||
             (_operations.TryGetValue((nint)block, out var previous) &&
-                (!previous.CleanupDelivered || !previous.CompletionDelivered)))
+             (!previous.CleanupDelivered || !previous.CompletionDelivered)))
         {
             return RuntimeServiceResult.InvalidArgument;
         }
@@ -314,7 +380,8 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
 
     private int TakeResult(XAsyncBlock* block, nint identity, nuint capacity, nint buffer, nuint* used)
     {
-        if (!_operations.TryGetValue((nint)block, out var operation) || operation.Identity != identity || operation.ResultTaken)
+        if (!_operations.TryGetValue((nint)block, out var operation) || operation.Identity != identity
+                                                                     || operation.ResultTaken)
         {
             return RuntimeServiceResult.InvalidArgument;
         }
@@ -368,7 +435,8 @@ internal sealed unsafe class AuthoredRuntimeAsyncHost : IDisposable
             Buffer = buffer
         };
 
-        return ((delegate* unmanaged[Stdcall]<XAsyncOperation, XAsyncProviderData*, int>)operation.Provider)(reason, &data);
+        return ((delegate* unmanaged[Stdcall]<XAsyncOperation, XAsyncProviderData*, int>)operation.Provider)(reason,
+            &data);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

@@ -5,4 +5,9 @@ using IraRationis.Graphics.Textures.Models;
 namespace IraRationis.Graphics.Drawing.Models;
 
 internal sealed record DualMaskRectangleBindings(
-    TextureSource First, nint FirstHost, TextureSource Second, nint SecondHost, nint Heap, ulong GpuTable);
+    TextureSource First,
+    nint FirstHost,
+    TextureSource Second,
+    nint SecondHost,
+    nint Heap,
+    ulong GpuTable);

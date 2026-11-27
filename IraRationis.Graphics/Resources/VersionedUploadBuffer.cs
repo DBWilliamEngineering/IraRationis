@@ -11,7 +11,7 @@ namespace IraRationis.Graphics.Resources;
 /// </summary>
 internal sealed class VersionedUploadBuffer
 {
-    //TODO: Damon -> Integrate raw guest writes and physical aliases before using versions to skip general title uploads.
+    //TODO: Damon William -> Integrate raw guest writes and physical aliases before using versions to skip general title uploads.
     private const int MaximumBytes = 16 * 1024 * 1024;
     private readonly byte[] _data;
 

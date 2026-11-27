@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Device.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct GraphicsHeapProperties
+internal struct GraphicsHeapProperties
 {
     public uint Kind;
     public uint CpuPages;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using IraRationis.Media.Audio;
-using XApu = global::IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
+using XApu = IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
 
 namespace IraRationis.HLE.Audio.Apu;
 

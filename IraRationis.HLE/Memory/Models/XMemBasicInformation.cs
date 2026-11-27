@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XMemBasicInformation
+internal struct XMemBasicInformation
 {
     public XMemMemoryInformation Host;
     public ulong Flags;

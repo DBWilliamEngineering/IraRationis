@@ -12,23 +12,87 @@ internal static unsafe class AuthoredRuntimeBridgeTargets
     internal const int OutgoingSystemError = 457;
     internal const int OutgoingInvocationError = 613;
 
-    internal static int Calls { get; private set; }
-    internal static int ObservedSystemError { get; private set; }
-    internal static int ObservedInvocationError { get; private set; }
-    internal static ulong FirstVersion { get; private set; }
-    internal static ulong SecondVersion { get; private set; }
-    internal static ulong Flags { get; private set; }
-    internal static nint Options { get; private set; }
-    internal static nint Name { get; private set; }
-    internal static nint File { get; private set; }
-    internal static nint Module { get; private set; }
-    internal static nint Provider { get; private set; }
-    internal static nint RequestedInterface { get; private set; }
-    internal static nint Output { get; private set; }
-
     private static int _result;
     private static nint _pointerResult;
     private static bool _writeOutput;
+
+    internal static int Calls
+    {
+        get;
+        private set;
+    }
+
+    internal static int ObservedSystemError
+    {
+        get;
+        private set;
+    }
+
+    internal static int ObservedInvocationError
+    {
+        get;
+        private set;
+    }
+
+    internal static ulong FirstVersion
+    {
+        get;
+        private set;
+    }
+
+    internal static ulong SecondVersion
+    {
+        get;
+        private set;
+    }
+
+    internal static ulong Flags
+    {
+        get;
+        private set;
+    }
+
+    internal static nint Options
+    {
+        get;
+        private set;
+    }
+
+    internal static nint Name
+    {
+        get;
+        private set;
+    }
+
+    internal static nint File
+    {
+        get;
+        private set;
+    }
+
+    internal static nint Module
+    {
+        get;
+        private set;
+    }
+
+    internal static nint Provider
+    {
+        get;
+        private set;
+    }
+
+    internal static nint RequestedInterface
+    {
+        get;
+        private set;
+    }
+
+    internal static nint Output
+    {
+        get;
+        private set;
+    }
 
     internal static nint InitializeAddress
     {

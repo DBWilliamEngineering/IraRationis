@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using TerraFX.Interop.DirectX;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Media;
 
@@ -61,7 +61,8 @@ public sealed unsafe class MediaGpuContext : IDisposable
             var queueId = GraphicsDevice.QueueId;
             var description = default(D3D12_COMMAND_QUEUE_DESC);
             var create =
-                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(
+                    _device, 8);
             var result = create(_device, &description, &queueId, &queue);
 
             _queue = queue;
@@ -162,7 +163,8 @@ public sealed unsafe class MediaGpuContext : IDisposable
                 throw new InvalidOperationException("R44 host media pipeline cache capacity reached.");
             }
 
-            GraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot, out var createdPipeline, shader);
+            GraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot, out var createdPipeline,
+                shader);
 
             entry = (createdRoot, createdPipeline);
 

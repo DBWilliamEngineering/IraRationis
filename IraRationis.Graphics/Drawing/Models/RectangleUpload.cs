@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using IraRationis.Graphics.Commands.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed unsafe class RectangleUpload(ulong table, ulong vertex, uint stride, RecordedUploadSlice slice)
+internal sealed class RectangleUpload(ulong table, ulong vertex, uint stride, RecordedUploadSlice slice)
 {
     public readonly RecordedUploadSlice Slice = slice;
     public readonly uint Stride = stride;
@@ -15,11 +15,11 @@ internal sealed unsafe class RectangleUpload(ulong table, ulong vertex, uint str
     public int Capacity;
     public int ConstantBytes = GraphicsDevice.RectangleConstantBytes;
     public int ConstantOffset;
-    public int NonIndexedVertexBytes;
+    public DualMaskRectangleBindings? DualMask;
     public IndexedUploadPlan? Indexed;
     public bool IndexedArray;
     public bool IndexedColor;
-    public DualMaskRectangleBindings? DualMask;
+    public int NonIndexedVertexBytes;
     public int Phase;
     public nint Target;
 }

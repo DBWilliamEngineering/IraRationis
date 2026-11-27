@@ -40,7 +40,8 @@ internal static unsafe partial class InstructionProbeNativeMethods
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    internal static partial nuint VirtualQuery(nint address, InstructionProbeMemoryInformation* information, nuint size);
+    internal static partial nuint
+        VirtualQuery(nint address, InstructionProbeMemoryInformation* information, nuint size);
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

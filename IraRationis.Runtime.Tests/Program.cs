@@ -3,9 +3,9 @@
 
 using System.Buffers.Binary;
 using IraRationis.Graphics.Device;
-using IraRationis.HLE.Input;
 using IraRationis.HLE.Audio;
 using IraRationis.HLE.Audio.Movie;
+using IraRationis.HLE.Input.GameInputModule;
 using IraRationis.HLE.Input.Models;
 using IraRationis.HLE.Runtime;
 using IraRationis.HLE.Runtime.Models;
@@ -16,13 +16,12 @@ using IraRationis.Loader.Threads;
 using IraRationis.PE.Models;
 using IraRationis.Runtime.Tests.Contracts;
 using IraRationis.Runtime.Tests.Hardware;
-using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Input;
+using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Memory;
 using IraRationis.Runtime.Tests.RuntimeBridge;
 using IraRationis.Runtime.Tests.RuntimeServices;
 using IraRationis.Shaders.Raster;
-using IraRationis.HLE.Input.GameInputModule;
 
 namespace IraRationis.Runtime.Tests;
 
@@ -35,7 +34,8 @@ internal static class Program
             var translated = SrgbTextureStripCompiler.Translate(File.ReadAllBytes(vertex), File.ReadAllBytes(pixel),
                 File.ReadAllBytes(root));
 
-            Console.WriteLine($"Captured sRGB texture-strip contract accepted: VS source={translated.VertexSource.Length}; PS source={translated.PixelSource.Length} (CPU only).");
+            Console.WriteLine(
+                $"Captured sRGB texture-strip contract accepted: VS source={translated.VertexSource.Length}; PS source={translated.PixelSource.Length} (CPU only).");
 
             return 0;
         }
@@ -89,34 +89,36 @@ internal static class Program
 
         PhysicalPageTests.Run();
 
+        DirectStorageBcPackTests.Run();
+
         InteropTests.Run();
 
         var image = (nuint)0x10000000;
         Require(AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x5C60800), "Audio mixer thunk");
         Require(AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x1E95040), "Audio mixer direct entry");
         Require(!AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x5B94C00) &&
-            !AudioMixerScheduling.Matches(image, image + 0x2215EA1, image + 0x5C60800) &&
-            !AudioMixerScheduling.Matches(image, image - 1, image + 0x5C60800) &&
-            !AudioMixerScheduling.Matches(0, 0x2215EA0, 0x5C60800), "Audio mixer unrelated thread rejection");
+                !AudioMixerScheduling.Matches(image, image + 0x2215EA1, image + 0x5C60800) &&
+                !AudioMixerScheduling.Matches(image, image - 1, image + 0x5C60800) &&
+                !AudioMixerScheduling.Matches(0, 0x2215EA0, 0x5C60800), "Audio mixer unrelated thread rejection");
         Require(AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA0, image + 0x442FA80) &&
-            !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA0, image + 0x1E95040) &&
-            !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA1, image + 0x442FA80) &&
-            !AudioMixerScheduling.MatchesMovie(image, image + 0x442FA80, image + 0x442FA80),
+                !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA0, image + 0x1E95040) &&
+                !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA1, image + 0x442FA80) &&
+                !AudioMixerScheduling.MatchesMovie(image, image + 0x442FA80, image + 0x442FA80),
             "Movie scheduling requires the exact title wrapper and worker");
 
         const ulong preferredImage = 0x140000000;
         var endpointThunk = image + (nuint)(0x1443ADC30 - preferredImage);
         var endpointEntry = image + (nuint)(0x1443ADC40 - preferredImage);
         Require(AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, endpointThunk) &&
-            AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, endpointEntry) &&
-            !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA1, endpointEntry) &&
-            !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, image + 0x443ADC40),
+                AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, endpointEntry) &&
+                !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA1, endpointEntry) &&
+                !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, image + 0x443ADC40),
             "Spatial output worker address rebasing and unrelated thread rejection");
 
         const string movieLibraryHash = "CB71456919AADA87FDDAFC44A27B8733AA827DE4DA58516E9381323EF70DA331";
         Require(MovieAudioImportTrace.MatchesProfile(AudioMixerScheduling.ObservedBuild, movieLibraryHash) &&
-            !MovieAudioImportTrace.MatchesProfile(string.Empty, movieLibraryHash) &&
-            !MovieAudioImportTrace.MatchesProfile(AudioMixerScheduling.ObservedBuild, movieLibraryHash[..16]),
+                !MovieAudioImportTrace.MatchesProfile(string.Empty, movieLibraryHash) &&
+                !MovieAudioImportTrace.MatchesProfile(AudioMixerScheduling.ObservedBuild, movieLibraryHash[..16]),
             "Movie audio tracing requires both complete fingerprints");
 
         Console.WriteLine("Audio worker identity and movie audio trace profile contracts passed (CPU only).");
@@ -310,6 +312,28 @@ internal static class Program
         var resolver = new HleResolver(registry, new HostPolicy([]));
 
         Require(host.Allows("KERNEL32.DLL") && !host.Allows("xmem.dll"), "Host policy");
+
+        var custom = new HostPolicy(["exact.dll", "api-ms-win-core-test-*"]);
+        Require(custom.Allows("EXACT.DLL") &&
+                custom.Allows("API-MS-WIN-CORE-TEST-L1-1-0.DLL") &&
+                !custom.Allows("exact.dll.extra") && !custom.Allows("kernel32.dll"),
+            "Host policy exact names and module families");
+
+        if (OperatingSystem.IsWindows())
+        {
+            var processId = new ImportSymbol("GetCurrentProcessId", 0);
+            var address = host.Resolve("kernel32.dll", processId);
+            Require(address is > 0 && host.Resolve("KERNEL32.DLL", processId) == address,
+                "Host named export resolution and case-insensitive module reuse");
+            Require(host.Resolve("kernel32.dll", new ImportSymbol("getcurrentprocessid", 0)) is null,
+                "Host export names remain case-sensitive");
+
+            var wildcard = new HostPolicy(["*"]);
+            Require(wildcard.Resolve("..\\kernel32.dll", processId) is null &&
+                    wildcard.Resolve("kernel32.dll\0extra", processId) is null &&
+                    wildcard.Resolve("kernel32.dll", new ImportSymbol("GetCurrentProcessId\0extra", 0)) is null,
+                "Host loader rejects path syntax and embedded null characters under a wildcard policy");
+        }
 
         Require(registry.Lookup("API-MS-WIN-CORE-LIBRARYLOADER-L1-2-0.DLL", "Probe") == 0x1234, "Registry wildcard");
 

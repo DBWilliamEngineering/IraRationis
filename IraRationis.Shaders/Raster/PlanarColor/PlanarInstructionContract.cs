@@ -63,7 +63,7 @@ internal static class PlanarInstructionContract
         reader.Add(10, 13, 4);
         reader.Add(5, 14, 7);
         reader.Add(0, 15, 0);
-        reader.Export(12, 3, 10, 5, 0, done: true);
+        reader.Export(12, 3, 10, 5, 0, true);
         reader.Wait(0xc07f);
         reader.MultiplyLegacy(1, 0, 8);
         reader.MultiplyLegacy(4, 1, 9);
@@ -153,7 +153,7 @@ internal static class PlanarInstructionContract
         reader.ScalarNoOperation();
         reader.PackHalfTowardZero(0, RasterInstructionReader.Vector(2), 3);
         reader.PackHalfTowardZero(1, RasterInstructionReader.Vector(4), 5);
-        reader.Export(0, 0, 1, 0, 0, done: true, compressed: true, validMask: true);
+        reader.Export(0, 0, 1, 0, 0, true, true, true);
         reader.End();
         reader.Padding();
     }

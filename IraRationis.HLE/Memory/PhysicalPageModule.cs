@@ -3,9 +3,9 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 using IraRationis.HLE.Memory.Models;
 using IraRationis.HLE.Runtime.Models;
+using Microsoft.Win32.SafeHandles;
 
 namespace IraRationis.HLE.Memory;
 
@@ -266,7 +266,7 @@ public static unsafe partial class PhysicalPageModule
     private static bool UnmapRange(ulong start, ulong size)
     {
         // O(log n + k log n) index work for k overlaps; Windows mapping calls remain serialized by Gate.
-        //TODO: Damon -> Profile mapping-call latency and Gate contention before changing ownership or lock scope.
+        //TODO: Damon William -> Profile mapping-call latency and Gate contention before changing ownership or lock scope.
         if (size == 0)
         {
             return true;
@@ -430,8 +430,18 @@ public static unsafe partial class PhysicalPageModule
     // DirectStorage may write a physical page even when it has no title view.
     public static bool WritePhysical(nuint* pages, ulong offset, ReadOnlySpan<byte> data)
     {
+        return WritePhysical(pages, offset, data, out _);
+    }
+
+    public static bool WritePhysical(nuint* pages, ulong offset, ReadOnlySpan<byte> data,
+        out PhysicalPageWriteFailure failure)
+    {
+        failure = PhysicalPageWriteFailure.None;
+
         if (pages == null || offset >= PageSize)
         {
+            failure = PhysicalPageWriteFailure.InvalidDestination;
+
             return false;
         }
 
@@ -447,8 +457,12 @@ public static unsafe partial class PhysicalPageModule
 
             for (ulong index = 0; index < count; index++)
             {
-                if (!Pages.TryGetValue(pages[index], out var slice))
+                var pageNumber = pages[index];
+
+                if (!Pages.TryGetValue(pageNumber, out var slice))
                 {
+                    failure = pageNumber == 0 ? PhysicalPageWriteFailure.UnpublishedPage : PhysicalPageWriteFailure.UnknownPage;
+
                     return false;
                 }
 
@@ -469,6 +483,7 @@ public static unsafe partial class PhysicalPageModule
                 if (view == 0)
                 {
                     Report("MapViewOfFile (storage)", 0, length);
+                    failure = PhysicalPageWriteFailure.MappingFailed;
 
                     return false;
                 }
@@ -478,6 +493,7 @@ public static unsafe partial class PhysicalPageModule
                     if (VirtualAlloc(view, (nuint)length, MemCommit, PageReadWrite) == 0)
                     {
                         Report("VirtualAlloc (storage commit)", (nuint)view, length);
+                        failure = PhysicalPageWriteFailure.CommitFailed;
 
                         return false;
                     }
@@ -496,7 +512,14 @@ public static unsafe partial class PhysicalPageModule
                 }
             }
 
-            return done == data.Length;
+            if (done != data.Length)
+            {
+                failure = PhysicalPageWriteFailure.IncompleteWrite;
+
+                return false;
+            }
+
+            return true;
         }
     }
 

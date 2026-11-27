@@ -32,7 +32,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (!TryGetVertexRange(plan, indices, out var vertexOffset, out var vertexBytes))
         {
-            Environment.FailFast("[graphics] Indexed color compact staging found an index outside the guest vertex view.");
+            Environment.FailFast(
+                "[graphics] Indexed color compact staging found an index outside the guest vertex view.");
         }
 
         if (vertexBytes > MaximumCompactVertexBytes || vertexBytes >= plan.VertexBytes)
@@ -51,17 +52,20 @@ public static unsafe partial class ConsoleGraphicsDevice
             Span<byte> token = stackalloc byte[16];
             Span<byte> recheck = stackalloc byte[16];
 
-            if (!TryReadGuestMemory(upload.Table, token) || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag ||
+            if (!TryReadGuestMemory(upload.Table, token)
+                || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag ||
                 !TryReadGuestMemory(upload.Vertex + (ulong)vertexOffset, vertices))
             {
-                Environment.FailFast("[graphics] Indexed color compact staging could not read the guest descriptor or vertices.");
+                Environment.FailFast(
+                    "[graphics] Indexed color compact staging could not read the guest descriptor or vertices.");
             }
 
             var requiredBytes = upload.ConstantBytes;
 
             if (upload.IndexedArray && !TryConstantExtent(plan, vertices, indices, out requiredBytes, vertexOffset))
             {
-                Environment.FailFast("[graphics] Indexed color compact staging could not determine the constant extent.");
+                Environment.FailFast(
+                    "[graphics] Indexed color compact staging could not determine the constant extent.");
             }
 
             var address = BinaryPrimitives.ReadUInt64LittleEndian(token[8..]);
@@ -92,8 +96,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (GraphicsLogSampling.IsSample(count))
         {
             Console.Error.WriteLine($"[performance] Indexed color compact upload: observations={count}; " +
-                $"vertexOffset={vertexOffset}; vertexBytes={vertexBytes}; indexBytes={plan.IndexBytes}; " +
-                $"constantBytes={upload.ConstantBytes}; copiedBytes={stagingBytes + plan.IndexBytes}; allocationBytes={upload.Capacity}.");
+                                    $"vertexOffset={vertexOffset}; vertexBytes={vertexBytes}; indexBytes={plan.IndexBytes}; "
+                                    +
+                                    $"constantBytes={upload.ConstantBytes}; copiedBytes={stagingBytes + plan.IndexBytes}; allocationBytes={upload.Capacity}.");
         }
 
         return true;
@@ -123,7 +128,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             indices.CopyTo(destination.Slice(indexDestination, indices.Length));
             constants.CopyTo(destination.Slice(constantDestination, constants.Length));
 
-            written.Begin = (nuint)(hostOffset + Math.Min(constantDestination, Math.Min(vertexDestination, indexDestination)));
+            written.Begin =
+                (nuint)(hostOffset + Math.Min(constantDestination, Math.Min(vertexDestination, indexDestination)));
             written.End = (nuint)(hostOffset + Math.Max(constantDestination + constants.Length,
                 Math.Max(vertexDestination + vertices.Length, indexDestination + indices.Length)));
         }

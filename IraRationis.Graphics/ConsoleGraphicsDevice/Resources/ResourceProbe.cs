@@ -2,9 +2,9 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -115,7 +115,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var createCommitted =
-                (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, Guid*, nint
+                (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint,
+                    Guid*, nint
                     *, int>)Slot(device, 27);
 
             CheckResource(createCommitted(device, &properties, 0, &desc, 0, 0, &id, &committed), "committed buffer");
@@ -213,7 +214,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 (nint)(delegate* unmanaged[Stdcall]<void*, ulong, void>)&ProbeFreeResource);
 
             var create =
-                (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, Guid*, nint
+                (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint,
+                    Guid*, nint
                     *, int>)Slot(device, 27);
 
             CheckResource(create(device, &properties, 0, &description, 0, 0, &id, &resource),
@@ -365,7 +367,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var id = ResourceId;
         var texture = (nint)0;
         var create =
-            (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, Guid*, nint*,
+            (delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, Guid*,
+                nint*,
                 int>)Slot(device, 27);
 
         try

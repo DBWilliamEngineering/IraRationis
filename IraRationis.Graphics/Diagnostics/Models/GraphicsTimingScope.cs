@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Diagnostics.Models;
 
-internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample) : IDisposable
+internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample)
+    : IDisposable
 {
     public void Dispose()
     {

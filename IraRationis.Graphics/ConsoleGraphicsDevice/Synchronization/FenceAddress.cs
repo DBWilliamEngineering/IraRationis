@@ -101,7 +101,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void RunFenceMirrorObserver()
     {
-        for(;;)
+        for (;;)
         {
             int delay;
 

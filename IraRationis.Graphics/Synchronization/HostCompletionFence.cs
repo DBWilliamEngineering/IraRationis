@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Synchronization;
 
@@ -81,7 +81,8 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         var started = Stopwatch.GetTimestamp();
         var value = ++timeline.Value;
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(queue, 14))(queue, timeline.Fence,
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(queue, 14))(queue,
+            timeline.Fence,
             value);
 
         if (resultCode < 0)

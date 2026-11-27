@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Device.Models;
@@ -13,6 +12,7 @@ using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Synchronization;
 using IraRationis.Graphics.Textures.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -20,8 +20,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     internal const int MemoryWaitTimeoutMilliseconds = 30000;
     private const int MaximumMemoryOperations = 65536;
-    private static readonly bool EnableGuardedPublication = Environment.GetEnvironmentVariable("IRX_GUARDED_MEMORY_PUBLICATION") == "1";
-    private static readonly bool SkipEmptyDrawSegments = Environment.GetEnvironmentVariable("IRX_SKIP_EMPTY_DRAW_SEGMENTS") == "1";
+    private static readonly bool EnableGuardedPublication =
+        Environment.GetEnvironmentVariable("IRX_GUARDED_MEMORY_PUBLICATION") == "1";
+    private static readonly bool SkipEmptyDrawSegments =
+        Environment.GetEnvironmentVariable("IRX_SKIP_EMPTY_DRAW_SEGMENTS") == "1";
     private static int _guardedPublicationUnavailable;
     private static long _guardedPublicationHits;
     private static long _guardedPublicationMisses;
@@ -37,22 +39,30 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             return false;
         }
+
         try
         {
             var accepted = TryPublishResidentScalar((nuint)address, value, (uint)bytes) != 0;
-            var count = accepted ? Interlocked.Increment(ref _guardedPublicationHits) : Interlocked.Increment(ref _guardedPublicationMisses);
+            var count = accepted
+                ? Interlocked.Increment(ref _guardedPublicationHits)
+                : Interlocked.Increment(ref _guardedPublicationMisses);
             if (count <= 2 || (count & (count - 1)) == 0)
             {
-                Console.Error.WriteLine($"[graphics] IRX-R75-PUBLICATION: residentHits={Interlocked.Read(ref _guardedPublicationHits)}; kernelFallbacks={Interlocked.Read(ref _guardedPublicationMisses)}.");
+                Console.Error.WriteLine(
+                    $"[graphics] IRX-R75-PUBLICATION: residentHits={Interlocked.Read(ref _guardedPublicationHits)}; kernelFallbacks={Interlocked.Read(ref _guardedPublicationMisses)}.");
             }
+
             return accepted;
         }
-        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException
+                                              or BadImageFormatException)
         {
             if (Interlocked.Exchange(ref _guardedPublicationUnavailable, 1) == 0)
             {
-                Console.Error.WriteLine("[graphics] IRX-R75-PUBLICATION: native export unavailable; retaining kernel writes.");
+                Console.Error.WriteLine(
+                    "[graphics] IRX-R75-PUBLICATION: native export unavailable; retaining kernel writes.");
             }
+
             return false;
         }
     }
@@ -147,7 +157,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         using var stageTiming = BeginTiming(GraphicsStage.SealBoundary);
 
         var current = Host(self);
-        var boundary = new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor, indexedUi);
+        var boundary = new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor,
+            indexedUi);
 
         if (current == 0) // Synthetic ABI probe only.
         {
@@ -171,7 +182,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (resultCode < 0)
         {
-            var boundaryName = indexedUi.HasValue ? "indexed-ui" : planarColor.HasValue ? "planar-color" :
+            var boundaryName = indexedUi.HasValue ? "indexed-ui" :
+                planarColor.HasValue ? "planar-color" :
                 compute != null ? "compute" :
                 textured.HasValue ? "textured-rectangle" :
                 rectangle.HasValue ? "rectangle" :
@@ -317,7 +329,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var started = Stopwatch.GetTimestamp();
 
-        for(;;)
+        for (;;)
         {
             if (!TryReadMemory(wait.Address, wait.Bytes, out var value))
             {
@@ -356,8 +368,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             using var completion = new HostCompletionFence();
             using var ordered = EnableOrderedTextureUploads && !EnableColorFlow && !EnableInputColorTrace &&
-                !EnableTextureIntermediatePreview && !EnableGuestPreviewWindow
-                ? new OrderedTextureUploads(queue, EnableBatchedTextureUploads) : null;
+                                !EnableTextureIntermediatePreview && !EnableGuestPreviewWindow
+                ? new OrderedTextureUploads(queue, EnableBatchedTextureUploads)
+                : null;
 
             foreach (var boundary in state.MemoryBoundaries)
             {
@@ -418,7 +431,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
                     catch (Exception exception)
                     {
-                        Environment.FailFast($"[graphics] Planar color submission failed: {exception.Message}", exception);
+                        Environment.FailFast($"[graphics] Planar color submission failed: {exception.Message}",
+                            exception);
                     }
                 }
 
@@ -430,7 +444,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
                     catch (Exception exception)
                     {
-                        Environment.FailFast($"[graphics] Indexed UI submission failed: {exception.Message}", exception);
+                        Environment.FailFast($"[graphics] Indexed UI submission failed: {exception.Message}",
+                            exception);
                     }
                 }
 
@@ -471,7 +486,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 ulong gpu = 0, cpu = 0;
                 // ID3D12CommandQueue::GetClockCalibration is slot 17.
-                var resultCode = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
+                var resultCode =
+                    ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
 
                 if (resultCode < 0)
                 {
@@ -482,6 +498,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 break;
             }
+
             case 8 when write.Flags == 2:
                 value = (ulong)Stopwatch.GetTimestamp();
 

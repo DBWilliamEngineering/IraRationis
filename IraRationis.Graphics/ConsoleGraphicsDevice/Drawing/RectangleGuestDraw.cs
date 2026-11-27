@@ -4,7 +4,6 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Text;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Diagnostics.Models;
@@ -15,6 +14,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.VertexFetch.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -35,7 +35,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         Environment.GetEnvironmentVariable("IRX_SPARSE_INDEX_UPLOAD") == "1";
     private static int _sparseUploads;
     private static readonly ConditionalWeakTable<RecordedCommandState,
-        Dictionary<(nint Pipeline, nint Root, uint Stride, bool IndexedColor, bool DepthBound, uint ColorFormat), RectanglePipeline>>
+            Dictionary<(nint Pipeline, nint Root, uint Stride, bool IndexedColor, bool DepthBound, uint ColorFormat),
+                RectanglePipeline>>
         RectanglePipelines = new();
 
     private static bool TryReadVertexInputLayout(ulong address, uint count, out VertexInputElement[]? elements)
@@ -49,7 +50,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return true;
         }
 
-        if (count > 32 || address == 0 || 32UL * count > ulong.MaxValue - address || sizeof(NativeVertexInputElement) != 32)
+        if (count > 32 || address == 0 || 32UL * count > ulong.MaxValue - address
+            || sizeof(NativeVertexInputElement) != 32)
         {
             return false;
         }
@@ -126,7 +128,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
     }
 
-    private static bool TryNormalizeRectangleLayout(VertexInputElement[]? input, uint stride, out VertexInputElement[] elements)
+    private static bool TryNormalizeRectangleLayout(VertexInputElement[]? input, uint stride,
+        out VertexInputElement[] elements)
     {
         elements = [];
 
@@ -241,7 +244,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         return targets is { Bytes.Length: 40 } &&
                BinaryPrimitives.ReadUInt32LittleEndian(targets.Bytes) == 15 &&
-               IsPipelineStateCompatible(targets, rectangle: !indexedColor, allowDepthless: !depthBound, colorFormat: colorFormat);
+               IsPipelineStateCompatible(targets, !indexedColor, !depthBound, colorFormat);
     }
 
     private static RectanglePipeline? GetRectanglePipeline(RecordedCommandState state, uint stride, bool indexedColor,
@@ -257,7 +260,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var cache = RectanglePipelines.GetOrCreateValue(state);
-        var key = (state.Pipeline, Root: rootSignature, Stride: stride, IndexedColor: indexedColor, DepthBound: depthBound,
+        var key = (state.Pipeline, Root: rootSignature, Stride: stride, IndexedColor: indexedColor,
+            DepthBound: depthBound,
             ColorFormat: colorFormat);
 
         if (cache.TryGetValue(key, out var cached))
@@ -331,10 +335,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             report.WriteLine(dualMask
                 ? "[graphics] Recognized rectangle with two sampled alpha masks."
                 : indexedColor
-                ? pair.IndexedArray
-                    ? "[graphics] IRX-GFX-SHADER-R23: recognized indexed array color transform; up to 256 parameter blocks."
-                    : $"[graphics] IRX-GFX-SHADER-R22: recognized indexed triangle color transform; {pair.IndexedVertexConstantBytes}-byte vertex CBV."
-                : "[graphics] IRX-GFX-SHADER-R14: recognized rectangle IA fetch / perspective COLOR / CBV modulation; b27, space1.");
+                    ? pair.IndexedArray
+                        ? "[graphics] IRX-GFX-SHADER-R23: recognized indexed array color transform; up to 256 parameter blocks."
+                        : $"[graphics] IRX-GFX-SHADER-R22: recognized indexed triangle color transform; {pair.IndexedVertexConstantBytes}-byte vertex CBV."
+                    : "[graphics] IRX-GFX-SHADER-R14: recognized rectangle IA fetch / perspective COLOR / CBV modulation; b27, space1.");
 
             var vertexShader = CompileHostShader(pair.VertexSource, "vs_5_1", report);
             var geometryShader = indexedColor ? null : CompileHostShader(pair.GeometrySource, "gs_5_1", report);
@@ -342,9 +346,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             // The descriptor table is lowered to a root CBV. It is populated only after the preceding guest work.
             var contract = new VertexFetchShaderPair(string.Empty, string.Empty, pair.Register, pair.Space, default,
                 default);
-            var blob = SerializeHostRoot(contract, report, rectangle: true, dualMask: dualMask);
+            var blob = SerializeHostRoot(contract, report, true, dualMask);
 
-            if (vertexShader == null || (!indexedColor && geometryShader == null) || pixelShader == null || blob == null)
+            if (vertexShader == null || (!indexedColor && geometryShader == null) || pixelShader == null
+                || blob == null)
             {
                 _ = RejectRectangleDraw("host shader compilation or root serialization failed");
 
@@ -395,8 +400,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                         $"[graphics] R14 input {element.Name}: format={element.Format}, offset={element.Offset}.");
                 }
 
-                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, hostMetadata, report, geometryShader,
-                    native, (uint)elements.Length, allowDepthless: !depthBound, colorFormat: colorFormat);
+                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, hostMetadata, report,
+                    geometryShader,
+                    native, (uint)elements.Length, !depthBound, colorFormat);
             }
 
             if (pipeline == 0)
@@ -469,7 +475,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         return true;
     }
 
-    private static bool TryRecordRectangleGuestDraw(nint self, uint vertices, uint instances, uint first, uint firstInstance,
+    private static bool TryRecordRectangleGuestDraw(nint self, uint vertices, uint instances, uint first,
+        uint firstInstance,
         bool indexed = false, int baseVertex = 0)
     {
         using var stageTiming = BeginTiming(GraphicsStage.RecordRectangle);
@@ -487,7 +494,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             firstInstance != 0
             || (!indexedColor && state.Topology != RectangleRectangleTopology) ||
             state.Viewports is not { Length: 1 } || state.Scissors is not { Length: 1 } ||
-            state.Targets.Length != 1 || (indexed && !indexedColor && !depthHandle.HasValue) || state.Vertices.Count != 1 ||
+            state.Targets.Length != 1 || (indexed && !indexedColor && !depthHandle.HasValue)
+            || state.Vertices.Count != 1 ||
             !state.Vertices.TryGetValue(0, out var vertex) || state.Graphics.Tables.Count != 1 ||
             !state.Graphics.Tables.TryGetValue(0, out var table) || state.Graphics.Views.Count != 0 ||
             (indexedColor
@@ -500,7 +508,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var stride = vertex.FormatOrStride;
 
         IndexedUploadPlan? plan = null;
-        var vertexRange = (Address: vertex.Address, Bytes: 0);
+        var vertexRange = (vertex.Address, Bytes: 0);
 
         if (indexed)
         {
@@ -524,7 +532,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return RejectRectangleDraw("vertex extent, descriptor or command-list budget invalid");
         }
 
-        if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat, out var target) ||
+        if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat,
+                out var target) ||
             !SupportsRectangleTargets(colorFormat, indexedColor, depthHandle.HasValue))
         {
             return RejectRectangleDraw("unsupported color target view");
@@ -585,7 +594,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var gpu = upload.GpuAddress;
 
-        var constants = table + (translated.DualMask ? (ulong)DualMaskConstantsOffset : 0UL);
+        var constants = table + (translated.DualMask ? DualMaskConstantsOffset : 0UL);
         var deferred = new RectangleUpload(constants, vertexRange.Address, stride, upload)
         {
             Target = target,
@@ -598,7 +607,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             NonIndexedVertexBytes = vertexRange.Bytes,
             Capacity = capacity,
             ConstantBytes = translated.IndexedArray ? RectangleConstantArrayBytes :
-                translated.DualMask ? DualMaskConstantBytes : indexedColor ? translated.IndexedVertexConstantBytes : RectangleConstantBytes
+                translated.DualMask ? DualMaskConstantBytes :
+                indexedColor ? translated.IndexedVertexConstantBytes : RectangleConstantBytes
         };
 
         SealMemoryBoundary(self, state, null, null, rectangle: new RectangleDrawBoundary(deferred, false));
@@ -716,7 +726,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
             else if (!upload.IndexedColor)
             {
-                TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R14: GPU COMPLETED guest rectangle (presentation unverified).");
+                TraceGraphicsSuccess(
+                    "[graphics] IRX-GFX-DRAW-R14: GPU COMPLETED guest rectangle (presentation unverified).");
             }
 
             TraceColor(queue, upload.Target, upload.IndexedArray ? "R23-indexed-output" :
@@ -762,7 +773,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var snapshot = capacity <= RectangleStackSnapshotLimit
                 ? stackalloc byte[capacity]
-                : rented == null ? new byte[capacity] : rented.AsSpan(0, capacity);
+                : rented == null
+                    ? new byte[capacity]
+                    : rented.AsSpan(0, capacity);
 
             snapshot.Clear();
 
@@ -770,7 +783,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             token.Clear();
 
-            if (!TryReadGuestMemory(upload.Table, token) || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag)
+            if (!TryReadGuestMemory(upload.Table, token)
+                || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag)
             {
                 Environment.FailFast($"[graphics] R14/R22/R23 submission-time descriptor is not an IRXC CBV token; " +
                                      $"tag=0x{BinaryPrimitives.ReadUInt32LittleEndian(token):X8}.");
@@ -1036,11 +1050,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         vertices[38] = 8;
 
         if (!TryConstantExtent(plan, vertices, [1, 0, 3, 0, 1, 0], out var small) || small != 576 ||
-            !TryConstantExtent(plan, vertices, [2, 0, 3, 0, 1, 0], out var large) || large != RectangleConstantArrayBytes ||
+            !TryConstantExtent(plan, vertices, [2, 0, 3, 0, 1, 0], out var large)
+            || large != RectangleConstantArrayBytes ||
             TryConstantExtent(plan, vertices, [0, 0, 1, 0, 2, 0], out _) ||
-            !TryConstantExtent(plan, vertices[16..], [2, 0, 3, 0, 2, 0], out var compact, vertexOffset: 16) ||
+            !TryConstantExtent(plan, vertices[16..], [2, 0, 3, 0, 2, 0], out var compact, 16) ||
             compact != RectangleConstantArrayBytes ||
-            TryConstantExtent(plan, vertices[16..], [1, 0, 2, 0, 1, 0], out _, vertexOffset: 16))
+            TryConstantExtent(plan, vertices[16..], [1, 0, 2, 0, 1, 0], out _, 16))
         {
             throw new InvalidOperationException("R23 indexed constant extent regression failed.");
         }
@@ -1059,7 +1074,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         BinaryPrimitives.WriteUInt32LittleEndian(depth.AsSpan(12), 2);
         BinaryPrimitives.WriteUInt32LittleEndian(format, 16);
 
-        var metadata = new GraphicsPipelineMetadata(0, [], [new(21, depth), new(16, format)], true, true);
+        var metadata = new GraphicsPipelineMetadata(0, [],
+            [new PipelineStateRecord(21, depth), new PipelineStateRecord(16, format)], true, true);
 
         if (!DepthTargetPolicy.TryGetHostState(metadata, false, out var host) ||
             !HasDisabledDepthStencil(host) ||
@@ -1077,7 +1093,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (DepthTargetPolicy.TryGetHostState(metadata, false, out _))
             {
-                throw new InvalidOperationException("Rectangle depthless pipeline accepted active stencil or depth bounds.");
+                throw new InvalidOperationException(
+                    "Rectangle depthless pipeline accepted active stencil or depth bounds.");
             }
 
             BinaryPrimitives.WriteUInt32LittleEndian(depth.AsSpan(unsupportedStateOffset), 0);
@@ -1102,18 +1119,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         var depth = guest.State.Single(static record => record.Kind == 21).Bytes;
         var targets = guest.State.Single(static record => record.Kind == 15).Bytes;
 
-        if (TryPrepareRectangleHostState(guest, alphaOnly, indexedColor: true, depthBound: false, out _))
+        if (TryPrepareRectangleHostState(guest, alphaOnly, true, false, out _))
         {
             throw new InvalidOperationException("Indexed A8 pipeline accepted active guest depth.");
         }
 
         depth.AsSpan(4, 8).Clear();
 
-        if (!TryPrepareRectangleHostState(guest, alphaOnly, indexedColor: true, depthBound: false, out var host) ||
+        if (!TryPrepareRectangleHostState(guest, alphaOnly, true, false, out var host) ||
             !ReferenceEquals(guest, host) ||
-            TryPrepareRectangleHostState(guest, alphaOnly, indexedColor: false, depthBound: false, out _) ||
-            TryPrepareRectangleHostState(guest, alphaOnly, indexedColor: true, depthBound: true, out _) ||
-            TryPrepareRectangleHostState(guest, rgba, indexedColor: false, depthBound: false, out _))
+            TryPrepareRectangleHostState(guest, alphaOnly, false, false, out _) ||
+            TryPrepareRectangleHostState(guest, alphaOnly, true, true, out _) ||
+            TryPrepareRectangleHostState(guest, rgba, false, false, out _))
         {
             throw new InvalidOperationException("Indexed A8 PSO output or depth contract changed.");
         }
@@ -1121,7 +1138,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         BinaryPrimitives.WriteUInt32LittleEndian(targets.AsSpan(8), rgba);
         BinaryPrimitives.WriteUInt32LittleEndian(targets.AsSpan(36), 2);
 
-        if (TryPrepareRectangleHostState(guest, alphaOnly, indexedColor: true, depthBound: false, out _))
+        if (TryPrepareRectangleHostState(guest, alphaOnly, true, false, out _))
         {
             throw new InvalidOperationException("Indexed A8 pipeline accepted an additional color target.");
         }

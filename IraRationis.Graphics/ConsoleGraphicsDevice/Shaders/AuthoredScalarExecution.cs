@@ -3,13 +3,13 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Descriptors;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Media;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Shaders.Compute;
 using IraRationis.Shaders.Scalar;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -78,7 +78,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var source = graph.EmitTypedCompute();
 
-        Console.WriteLine($"[runtime] IRX-R65: values={graph.ValueCount}; live={graph.LiveValueCount}; eliminated={graph.ValueCount - graph.LiveValueCount}; sourceChars={source.Length}; backend=typed-hlsl.");
+        Console.WriteLine(
+            $"[runtime] IRX-R65: values={graph.ValueCount}; live={graph.LiveValueCount}; eliminated={graph.ValueCount - graph.LiveValueCount}; sourceChars={source.Length}; backend=typed-hlsl.");
 
         var lowered = Stopwatch.GetTimestamp();
 
@@ -122,7 +123,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         ExecuteAuthoredScalarBatch(queue, source, inputA, inputB, expectedA, expectedB, started, lowered,
             "IRX-R66-GPU");
 
-        Console.WriteLine("[runtime] IRX-R66: returned=2; exhausted=1; outputWords=309; partialOutput=none; readback=verified.");
+        Console.WriteLine(
+            "[runtime] IRX-R66: returned=2; exhausted=1; outputWords=309; partialOutput=none; readback=verified.");
     }
 
     private static void ExecuteAuthoredScalarBatch(nint queue, string source, ReadOnlySpan<uint> inputA,
@@ -154,7 +156,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             RequireHostObject(readback, "Authored scalar readback");
 
             using var utility = AcquireUtilityContext(AuthoredScalarUploadBytes,
-                2 * DescriptorTableCache.DescriptorsPerTable, versioned: true);
+                2 * DescriptorTableCache.DescriptorsPerTable, true);
 
             var data = new byte[AuthoredScalarUploadBytes];
 
@@ -169,7 +171,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             var cache = new DescriptorTableCache(catalog, 2);
             var tableA = new ComputeBufferTable(
                 new BufferDescriptor(uploadIdentity, BufferViewKind.Constant, 0, 256),
-                new BufferDescriptor(uploadIdentity, BufferViewKind.ShaderResource, AuthoredScalarInputA, AuthoredScalarBytes),
+                new BufferDescriptor(uploadIdentity, BufferViewKind.ShaderResource, AuthoredScalarInputA,
+                    AuthoredScalarBytes),
                 new BufferDescriptor(outputIdentity, BufferViewKind.UnorderedAccess, 0, AuthoredScalarBytes));
             var tableB = tableA with { Input = tableA.Input with { Offset = AuthoredScalarInputB } };
             var leaseA = cache.TryAcquire(tableA) ?? throw new InvalidOperationException("Scalar table A unavailable.");
@@ -287,11 +290,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             for (var index = 0; index < AuthoredScalarDispatches; index++)
             {
                 var expected = index == 1 ? expectedB : expectedA;
-                var actual = results.Slice(index * ScalarReferenceExecutor.StateWords, ScalarReferenceExecutor.StateWords);
+                var actual = results.Slice(index * ScalarReferenceExecutor.StateWords,
+                    ScalarReferenceExecutor.StateWords);
 
                 if (!actual.SequenceEqual(expected))
                 {
-                    throw new InvalidOperationException($"Authored scalar dispatch {index} differs from CPU reference.");
+                    throw new InvalidOperationException(
+                        $"Authored scalar dispatch {index} differs from CPU reference.");
                 }
             }
         }

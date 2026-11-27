@@ -7,10 +7,10 @@ internal sealed class GraphicsLogSampling
     private readonly long[] _listKindCounts = new long[8];
     private readonly bool _sampleGraphics;
     private readonly bool _sampleListKinds;
-    private long _resourceLines;
-    private long _resourceEmitted;
-    private long _listLines;
     private long _listEmitted;
+    private long _listLines;
+    private long _resourceEmitted;
+    private long _resourceLines;
 
     internal GraphicsLogSampling(bool sampleGraphics, bool sampleListKinds, bool verbose)
     {
@@ -19,7 +19,10 @@ internal sealed class GraphicsLogSampling
         Enabled = !verbose && (sampleGraphics || sampleListKinds);
     }
 
-    internal bool Enabled { get; }
+    internal bool Enabled
+    {
+        get;
+    }
 
     internal bool ShouldEmitResourceView()
     {
@@ -35,6 +38,7 @@ internal sealed class GraphicsLogSampling
         }
 
         Interlocked.Increment(ref _resourceEmitted);
+
         return true;
     }
 
@@ -61,6 +65,7 @@ internal sealed class GraphicsLogSampling
         }
 
         Interlocked.Increment(ref _listEmitted);
+
         return true;
     }
 

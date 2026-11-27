@@ -91,7 +91,8 @@ internal static unsafe partial class RuntimeBridgeCallbacks
 
         incoming.Restore();
 
-        var result = ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)_query)(provider, requestedInterface, output);
+        var result =
+            ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)_query)(provider, requestedInterface, output);
         var outgoing = NativeErrorState.Capture();
 
         try

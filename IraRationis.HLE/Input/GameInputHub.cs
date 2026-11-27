@@ -4,7 +4,7 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
-using GameInput = global::IraRationis.HLE.Input.GameInputModule.GameInputModule;
+using GameInput = IraRationis.HLE.Input.GameInputModule.GameInputModule;
 
 namespace IraRationis.HLE.Input;
 
@@ -17,7 +17,8 @@ internal sealed unsafe class GameInputHub
     public readonly nint ReadingTable;
     public readonly List<GameInputRegistration> Registrations = [];
     public readonly List<(ulong Token, int Thread)> Running = [];
-    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInput.DeviceCount).Select(_ => new GameInputSlot()).ToArray();
+    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInput.DeviceCount).Select(_ => new GameInputSlot())
+        .ToArray();
     private readonly DualSenseProvider? _dualSense;
     private readonly long[] _retryAt = new long[4];
     private bool _usingDualSense;
@@ -73,7 +74,7 @@ internal sealed unsafe class GameInputHub
 
     private void PollLoop()
     {
-        for(;;)
+        for (;;)
         {
             Thread.Sleep(8);
 
@@ -143,7 +144,8 @@ internal sealed unsafe class GameInputHub
                     $"[input] IRX-R30-ROUTE: slot={GameInput.Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
             }
 
-            Update(GameInput.Fallback, useFallback, useFallback ? dualSense ?? GameInput.FallbackPad(keys) : null, [], timestamp,
+            Update(GameInput.Fallback, useFallback, useFallback ? dualSense ?? GameInput.FallbackPad(keys) : null, [],
+                timestamp,
                 events);
 
             Update(GameInput.Keyboard, true, null, keys, timestamp, events);
@@ -189,7 +191,8 @@ internal sealed unsafe class GameInputHub
         {
             if (Matches(registration, index) && (registration.Status & GameInput.Connected) != 0)
             {
-                events.Add(new GameInputNotification(registration, index, timestamp, connected ? GameInput.Connected : 0,
+                events.Add(new GameInputNotification(registration, index, timestamp,
+                    connected ? GameInput.Connected : 0,
                     previous ? GameInput.Connected : 0));
             }
         }

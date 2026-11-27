@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using IraRationis.HLE.Runtime.Services;
-using IraRationis.HLE.Runtime.Services.Users;
 using IraRationis.HLE.Runtime.Services.Users.LocalUserService;
 
 namespace IraRationis.Runtime.Tests.RuntimeServices;
@@ -26,8 +25,10 @@ internal static unsafe class RuntimeServiceRoutingPolicyTests
 
         var service = new TitleRuntimeService(0x1234ABCD, new RuntimeServiceTrace(TextWriter.Null));
 
-        Require(!service.TryQuery(Guid.Empty, out var unknown) && unknown == 0, "Unknown title interfaces are rejected.");
-        Require(service.TryQuery(TitleRuntimeService.Interface, out var address), "The verified title interface is available.");
+        Require(!service.TryQuery(Guid.Empty, out var unknown) && unknown == 0,
+            "Unknown title interfaces are rejected.");
+        Require(service.TryQuery(TitleRuntimeService.Interface, out var address),
+            "The verified title interface is available.");
 
         var methods = *(nint**)address;
         uint titleId = 0;

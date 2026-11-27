@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ABI adapted from DexNom/VIctory crates/victory-gpu/src/list.rs and object.rs.
 
+using IraRationis.Graphics.Commands.Models;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
-using IraRationis.Graphics.Commands.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Commands;
 
-internal sealed unsafe class RecordedCommandState
+internal sealed class RecordedCommandState
 {
     public readonly RecordedRootState Compute = new();
     public readonly RecordedRootState Graphics = new();
@@ -21,8 +21,8 @@ internal sealed unsafe class RecordedCommandState
     public bool BlendSet;
     public ulong? Depth;
     public (float Min, float Max)? DepthBounds;
-    public nint[] Heaps = [];
     public bool HasHostGpuWork = true;
+    public nint[] Heaps = [];
     public int HostCommandCount;
     public RecordedBufferView? Index;
     public RecordedUploadPage? LargeRectangleUploadPage;
@@ -33,8 +33,8 @@ internal sealed unsafe class RecordedCommandState
     public int RectangleUploadSliceCount;
     public RECT[]? Scissors;
     public uint? Stencil;
-    public ulong[] Targets = [];
     public Dictionary<(uint Kind, ulong DescriptorId), RecordedTargetView>? TargetViews;
+    public ulong[] Targets = [];
     public uint? Topology;
     public ulong UploadBytes;
     public D3D12_VIEWPORT[]? Viewports;

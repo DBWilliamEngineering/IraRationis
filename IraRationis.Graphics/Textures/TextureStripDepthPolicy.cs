@@ -33,7 +33,8 @@ internal static class TextureStripDepthPolicy
         var hostFormat = (byte[])format[0].Bytes.Clone();
         BinaryPrimitives.WriteUInt32LittleEndian(hostFormat.AsSpan(4), 0);
         var records = metadata.State.Select(record => record.Kind == 16
-            ? new PipelineStateRecord(16, hostFormat) : record).ToList();
+            ? new PipelineStateRecord(16, hostFormat)
+            : record).ToList();
         normalized = metadata with { State = records };
 
         return true;

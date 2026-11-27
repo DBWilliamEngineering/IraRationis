@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct ResourceObject
+internal struct ResourceObject
 {
     public GraphicsObjectHeader Header;
     public ResourceDescription Description;

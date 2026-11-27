@@ -20,9 +20,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static readonly bool UseRectangleUploadPages =
         Environment.GetEnvironmentVariable("IRX_RECTANGLE_UPLOAD_PAGES") != "0";
     private static readonly bool UseLargeRectangleUploadPages = UseRectangleUploadPages &&
-        Environment.GetEnvironmentVariable("IRX_RECTANGLE_UPLOAD_LARGE_PAGES") == "1";
+                                                                Environment.GetEnvironmentVariable(
+                                                                    "IRX_RECTANGLE_UPLOAD_LARGE_PAGES") == "1";
     private static readonly RectangleUploadBufferPool? RectangleUploadPool =
-        Environment.GetEnvironmentVariable("IRX_RECTANGLE_UPLOAD_RECYCLE") == "1" ? new() : null;
+        Environment.GetEnvironmentVariable("IRX_RECTANGLE_UPLOAD_RECYCLE") == "1"
+            ? new RectangleUploadBufferPool(RectangleUploadPageBytes)
+            : null;
     private static long _rectangleUploadSlices;
     private static long _rectangleUploadAllocations;
     private static long _rectangleUploadAllocatedBytes;
@@ -30,6 +33,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static long _largeRectangleUploadReuses;
     private static long _largeRectangleUploadFallbacks;
     private static long _recycledRectangleUploadBuffers;
+    private static long _recycledRectangleUploadPages;
 
     private static bool TryReserveRectangleUpload(RecordedCommandState state, int bytes, out RecordedUploadSlice slice)
     {
@@ -118,15 +122,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         Dictionary<nint, RectangleUploadBuffer>? recycledBuffers = null;
         RectangleUploadBuffer buffer = default;
 
-        if (RectangleUploadPool is { } pool && TryGetRecycledUploadSize(requestedBytes, remainingBudget, out var roundedBytes))
+        if (RectangleUploadPool is { } pool
+            && TryGetRecycledUploadSize(requestedBytes, remainingBudget, out var roundedBytes))
         {
             bytes = roundedBytes;
-            recycledBuffers = state.RectangleUploadBuffers ??= new();
+            recycledBuffers = state.RectangleUploadBuffers ??= new Dictionary<IntPtr, RectangleUploadBuffer>();
             _ = recycledBuffers.EnsureCapacity(recycledBuffers.Count + 1);
 
             if (pool.TryRent(device, bytes, out buffer))
             {
                 Interlocked.Increment(ref _recycledRectangleUploadBuffers);
+                if (bytes == RectangleUploadPageBytes)
+                {
+                    Interlocked.Increment(ref _recycledRectangleUploadPages);
+                }
             }
         }
 
@@ -160,7 +169,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         roundedBytes = 0;
 
-        if (bytes is < MinimumLargeRectangleUpload or > LargeRectangleUploadPageBytes)
+        if (bytes != RectangleUploadPageBytes &&
+            (bytes < MinimumLargeRectangleUpload || bytes > LargeRectangleUploadPageBytes))
         {
             return false;
         }
@@ -174,7 +184,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         // Completion runs after the rectangle segment fence. The following segment has new bindings.
         return reset && state.RectangleUploadBuffers is { Count: > 0 } &&
-            completedSlices == state.RectangleUploadSliceCount;
+               completedSlices == state.RectangleUploadSliceCount;
     }
 
     private static bool WasCompletedRectangleSlice(RectangleDrawBoundary rectangle)
@@ -232,7 +242,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         return largePages && bytes is >= MinimumLargeRectangleUpload and <= MaximumSharedLargeRectangleUpload
-            ? LargeRectangleUploadPageBytes : 0;
+            ? LargeRectangleUploadPageBytes
+            : 0;
     }
 
     private static void SetRectangleUploadPage(RecordedCommandState state, bool largePage, RecordedUploadPage page)
@@ -285,13 +296,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             !TryPlaceRectangleUpload(LargeRectangleUploadPageBytes, representativeUploadBytes,
                 representativeUploadBytes, out var largeOffset) || largeOffset != representativeUploadBytes ||
             !TryPlaceRectangleUpload(LargeRectangleUploadPageBytes, largeUploadEnd - representativeUploadBytes,
-                representativeUploadBytes, out var fourthOffset) || fourthOffset + representativeUploadBytes != largeUploadEnd ||
+                representativeUploadBytes, out var fourthOffset)
+            || fourthOffset + representativeUploadBytes != largeUploadEnd ||
             TryPlaceRectangleUpload(LargeRectangleUploadPageBytes, largeUploadEnd, representativeUploadBytes, out _))
         {
             throw new InvalidOperationException("Large rectangle upload page classification or capacity check failed.");
         }
 
-        Console.WriteLine("[graphics-probe] Large rectangle upload page classification and capacity passed (CPU only).");
+        Console.WriteLine(
+            "[graphics-probe] Large rectangle upload page classification and capacity passed (CPU only).");
 
         VerifyRectangleUploadRecycling();
     }
@@ -303,24 +316,44 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (!TryGetRecycledUploadSize(requestedBytes, allocationBytes, out var roundedBytes) ||
             roundedBytes != allocationBytes || TryGetRecycledUploadSize(requestedBytes, requestedBytes, out _) ||
-            TryGetRecycledUploadSize(RectangleUploadPageBytes, UploadBudget, out _))
+            !TryGetRecycledUploadSize(RectangleUploadPageBytes, RectangleUploadPageBytes, out var pageBytes) ||
+            pageBytes != RectangleUploadPageBytes ||
+            TryGetRecycledUploadSize(RectangleUploadPageBytes, RectangleUploadPageBytes - 1, out _) ||
+            TryGetRecycledUploadSize(RectangleUploadPageBytes + 1, UploadBudget, out _))
         {
             throw new InvalidOperationException("Rectangle upload recycling size class or budget check failed.");
         }
 
         var buffer = new RectangleUploadBuffer(1, 2, 0x10000, allocationBytes);
-        var pool = new RectangleUploadBufferPool();
+        var pool = new RectangleUploadBufferPool(RectangleUploadPageBytes);
         if (pool.TryRent(buffer.Device, allocationBytes, out _) || !pool.TryReturn(buffer) ||
             pool.TryRent(buffer.Device, allocationBytes - RecycledUploadAlignment, out _) ||
             !pool.TryRent(buffer.Device, allocationBytes, out var rented) || rented != buffer ||
             pool.TryRent(buffer.Device, allocationBytes, out _))
         {
-            throw new InvalidOperationException("Rectangle upload pool did not return an exclusive size-matched buffer.");
+            throw new InvalidOperationException(
+                "Rectangle upload pool did not return an exclusive size-matched buffer.");
+        }
+
+        for (var index = 0; index < 8; index++)
+        {
+            var page = new RectangleUploadBuffer(buffer.Device, 100 + index, 0x20000, RectangleUploadPageBytes);
+            if (!pool.TryReturn(page))
+            {
+                throw new InvalidOperationException("Rectangle upload pool refused an eligible small page.");
+            }
+        }
+
+        var excessPage = new RectangleUploadBuffer(buffer.Device, 108, 0x20000, RectangleUploadPageBytes);
+        if (pool.TryReturn(excessPage) || !pool.TryReturn(buffer) ||
+            !pool.TryRent(buffer.Device, RectangleUploadPageBytes, out _) || !pool.TryReturn(excessPage))
+        {
+            throw new InvalidOperationException("Rectangle upload pool did not enforce its small-page limit.");
         }
 
         var state = new RecordedCommandState
         {
-            RectangleUploadBuffers = new() { [buffer.Host] = buffer },
+            RectangleUploadBuffers = new Dictionary<IntPtr, RectangleUploadBuffer> { [buffer.Host] = buffer },
             RectangleUploadSliceCount = 1
         };
         var upload = new RectangleUpload(0, 0, 0, default);
@@ -343,6 +376,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("Rectangle upload recycling retirement check failed.");
         }
 
-        Console.WriteLine("[graphics-probe] Rectangle upload recycling size, budget, and retirement checks passed (CPU only).");
+        Console.WriteLine(
+            "[graphics-probe] Rectangle upload recycling size, budget, and retirement checks passed (CPU only).");
     }
 }

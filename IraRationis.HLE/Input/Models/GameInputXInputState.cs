@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct GameInputXInputState
+internal struct GameInputXInputState
 {
     public uint Packet;
     public ushort Buttons;

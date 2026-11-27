@@ -2,17 +2,23 @@
 
 using System.Runtime.InteropServices;
 using IraRationis.Graphics.Synchronization;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Commands;
 
 /// <summary>Owns submitted utility lists until a subsequent same-queue segment fence.</summary>
 internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUploads = false) : IDisposable
 {
-    private readonly List<UtilityContext> _pending = [];
-    private readonly List<nint>? _queuedDestinations = batchIndependentUploads ? new(MaximumPending) : null;
-    private int _submittedCount;
     internal const int MaximumPending = 8;
+    private readonly List<UtilityContext> _pending = [];
+    private readonly List<nint>? _queuedDestinations =
+        batchIndependentUploads ? new List<IntPtr>(MaximumPending) : null;
+    private int _submittedCount;
+
+    public void Dispose()
+    {
+        Flush();
+    }
 
     internal void Submit(UtilityContext context, nint destination = 0)
     {
@@ -20,6 +26,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         {
             Flush();
         }
+
         if (_queuedDestinations is { } destinations && destination != 0)
         {
             // Separate submissions maintain ordering if a destination repeats in one batch.
@@ -30,6 +37,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
 
             _pending.Add(context);
             destinations.Add(destination);
+
             return;
         }
 
@@ -43,6 +51,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         catch
         {
             _pending.RemoveAt(_pending.Count - 1);
+
             throw;
         }
     }
@@ -69,6 +78,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
 
             _pending.RemoveRange(_submittedCount, queued);
             _queuedDestinations!.Clear();
+
             throw;
         }
 
@@ -83,6 +93,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         {
             return;
         }
+
         var count = _pending.Count;
         if (_submittedCount != count)
         {
@@ -94,6 +105,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
             context.CompleteOrdered();
             context.Dispose();
         }
+
         _pending.Clear();
         _submittedCount = 0;
         GraphicsDevice.ReportOrderedTextureUploads(count);
@@ -110,10 +122,5 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         using var completion = new HostCompletionFence();
         completion.Wait(queue);
         CompleteAfterFence();
-    }
-
-    public void Dispose()
-    {
-        Flush();
     }
 }

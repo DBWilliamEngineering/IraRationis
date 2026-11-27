@@ -3,7 +3,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
-using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.HLE.Runtime.Diagnostics.Models;
 using IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeTrace;
 
@@ -21,7 +20,8 @@ internal static class RuntimeBridgeQueryTraceTests
         ConcurrentQueriesRetainMatchingRecords();
         DiagnosticFailuresPreserveErrorState();
 
-        Console.WriteLine("Per-interface runtime query sampling, failure visibility, and correlation contracts passed.");
+        Console.WriteLine(
+            "Per-interface runtime query sampling, failure visibility, and correlation contracts passed.");
     }
 
     private static void StartupPollingCannotHideAnotherInterface()
@@ -53,7 +53,8 @@ internal static class RuntimeBridgeQueryTraceTests
         var records = Records(writer);
 
         Require(records.Any(record => IsCall(record, "begin", rareCall.Id)
-                                      && record.Contains($"interface={rareInterface.RequestedInterface:D}", StringComparison.Ordinal))
+                                      && record.Contains($"interface={rareInterface.RequestedInterface:D}",
+                                          StringComparison.Ordinal))
                 && records.Any(record => IsCall(record, "end", rareCall.Id)
                                          && record.Contains("hresult=0x80004005", StringComparison.Ordinal)),
             "A failed request for a new interface must remain visible after another interface exhausts startup sampling.");
@@ -126,16 +127,21 @@ internal static class RuntimeBridgeQueryTraceTests
 
         trace.WriteSummary();
         var records = Records(writer);
-        var promotedFailures = records.Count(record => record.Contains("deferredForFailure=True", StringComparison.Ordinal));
+        var promotedFailures =
+            records.Count(record => record.Contains("deferredForFailure=True", StringComparison.Ordinal));
 
         Require(promotedFailures == RuntimeBridgeTrace.MaximumAdditionalQueryFailures
-                && records.Count(record => record.Contains("phase=limit operation=QueryApiKeys ", StringComparison.Ordinal)) == 1
-                && records.Count(record => record.Contains("phase=limit operation=QueryApiFailures ", StringComparison.Ordinal)) == 1,
+                && records.Count(record =>
+                    record.Contains("phase=limit operation=QueryApiKeys ", StringComparison.Ordinal)) == 1
+                && records.Count(record =>
+                    record.Contains("phase=limit operation=QueryApiFailures ", StringComparison.Ordinal)) == 1,
             "Untracked key failures must retain bounded visibility and disclose both exhausted diagnostic budgets once.");
-        Require(records.Count(record => record.Contains("phase=summary operation=QueryApiKey ", StringComparison.Ordinal))
-                    == RuntimeBridgeTrace.MaximumQueryKeys
+        Require(records.Count(record =>
+                    record.Contains("phase=summary operation=QueryApiKey ", StringComparison.Ordinal))
+                == RuntimeBridgeTrace.MaximumQueryKeys
                 && records.Any(record => record.Contains("phase=summary operation=QueryApi ", StringComparison.Ordinal)
-                                         && record.Contains("additionalFailuresSuppressed=8", StringComparison.Ordinal)),
+                                         && record.Contains("additionalFailuresSuppressed=8",
+                                             StringComparison.Ordinal)),
             "New query keys must not grow retained state beyond its capacity, while omitted failures remain counted.");
         RequireMatchingPairs(records);
     }
@@ -176,7 +182,7 @@ internal static class RuntimeBridgeQueryTraceTests
             var afterEnd = NativeErrorState.Capture();
 
             Require(afterBegin.PInvokeError == 111 && afterBegin.SystemError == 222
-                    && afterEnd.PInvokeError == 111 && afterEnd.SystemError == 222,
+                                                   && afterEnd.PInvokeError == 111 && afterEnd.SystemError == 222,
                 "Query diagnostics must contain caller/writer failures and preserve both native error states.");
         }
         finally
@@ -206,13 +212,15 @@ internal static class RuntimeBridgeQueryTraceTests
 
     private static void RequireMatchingPairs(string[] records)
     {
-        var beginnings = records.Where(record => record.Contains("phase=begin operation=QueryApi ", StringComparison.Ordinal))
+        var beginnings = records
+            .Where(record => record.Contains("phase=begin operation=QueryApi ", StringComparison.Ordinal))
             .Select(CallId).ToArray();
-        var endings = records.Where(record => record.Contains("phase=end operation=QueryApi ", StringComparison.Ordinal))
+        var endings = records
+            .Where(record => record.Contains("phase=end operation=QueryApi ", StringComparison.Ordinal))
             .Select(CallId).ToArray();
 
         Require(beginnings.Length == beginnings.Distinct().Count() && endings.Length == endings.Distinct().Count()
-                && beginnings.Order().SequenceEqual(endings.Order()),
+                                                                   && beginnings.Order().SequenceEqual(endings.Order()),
             "Every emitted query outcome must match one unique begin record, including concurrent and promoted failures.");
     }
 

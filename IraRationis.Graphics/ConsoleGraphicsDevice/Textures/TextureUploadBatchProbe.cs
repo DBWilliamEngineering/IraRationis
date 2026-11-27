@@ -27,10 +27,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             RequireHostObject(second, "second batched upload target");
             RequireHostObject(readback, "batched upload readback");
 
-            using var firstUpload = AcquireUtilityContext(rowPitch, 0, versioned: true);
-            using var secondUpload = AcquireUtilityContext(rowPitch, 0, versioned: true);
-            using var replacement = AcquireUtilityContext(rowPitch, 0, versioned: true);
-            using var ordered = new OrderedTextureUploads(queue, batchIndependentUploads: true);
+            using var firstUpload = AcquireUtilityContext(rowPitch, 0, true);
+            using var secondUpload = AcquireUtilityContext(rowPitch, 0, true);
+            using var replacement = AcquireUtilityContext(rowPitch, 0, true);
+            using var ordered = new OrderedTextureUploads(queue, true);
 
             RecordTextureUploadProbe(firstUpload, first, firstFootprint, [16, 32, 48, 64]);
             RecordTextureUploadProbe(secondUpload, second, firstFootprint, [80, 96, 112, 128]);
@@ -44,8 +44,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             using var consumer = AcquireUtilityContext(0, 0);
             TransitionHostResource(consumer.List, first, 0, CopySource);
             TransitionHostResource(consumer.List, second, 0, CopySource);
-            RecordHostTextureTransfer(consumer.List, first, readback, readbackBytes, firstFootprint, upload: false);
-            RecordHostTextureTransfer(consumer.List, second, readback, readbackBytes, secondFootprint, upload: false);
+            RecordHostTextureTransfer(consumer.List, first, readback, readbackBytes, firstFootprint, false);
+            RecordHostTextureTransfer(consumer.List, second, readback, readbackBytes, secondFootprint, false);
             consumer.SubmitAndWait(queue);
             ordered.CompleteAfterFence();
 
@@ -57,7 +57,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Batched texture upload readback or repeated-target order failed.");
             }
 
-            Console.WriteLine("[graphics-probe] Batched texture upload GPU readback passed (independent targets and repeated-target order).");
+            Console.WriteLine(
+                "[graphics-probe] Batched texture upload GPU readback passed (independent targets and repeated-target order).");
         }
         finally
         {
@@ -74,7 +75,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         pixel.CopyTo(bytes);
         utility.PrepareVersionedUpload(bytes);
         TransitionHostResource(utility.List, target, 0, CopyDestination);
-        RecordHostTextureTransfer(utility.List, target, utility.Upload, (ulong)bytes.Length, footprint, upload: true);
+        RecordHostTextureTransfer(utility.List, target, utility.Upload, (ulong)bytes.Length, footprint, true);
         TransitionHostResource(utility.List, target, CopyDestination, 0);
     }
 }

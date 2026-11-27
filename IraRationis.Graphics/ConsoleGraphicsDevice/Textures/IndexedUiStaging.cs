@@ -7,7 +7,7 @@ using IraRationis.Shaders.Raster;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
     private const int IndexedUiPixelConstantBytes = 16;
     private const int IndexedUiStackSnapshotLimit = 1024;
@@ -51,6 +51,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 ReadIndexedUiIndexRange(upload, indices, out offset, out bytes);
             }
+
             var vertices = snapshot.Slice(upload.VertexOffset + offset, bytes);
 
             ReadIndexedUiVertexData(upload, indices, vertices, offset, snapshot);
@@ -62,7 +63,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static bool TryStageCompactIndexedUiUpload(IndexedUiUpload upload, ReadOnlySpan<byte> indices, int offset, int bytes)
+    private static bool TryStageCompactIndexedUiUpload(IndexedUiUpload upload, ReadOnlySpan<byte> indices, int offset,
+        int bytes)
     {
         var plan = upload.Plan;
         var stagingBytes = upload.VertexOffset + bytes;
@@ -72,7 +74,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        var rented = (stagingBytes > IndexedUiStackSnapshotLimit)
+        var rented = stagingBytes > IndexedUiStackSnapshotLimit
             ? ArrayPool<byte>.Shared.Rent(stagingBytes)
             : null;
 
@@ -101,14 +103,16 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (GraphicsLogSampling.IsSample(observations))
         {
             Console.Error.WriteLine($"[performance] Indexed UI compact upload: observations={observations}; " +
-                $"variant={upload.Variant}; vertexOffset={offset}; vertexBytes={bytes}; indexBytes={indices.Length}; " +
-                $"copiedBytes={stagingBytes + indices.Length}; allocationBytes={plan.Capacity}.");
+                                    $"variant={upload.Variant}; vertexOffset={offset}; vertexBytes={bytes}; indexBytes={indices.Length}; "
+                                    +
+                                    $"copiedBytes={stagingBytes + indices.Length}; allocationBytes={plan.Capacity}.");
         }
 
         return true;
     }
 
-    private static void ReadIndexedUiIndexRange(IndexedUiUpload upload, Span<byte> indices, out int offset, out int bytes)
+    private static void ReadIndexedUiIndexRange(IndexedUiUpload upload, Span<byte> indices, out int offset,
+        out int bytes)
     {
         if (!TryReadGuestMemory(upload.Plan.IndexAddress, indices))
         {

@@ -7,7 +7,7 @@ using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics.Commands.Models;
 
-internal readonly unsafe record struct MemoryBoundary(
+internal readonly record struct MemoryBoundary(
     nint Host,
     MemoryWrite? Write,
     MemoryWait? Wait,
@@ -31,9 +31,9 @@ internal readonly unsafe record struct MemoryBoundary(
                 return false;
             }
 
-            return (Draw is { Complete: false } || Rectangle is { Complete: false })
-                   || (Textured is { Complete: false } || PlanarColor is { Complete: false })
-                   || (IndexedUi is { Complete: false });
+            return Draw is { Complete: false } || Rectangle is { Complete: false }
+                                               || Textured is { Complete: false } || PlanarColor is { Complete: false }
+                                               || IndexedUi is { Complete: false };
         }
     }
 }

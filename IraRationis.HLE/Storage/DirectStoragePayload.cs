@@ -15,11 +15,16 @@ internal static class DirectStoragePayload
     // ZLibStream owns the decompressor and performs its normal format checks.
     internal static bool TryInflate(byte[] source, Span<byte> destination, bool strict, out int written)
     {
+        return TryInflate(new ArraySegment<byte>(source), destination, strict, out written);
+    }
+
+    internal static bool TryInflate(ArraySegment<byte> source, Span<byte> destination, bool strict, out int written)
+    {
         written = 0;
 
         try
         {
-            using var input = new MemoryStream(source, false);
+            using var input = new MemoryStream(source.Array!, source.Offset, source.Count, writable: false);
             using var inflater = new ZLibStream(input, CompressionMode.Decompress);
 
             while (written < destination.Length)

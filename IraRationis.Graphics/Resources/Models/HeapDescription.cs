@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct HeapDescription
+internal struct HeapDescription
 {
     public ulong Size;
     public GraphicsHeapProperties Properties;

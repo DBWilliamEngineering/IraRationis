@@ -3,11 +3,11 @@
 
 using System.Diagnostics;
 using IraRationis.HLE.Audio.Acp.Models;
-using AcpHal = global::IraRationis.HLE.Audio.Acp.AcpHalModule.AcpHalModule;
+using AcpHal = IraRationis.HLE.Audio.Acp.AcpHalModule.AcpHalModule;
 
 namespace IraRationis.HLE.Audio.Acp;
 
-internal sealed unsafe class AcpHalAcpConnection
+internal sealed class AcpHalAcpConnection
 {
     public readonly Lock Gate = new();
     public readonly long Started = Stopwatch.GetTimestamp();

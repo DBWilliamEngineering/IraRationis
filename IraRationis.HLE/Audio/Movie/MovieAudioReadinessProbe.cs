@@ -70,7 +70,7 @@ internal static class MovieAudioReadinessProbe
             return MovieAudioReadinessObservation.Unavailable;
         }
 
-        var readOffset = BinaryPrimitives.ReadUInt32LittleEndian(queue[QueueReadOffset..]);
+        var readOffset = BinaryPrimitives.ReadUInt32LittleEndian(queue[..]);
         var writeOffset = BinaryPrimitives.ReadUInt32LittleEndian(queue[QueueWriteOffset..]);
         sample = new MovieAudioQueueSample(capacity, queued, readOffset, writeOffset);
 

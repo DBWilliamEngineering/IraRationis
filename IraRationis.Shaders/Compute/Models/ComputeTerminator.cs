@@ -2,5 +2,8 @@
 
 namespace IraRationis.Shaders.Compute.Models;
 
-public readonly record struct ComputeTerminator(ComputeTransfer Transfer, int Target = -1,
-    int Alternative = -1, int Condition = -1);
+public readonly record struct ComputeTerminator(
+    ComputeTransfer Transfer,
+    int Target = -1,
+    int Alternative = -1,
+    int Condition = -1);

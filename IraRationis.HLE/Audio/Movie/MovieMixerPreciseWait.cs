@@ -16,11 +16,9 @@ internal static partial class MovieMixerPreciseWait
     private const uint WaitSignaled = 0;
     private const uint WaitGraceMilliseconds = 20;
 
-    [ThreadStatic]
-    private static nint _timer;
+    [ThreadStatic] private static nint _timer;
 
-    [ThreadStatic]
-    private static bool _unavailable;
+    [ThreadStatic] private static bool _unavailable;
 
     internal static bool TryWait(uint milliseconds)
     {
@@ -38,7 +36,7 @@ internal static partial class MovieMixerPreciseWait
 
             if (_timer != 0)
             {
-                var dueTime = -(long)milliseconds * TimeSpan.TicksPerMillisecond;
+                var dueTime = -milliseconds * TimeSpan.TicksPerMillisecond;
                 var start = Stopwatch.GetTimestamp();
                 var minimumTicks = (milliseconds * Stopwatch.Frequency + 999) / 1_000;
 

@@ -15,7 +15,8 @@ internal static class InstructionEmulationOptionsTests
 
         foreach (var disabledValue in new[] { "", "0", "true", "01", "1 ", " 1" })
         {
-            Require(InstructionEmulationOptions.FromEnvironment(_ => disabledValue) == new InstructionEmulationOptions(),
+            Require(
+                InstructionEmulationOptions.FromEnvironment(_ => disabledValue) == new InstructionEmulationOptions(),
                 "Instruction emulation switches must require the exact value 1.");
         }
 
@@ -37,7 +38,8 @@ internal static class InstructionEmulationOptionsTests
 
         Require(Marshal.SizeOf<NativeInstructionHandlerOptions>() == 8
                 && Marshal.OffsetOf<NativeInstructionHandlerOptions>(nameof(NativeInstructionHandlerOptions.Size)) == 0
-                && Marshal.OffsetOf<NativeInstructionHandlerOptions>(nameof(NativeInstructionHandlerOptions.Flags)) == 4,
+                && Marshal.OffsetOf<NativeInstructionHandlerOptions>(nameof(NativeInstructionHandlerOptions.Flags))
+                == 4,
             "Native instruction handler options must use the 8-byte ABI.");
 
         Require(Marshal.SizeOf<WritableCacheLineProbeResult>() == 32,

@@ -2,8 +2,6 @@
 
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
@@ -13,6 +11,8 @@ using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Synchronization;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
+using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -57,7 +57,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             fixed (byte* bytes = rootBlob)
             {
-                CheckHostResult((int)_host->CreateRootSignature(0, bytes, (nuint)rootBlob.Length, &iid, &root),
+                CheckHostResult(_host->CreateRootSignature(0, bytes, (nuint)rootBlob.Length, &iid, &root),
                     "authored A8 vertex-fetch root");
             }
 
@@ -130,7 +130,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             CreateVertexFetchProbeRecord(16, DXGI_FORMAT.DXGI_FORMAT_UNKNOWN),
             CreateVertexFetchProbeRecord(17, new DXGI_SAMPLE_DESC { Count = 1 }),
             CreateVertexFetchProbeRecord(21, depth)
-        ], IsStream: true, CompleteStream: true);
+        ], true, true);
     }
 
     private static PipelineStateRecord CreateVertexFetchProbeRecord<T>(uint kind, T payload) where T : unmanaged
@@ -218,10 +218,12 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12))
                 (device, 0, 0, allocator, pipeline, &listId, &list), "R11 command list");
 
-            CheckHostResult(CreateHostResource(HostBufferDescription(VertexFetchProbeSourceBytes), 2, GenericRead, &upload),
+            CheckHostResult(
+                CreateHostResource(HostBufferDescription(VertexFetchProbeSourceBytes), 2, GenericRead, &upload),
                 "R11 vertex-pulling upload");
 
-            CheckHostResult(CreateHostResource(HostBufferDescription(VertexFetchProbePitch * VertexFetchProbeHeight), 3, CopyDestination,
+            CheckHostResult(CreateHostResource(HostBufferDescription(VertexFetchProbePitch * VertexFetchProbeHeight), 3,
+                CopyDestination,
                 &readback), "R11 readback");
 
             var texture = new ResourceDescription
@@ -307,7 +309,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             commands->IASetPrimitiveTopology((D3D_PRIMITIVE_TOPOLOGY)4);
 
-            var viewport = new D3D12_VIEWPORT { Width = VertexFetchProbeWidth, Height = VertexFetchProbeHeight, MaxDepth = 1.0f };
+            var viewport = new D3D12_VIEWPORT
+                { Width = VertexFetchProbeWidth, Height = VertexFetchProbeHeight, MaxDepth = 1.0f };
             var scissor = new RECT { right = (int)VertexFetchProbeWidth, bottom = (int)VertexFetchProbeHeight };
 
             commands->RSSetViewports(1, &viewport);
@@ -383,7 +386,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         nint heap = 0;
 
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
+        var resultCode =
+            ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
             (device, &description, &iid, &heap);
 
         if (resultCode >= 0 && heap != 0)
@@ -397,7 +401,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         throw new InvalidOperationException($"R11 descriptor heap creation failed: 0x{resultCode:X8}.");
-
     }
 
     private static void WriteSyntheticVertexFetchSource(VertexFetchShaderPair pair, nint upload, bool alphaOnly)
@@ -440,7 +443,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 attributes[index]);
         }
 
-        if (!Rdna2VertexFetchCompiler.TryGetReadExtent(pair, source, 0, 3, VertexFetchProbeSourceBytes, out var extent) ||
+        if (!Rdna2VertexFetchCompiler.TryGetReadExtent(pair, source, 0, 3, VertexFetchProbeSourceBytes, out var extent)
+            ||
             extent != VertexFetchProbeSourceBytes)
         {
             throw new InvalidOperationException("R11 synthetic vertex source extent is inconsistent.");
@@ -493,6 +497,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (alphaOnly)
             {
                 VerifyAlphaVertexFetchReadback(pixels, report);
+
                 return;
             }
 
@@ -572,6 +577,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 $"Depthless A8 vertex-fetch readback differed: center={center}, covered={covered}, unexpected={unexpected}.");
         }
 
-        report.WriteLine($"[graphics-probe] Depthless A8 vertex-fetch passed GPU alpha readback (alpha={center}, tolerance=1).");
+        report.WriteLine(
+            $"[graphics-probe] Depthless A8 vertex-fetch passed GPU alpha readback (alpha={center}, tolerance=1).");
     }
 }

@@ -15,7 +15,10 @@ internal sealed class RuntimeBridgeAbiPolicy
         Fingerprint = fingerprint;
     }
 
-    internal string Fingerprint { get; }
+    internal string Fingerprint
+    {
+        get;
+    }
 
     internal bool Verified
     {
@@ -60,7 +63,7 @@ internal sealed class RuntimeBridgeAbiPolicy
     internal static nuint ExportRva(string export)
     {
         // These private x64 entry points were checked against host 10.0.26100.9656 and guest call sites.
-        //TODO: Damon -> Revalidate the calling shapes and fingerprint before adding another host runtime build.
+        //TODO: Damon William -> Revalidate the calling shapes and fingerprint before adding another host runtime build.
         return export switch
         {
             "InitializeApiImpl" => 0x17FB0,

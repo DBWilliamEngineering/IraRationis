@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using System.Numerics;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Media;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Raster;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Drawing;
 
 /// <summary>
-/// Reusable, thread-affine host graphics pipeline for explicitly supplied geometry
-/// and RGBA8 textures. Owns the root signature and PSO across render calls.
-/// Render returns tightly packed RGBA8 after confirmed GPU completion.
-/// Does not infer guest memory ownership or modify guest render targets.
+///     Reusable, thread-affine host graphics pipeline for explicitly supplied geometry
+///     and RGBA8 textures. Owns the root signature and PSO across render calls.
+///     Render returns tightly packed RGBA8 after confirmed GPU completion.
+///     Does not infer guest memory ownership or modify guest render targets.
 /// </summary>
 public sealed unsafe class ProgrammableRasterPipeline : IDisposable
 {
@@ -37,7 +36,8 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
         {
             if (_device != (nint)GraphicsDevice._host || _queue == 0 || sizeof(RasterVertex) != 48)
             {
-                throw new InvalidOperationException("Raster pipeline requires the runtime D3D12 device and a valid vertex ABI.");
+                throw new InvalidOperationException(
+                    "Raster pipeline requires the runtime D3D12 device and a valid vertex ABI.");
             }
 
             GraphicsDevice.CreateRasterPipeline(program, out _root, out _pipeline);
@@ -47,14 +47,6 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
             Dispose();
 
             throw;
-        }
-    }
-
-    private void CheckThread()
-    {
-        if (Environment.CurrentManagedThreadId != _owner)
-        {
-            throw new InvalidOperationException("Raster pipeline is thread-affine.");
         }
     }
 
@@ -78,6 +70,14 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
         _root = 0;
         _queue = 0;
         _device = 0;
+    }
+
+    private void CheckThread()
+    {
+        if (Environment.CurrentManagedThreadId != _owner)
+        {
+            throw new InvalidOperationException("Raster pipeline is thread-affine.");
+        }
     }
 
     public byte[] Render(ReadOnlySpan<RasterVertex> vertices, ReadOnlySpan<byte> rgba,
@@ -124,10 +124,15 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
 
         try
         {
-            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateHostResource(GraphicsDevice.RasterTexture(textureWidth, textureHeight, 0), 1, 0, &texture),
+            GraphicsDevice.CheckHostResult(
+                GraphicsDevice.CreateHostResource(GraphicsDevice.RasterTexture(textureWidth, textureHeight, 0), 1, 0,
+                    &texture),
                 "R67 texture");
-            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateHostResource(GraphicsDevice.RasterTexture(width, height, 1), 1, 0, &target), "R67 target");
-            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateHostResource(GraphicsDevice.HostBufferDescription((ulong)readbackBytes), 3, GraphicsDevice.CopyDestination,
+            GraphicsDevice.CheckHostResult(
+                GraphicsDevice.CreateHostResource(GraphicsDevice.RasterTexture(width, height, 1), 1, 0, &target),
+                "R67 target");
+            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateHostResource(
+                GraphicsDevice.HostBufferDescription((ulong)readbackBytes), 3, GraphicsDevice.CopyDestination,
                 &readback), "R67 readback");
 
             GraphicsDevice.RequireHostObject(texture, "R67 texture");
@@ -136,7 +141,7 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
 
             rtvHeap = GraphicsDevice.CreateShaderViewHeap(_device, 2);
 
-            using var utility = GraphicsDevice.AcquireUtilityContext((ulong)uploadBytes, 1, versioned: true);
+            using var utility = GraphicsDevice.AcquireUtilityContext((ulong)uploadBytes, 1, true);
 
             utility.PrepareVersionedUpload(data);
 
@@ -157,7 +162,7 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
             GraphicsDevice.TransitionHostResource(utility.List, texture, 0, GraphicsDevice.CopyDestination);
             GraphicsDevice.RecordHostTextureTransfer(utility.List, texture, utility.Upload, (ulong)uploadBytes,
                 new HostTextureTransferFootprint(0, 28, (uint)textureWidth, (uint)textureHeight,
-                    (uint)texturePitch, (ulong)textureOffset), upload: true);
+                    (uint)texturePitch, (ulong)textureOffset), true);
             GraphicsDevice.TransitionHostResource(utility.List, texture, GraphicsDevice.CopyDestination, 0x80);
             GraphicsDevice.TransitionHostResource(utility.List, target, 0, 4);
 
@@ -192,7 +197,7 @@ public sealed unsafe class ProgrammableRasterPipeline : IDisposable
             GraphicsDevice.TransitionHostResource(utility.List, target, 4, GraphicsDevice.CopySource);
             GraphicsDevice.RecordHostTextureTransfer(utility.List, target, readback, (ulong)readbackBytes,
                 new HostTextureTransferFootprint(0, 28, (uint)width, (uint)height, (uint)outputPitch, 0),
-                upload: false);
+                false);
             GraphicsDevice.TransitionHostResource(utility.List, target, GraphicsDevice.CopySource, 0);
             GraphicsDevice.TransitionHostResource(utility.List, texture, 0x80, 0);
 

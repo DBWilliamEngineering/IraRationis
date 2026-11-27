@@ -114,7 +114,8 @@ public static unsafe partial class MemoryProbe
         var failed = false;
 
         foreach (var size in from size
-                     in sizes from mode
+                     in sizes
+                 from mode
                      in Enum.GetValues<MemoryResidency>()
                  where !Measure(mode, size, iterations, adapter, writer)
                  select size)
@@ -240,7 +241,7 @@ public static unsafe partial class MemoryProbe
             expected += seed + index / PageWords;
         }
 
-        return (sum != expected)
+        return sum != expected
             ? throw new InvalidOperationException("CPU readback did not match the expected synthetic pattern.")
             : elapsed;
     }

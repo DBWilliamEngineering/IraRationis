@@ -1,5 +1,5 @@
-using IraRationis.HLE.Storage;
 using System.IO.Compression;
+using IraRationis.HLE.Storage;
 
 static void Require(bool condition, string name)
 {
@@ -34,6 +34,13 @@ var exact = new byte[expected.Length];
 
 Require(DirectStoragePayload.TryInflate(compressed, exact, true, out var exactWritten)
         && exactWritten == expected.Length && exact.AsSpan().SequenceEqual(expected), "exact zlib output");
+
+var staging = new byte[compressed.Length + 12];
+staging.AsSpan().Fill(0xff);
+compressed.AsSpan().CopyTo(staging.AsSpan(4));
+var stagedSource = new ArraySegment<byte>(staging, 4, compressed.Length);
+Require(DirectStoragePayload.TryInflate(stagedSource, exact, true, out var stagedWritten)
+        && stagedWritten == expected.Length && exact.AsSpan().SequenceEqual(expected), "exact zlib from a staged segment");
 var longer = new byte[expected.Length + 64];
 
 Require(!DirectStoragePayload.TryInflate(compressed, longer, true, out _), "short zlib rejected");
@@ -41,7 +48,6 @@ Require(DirectStoragePayload.TryInflate(compressed, longer, false, out var short
         && shortWritten == expected.Length, "legacy short zlib accepted");
 
 Require(!DirectStoragePayload.TryInflate(compressed, new byte[expected.Length - 1], true, out _),
-
     "zlib overflow rejected");
 Require(!DirectStoragePayload.TryInflate([255, 255, 255, 255], exact, true, out _), "invalid zlib rejected");
 

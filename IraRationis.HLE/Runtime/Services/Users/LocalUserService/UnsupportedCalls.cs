@@ -31,7 +31,8 @@ internal sealed unsafe partial class LocalUserService
         }
 
         return FromObject(self)._users.IsValid(handle)
-            ? Unsupported(self, "UserPrivilegeUnavailable") : RuntimeServiceResult.InvalidHandle;
+            ? Unsupported(self, "UserPrivilegeUnavailable")
+            : RuntimeServiceResult.InvalidHandle;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -63,7 +64,8 @@ internal sealed unsafe partial class LocalUserService
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int RejectPrivilegeResolution(nint self, nint handle, uint options, uint privilege, XAsyncBlock* block)
+    private static int RejectPrivilegeResolution(nint self, nint handle, uint options, uint privilege,
+        XAsyncBlock* block)
     {
         return Unsupported(self, "UserPrivilegeResolutionUnavailable");
     }

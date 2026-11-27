@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Security.Cryptography;
+using IraRationis.Graphics.ConsoleGraphicsDevice;
 using IraRationis.Media.Decoding;
 using IraRationis.Media.Video;
-using IraRationis.Graphics.ConsoleGraphicsDevice;
 
 namespace GpuMedia;
 

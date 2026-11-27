@@ -5,4 +5,4 @@
 
 namespace IraRationis.HLE.Storage.Models;
 
-internal sealed unsafe record StorageCommand(StorageRequest Request, nint File, nint Status, uint Index);
+internal sealed record StorageCommand(StorageRequest Request, nint File, nint Status, uint Index);

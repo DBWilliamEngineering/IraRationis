@@ -22,14 +22,14 @@ internal sealed class MovieAudioEndpointTrace
     private const int LaneQueuedBytesOffset = 0x08;
     private const uint WaitSignaled = 0;
     private const uint WaitTimeout = 258;
-
-    private nint _mixerState;
     private nint _bufferEvent;
-    private long _signals;
-    private long _timeouts;
     private long _failures;
     private long _lastSignal;
     private long _maxSignalGapTicks;
+
+    private nint _mixerState;
+    private long _signals;
+    private long _timeouts;
 
     internal bool TryAttach(nint mixerState)
     {
@@ -57,12 +57,14 @@ internal sealed class MovieAudioEndpointTrace
         if (result == WaitTimeout)
         {
             Interlocked.Increment(ref _timeouts);
+
             return;
         }
 
         if (result != WaitSignaled)
         {
             Interlocked.Increment(ref _failures);
+
             return;
         }
 
@@ -72,7 +74,8 @@ internal sealed class MovieAudioEndpointTrace
         if (previous != 0)
         {
             var gap = now - previous;
-            for (var maximum = Volatile.Read(ref _maxSignalGapTicks); gap > maximum;
+            for (var maximum = Volatile.Read(ref _maxSignalGapTicks);
+                 gap > maximum;
                  maximum = Volatile.Read(ref _maxSignalGapTicks))
             {
                 if (Interlocked.CompareExchange(ref _maxSignalGapTicks, gap, maximum) == maximum)
@@ -97,12 +100,14 @@ internal sealed class MovieAudioEndpointTrace
         if (!TryReadAt(state, SpatialActiveOffset, active) || active[0] > 1)
         {
             Volatile.Write(ref _bufferEvent, 0);
+
             return "spatialOutput=unavailable";
         }
 
         if (active[0] == 0)
         {
             Volatile.Write(ref _bufferEvent, 0);
+
             return "spatialOutput=inactive";
         }
 
@@ -115,6 +120,7 @@ internal sealed class MovieAudioEndpointTrace
             ReadUInt32(stream, 0) != 1 || ReadPointer(stream, FirstStreamOffset - ActivatedStreamCountOffset) == 0)
         {
             Volatile.Write(ref _bufferEvent, 0);
+
             return "spatialOutput=unavailable-stream-layout";
         }
 
@@ -122,6 +128,7 @@ internal sealed class MovieAudioEndpointTrace
         if (bufferEvent == 0)
         {
             Volatile.Write(ref _bufferEvent, 0);
+
             return "spatialOutput=unavailable-event";
         }
 
@@ -132,11 +139,14 @@ internal sealed class MovieAudioEndpointTrace
 
         var ring = ReadMixRing(output);
         var lastSignal = Interlocked.Read(ref _lastSignal);
-        var lastSignalAge = lastSignal == 0 ? -1 : Stopwatch.GetElapsedTime(lastSignal, Math.Max(lastSignal, now)).TotalMilliseconds;
+        var lastSignalAge = lastSignal == 0
+            ? -1
+            : Stopwatch.GetElapsedTime(lastSignal, Math.Max(lastSignal, now)).TotalMilliseconds;
         var maxGap = Stopwatch.GetElapsedTime(0, Interlocked.Read(ref _maxSignalGapTicks)).TotalMilliseconds;
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"spatialOutput=active; endpointSignals={Interlocked.Read(ref _signals)}; endpointTimeouts={Interlocked.Read(ref _timeouts)}; " +
+            $"spatialOutput=active; endpointSignals={Interlocked.Read(ref _signals)}; endpointTimeouts={Interlocked.Read(ref _timeouts)}; "
+            +
             $"endpointWaitFailures={Interlocked.Read(ref _failures)}; endpointMaxSignalGapMs={maxGap:F2}; " +
             $"endpointLastSignalAgeMs={lastSignalAge:F2}; {ring}");
     }
@@ -153,7 +163,8 @@ internal sealed class MovieAudioEndpointTrace
             var queued = ReadUInt32(lane, LaneQueuedBytesOffset);
             if (capacity is > 0 and <= 64 * 1024 && queued <= capacity)
             {
-                return string.Create(CultureInfo.InvariantCulture, $"mixedLane0QueuedBytes={queued}; mixedLane0CapacityBytes={capacity}");
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"mixedLane0QueuedBytes={queued}; mixedLane0CapacityBytes={capacity}");
             }
         }
 
@@ -163,7 +174,7 @@ internal sealed class MovieAudioEndpointTrace
     private static bool TryReadAt(nint address, int offset, Span<byte> destination)
     {
         return address > 0 && address <= nint.MaxValue - offset &&
-            RuntimeBridgeMemoryReader.TryReadSnapshot(address + offset, destination);
+               RuntimeBridgeMemoryReader.TryReadSnapshot(address + offset, destination);
     }
 
     private static uint ReadUInt32(ReadOnlySpan<byte> state, int offset)

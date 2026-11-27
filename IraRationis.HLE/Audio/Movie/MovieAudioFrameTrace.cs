@@ -15,18 +15,17 @@ internal sealed partial class MovieAudioFrameTrace
     private const int RateNumeratorOffset = 0x14;
     private const int RateDivisorOffset = 0x18;
 
-    [ThreadStatic]
-    private static uint _currentThreadId;
-
-    private nint _movie;
-    private long _lastAcceptedAudio;
-    private uint _lastPacingThreadId;
-    private long _pacingPolls;
-    private long _pacingWaits;
-    private long _decodeWaits;
+    [ThreadStatic] private static uint _currentThreadId;
     private long _decodeReady;
     private long _decodeWaitTicks;
+    private long _decodeWaits;
+    private long _lastAcceptedAudio;
+    private uint _lastPacingThreadId;
     private long _maxDecodeWaitTicks;
+
+    private nint _movie;
+    private long _pacingPolls;
+    private long _pacingWaits;
 
     internal void RecordAudio(nint movie)
     {
@@ -75,7 +74,8 @@ internal sealed partial class MovieAudioFrameTrace
 
         Interlocked.Add(ref _decodeWaitTicks, ticks);
 
-        for (var maximum = Volatile.Read(ref _maxDecodeWaitTicks); ticks > maximum;
+        for (var maximum = Volatile.Read(ref _maxDecodeWaitTicks);
+             ticks > maximum;
              maximum = Volatile.Read(ref _maxDecodeWaitTicks))
         {
             if (Interlocked.CompareExchange(ref _maxDecodeWaitTicks, ticks, maximum) == maximum)
@@ -98,7 +98,8 @@ internal sealed partial class MovieAudioFrameTrace
         return string.Create(CultureInfo.InvariantCulture,
             $"{ReadFrame(movie)}; binkLastPacingThreadId={Volatile.Read(ref _lastPacingThreadId)}; " +
             $"binkPacingPolls={Interlocked.Read(ref _pacingPolls)}; " +
-            $"binkPacingWaits={Interlocked.Read(ref _pacingWaits)}; binkDecodeWaits={Interlocked.Read(ref _decodeWaits)}; " +
+            $"binkPacingWaits={Interlocked.Read(ref _pacingWaits)}; binkDecodeWaits={Interlocked.Read(ref _decodeWaits)}; "
+            +
             $"binkDecodeReady={Interlocked.Read(ref _decodeReady)}; " +
             $"binkDecodeWaitMs={Milliseconds(Interlocked.Read(ref _decodeWaitTicks)):F2}; " +
             $"binkMaxDecodeWaitMs={Milliseconds(Interlocked.Read(ref _maxDecodeWaitTicks)):F2}");

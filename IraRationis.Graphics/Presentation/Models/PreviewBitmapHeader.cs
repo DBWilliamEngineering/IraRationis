@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct PreviewBitmapHeader
+internal struct PreviewBitmapHeader
 {
     public uint Size;
     public int Width, Height;

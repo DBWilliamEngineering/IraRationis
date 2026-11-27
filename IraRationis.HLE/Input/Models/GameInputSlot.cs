@@ -4,7 +4,7 @@
 
 namespace IraRationis.HLE.Input.Models;
 
-internal sealed unsafe class GameInputSlot
+internal sealed class GameInputSlot
 {
     public bool Connected;
     public ulong Sequence;

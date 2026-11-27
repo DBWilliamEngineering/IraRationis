@@ -22,6 +22,8 @@ IRX is an independently evolving, managed-first native compatibility runtime tar
 | [fxceless/victory-fork](https://github.com/fxceless/victory-fork) | Upstream ancestry and technical reference | Direct versus inherited incorporation must be determined at file level. |
 | [avatarmanz/VIctory-7900XTX](https://github.com/avatarmanz/VIctory-7900XTX) | Architectural reference | R43, R48 and R49 notes document inspiration from resource publication, deferred preparation and transfer queues. R48/R49 notes report independent implementations rather than copied reference code; this has not been independently audited. |
 | [Belobug/VIctory-Belobug-AMD](https://github.com/Belobug/VIctory-Belobug-AMD) | Technical reference | Supplied by the maintainer for investigating critical compatibility and performance issues. No implementation from this repository was incorporated in the component-restructure change. This entry is not an audit of either repository. |
+| [trustno1-coder/VIctory-NVIDIA](https://github.com/trustno1-coder/VIctory-NVIDIA) | Technical reference | Published DLSS, frame generation and performance reporting inform benchmark design. |
+| [BCPack format specification](https://github.com/Tim0219800/bcpack-decoder/blob/main/docs/SPEC.md), [Microsoft Silicon-rANS](https://github.com/microsoft/silicon-rans) | Format and validation references | Documented byte layout, frequency generation, lane scheduling and block semantics inform the C# BC1 implementation. Independently calculated integer frequencies were compared with the published RTL. |
 
 ```mermaid
 flowchart TD
@@ -62,6 +64,7 @@ Paths follow the current component layout. Historical revision labels and commit
 | Virtual Unified Memory research | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/Diagnostics/MemoryProbe.cs) | Documented IRX research extension | Isolated research, not a production guest memory manager. Verify introduction commit. |
 | Shader inspection and lowering | [IraRationis.Shaders](../IraRationis.Shaders) | Mixed / unresolved | Audit parsers, instruction semantics and lowering implementations separately. |
 | DirectStorage | [DirectStorageModule.cs](../IraRationis.HLE/Storage/DirectStorageModule.cs), [DirectStoragePayload.cs](../IraRationis.HLE/Storage/DirectStoragePayload.cs) | Mixed / documented IRX development | Trace queue and payload validation changes. |
+| BC1 BCPack | [Storage/BcPack](../IraRationis.HLE/Storage/BcPack), [authored byte fixtures](../IraRationis.Runtime.Tests/Contracts/DirectStorageBcPackTests.cs) | Documented IRX development | Original managed implementation of the published format behavior. The verified built-in selector prefix is calculated directly. Other dictionary entries are optional local data that require independent validation. |
 | Controller input | [DualSense provider](../IraRationis.HLE/Input/DualSenseProvider.cs), [input decoding](../IraRationis.HLE/Input/GameInputModule/DualSense.cs) | Documented IRX development | R30 documentation describes native wired DualSense integration; extraction preserves inherited notices. Verify source ancestry. |
 | Audio and PCM | [IraRationis.Media](../IraRationis.Media), [PCM observation](../IraRationis.HLE/Audio/Apu/XApuModule/Pcm.cs) | Mixed / documented IRX development | Distinguish adapted APU/DSP behavior from host PCM contracts. The shared audio-local WaveFormat/WaveHeader types consolidate existing identical ABI layouts. |
 | Media decoding | [MediaFoundationDecoder.cs](../IraRationis.Media/Decoding/MediaFoundationDecoder.cs) | Documented IRX extension | R37 commit and README record in-process Windows Media Foundation integration. |
@@ -134,6 +137,18 @@ git show d18868543526c75005b12bad3fd1666037814340 --stat
 A first appearance in IRX history is not proof of independent authorship. Compare against pinned upstream source trees before marking a component independently authored.
 
 ## 8. Review boundaries
+
+### Retiring inherited implementations
+
+The November 27 header scan found 100 source files with matching Victory or ztrx port and adaptation notices. The count is an index for file-by-file review. Start with related clusters so an ABI change can be validated end to end. The `HostPolicy.cs` notice identifies an inherited host import resolver. A replacement starts with the observed module allowlist, system-directory loading, named and ordinal export resolution, retention rules, and rejection tests. Build the replacement from those contracts and compatible platform documentation. Record which source and data it still relies on, then update the notice for the actual lineage of the reviewed implementation. Keep the original attribution in the historical inventory.
+
+```powershell
+rg -l '^(//|#) (Port of|Adapted from|Layout and addressing adapted from).*([Zz]ettrox|[Vv]ictory|[Zz]trx)' `
+    -g '*.cs' -g '*.cpp' -g '*.h' -g '*.ps1'
+git log --follow -- IraRationis.HLE/Runtime/HostPolicy.cs
+```
+
+Use a block header for new IRX source files with `@file`, `@description`, `@author Damon William`, and the original `@date` in ISO format. Add `@details` for a meaningful ownership, ordering, or numerical contract. The [BC1 decoder header](../IraRationis.HLE/Storage/BcPack/BcPackBc1Decoder.cs) shows the format. File-level license terms follow the applicable repository notices. A separate library with independent ownership and distribution can have separately documented terms. Review how it would be used and distributed with the existing runtime before making a restrictive designation. [Repository license](../LICENSE) · [Proprietary material scope](../LICENSE-PROPRIETARY.md) · [SPDX identifiers](https://spdx.dev/learn/handling-license-info/)
 
 This inventory is based on the R52 repository tree, selected source files, revision notes, commit summaries, and existing attribution statements. No complete upstream diff, dependency license audit, or independent authorship verification has been performed. Unresolved classifications must remain visible until the maintainer completes that review.
 

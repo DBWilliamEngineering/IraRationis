@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.RootSignatures.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct RootSignatureObject
+internal struct RootSignatureObject
 {
     public GraphicsObjectHeader Header;
     public nuint BlobSize;

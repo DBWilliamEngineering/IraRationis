@@ -140,7 +140,9 @@ internal sealed unsafe partial class LocalUserService
 
         *output = 0;
 
-        return FromObject(self)._users.IsValid(handle) ? RuntimeServiceResult.Success : RuntimeServiceResult.InvalidHandle;
+        return FromObject(self)._users.IsValid(handle)
+            ? RuntimeServiceResult.Success
+            : RuntimeServiceResult.InvalidHandle;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

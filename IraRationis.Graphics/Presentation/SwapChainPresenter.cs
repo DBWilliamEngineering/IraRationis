@@ -4,7 +4,7 @@
 // exact-format copy on the producing queue, not a CPU readback or plane shader.
 
 using IraRationis.Graphics.Presentation.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Presentation;
 
@@ -38,7 +38,8 @@ internal sealed unsafe class SwapChainPresenter
         {
             var factoryId = GraphicsDevice.FactoryId;
 
-            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory), "R19 CreateDXGIFactory2");
+            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory),
+                "R19 CreateDXGIFactory2");
 
             var desc = new SwapDescription
             {
@@ -54,13 +55,15 @@ internal sealed unsafe class SwapChainPresenter
             };
 
             GraphicsDevice.CheckHostResult(
-                ((delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)GraphicsDevice.Slot(
-                    factory, 15))
+                ((delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)
+                    GraphicsDevice.Slot(
+                        factory, 15))
                 (factory, queue, window, &desc, null, 0, &baseChain), "R19 CreateSwapChainForHwnd");
 
             var chainId = GraphicsDevice.SwapChainId;
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)GraphicsDevice.Slot(baseChain, 0))
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)GraphicsDevice.Slot(baseChain, 0))
                 (baseChain, &chainId, &chain), "R19 IDXGISwapChain3");
 
             _chain = chain;
@@ -68,7 +71,8 @@ internal sealed unsafe class SwapChainPresenter
             var fenceId = GraphicsDevice.FenceId;
             var device = (nint)GraphicsDevice._host;
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(device, 36))
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(device, 36))
                 (device, 0, 0, &fenceId, &fence), "R19 frame fence");
 
             _fence = fence;
@@ -80,14 +84,16 @@ internal sealed unsafe class SwapChainPresenter
 
                 nint buffer = 0;
 
-                GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_chain, 9))
+                GraphicsDevice.CheckHostResult(
+                    ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_chain, 9))
                     (_chain, (uint)index, &resourceId, &buffer), "R19 GetBuffer");
 
                 slot.Buffer = buffer;
 
                 GraphicsDevice.CreateUtilityCommandList(out slot.Allocator, out slot.List);
 
-                GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.List, 9))(slot.List),
+                GraphicsDevice.CheckHostResult(
+                    ((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.List, 9))(slot.List),
                     "R19 initial close");
             }
         }
@@ -160,7 +166,8 @@ internal sealed unsafe class SwapChainPresenter
 
         if (completed < slot.FenceValue)
         {
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(_fence, 9))
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(_fence, 9))
                 (_fence, slot.FenceValue, _event.SafeWaitHandle.DangerousGetHandle()), "R19 frame fence event");
 
             if (!_event.WaitOne(GraphicsDevice.MemoryWaitTimeoutMilliseconds))
@@ -206,24 +213,28 @@ internal sealed unsafe class SwapChainPresenter
 
             WaitForSlot(slot);
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.Allocator, 8))(slot.Allocator),
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.Allocator, 8))(slot.Allocator),
                 "R19 allocator reset");
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)GraphicsDevice.Slot(slot.List, 10))
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)GraphicsDevice.Slot(slot.List, 10))
                 (slot.List, slot.Allocator, 0), "R19 list reset");
             // Guest draw paths currently restore COMMON. PRESENT is also 0.
             GraphicsDevice.TransitionHostResource(slot.List, source, 0, GraphicsDevice.CopySource);
 
             GraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, 0, GraphicsDevice.CopyDestination);
 
-            ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)GraphicsDevice.Slot(slot.List, 17))(slot.List, slot.Buffer,
+            ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)GraphicsDevice.Slot(slot.List, 17))(slot.List,
+                slot.Buffer,
                 source);
 
             GraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, GraphicsDevice.CopyDestination, 0);
 
             GraphicsDevice.TransitionHostResource(slot.List, source, GraphicsDevice.CopySource, 0);
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.List, 9))(slot.List),
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(slot.List, 9))(slot.List),
                 "R19 list close");
             // Keep the source alive until the copy completes, even if the
             // guest releases its resource immediately after PresentX.
@@ -235,10 +246,12 @@ internal sealed unsafe class SwapChainPresenter
 
             ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)GraphicsDevice.Slot(Queue, 10))(Queue, 1, &list);
 
-            var resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)GraphicsDevice.Slot(_chain, 8))(_chain, 1, 0);
+            var resultCode =
+                ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)GraphicsDevice.Slot(_chain, 8))(_chain, 1, 0);
             var value = ++_nextValue;
 
-            GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(Queue, 14))
+            GraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(Queue, 14))
                 (Queue, _fence, value), "R19 frame fence signal");
 
             slot.FenceValue = value;

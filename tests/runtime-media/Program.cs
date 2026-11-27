@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
-using IraRationis.HLE.Audio.Apu;
+using IraRationis.HLE.Audio.Apu.XApuModule;
 using IraRationis.HLE.Runtime;
 using IraRationis.Media.Audio;
 using IraRationis.Media.Video;
-using IraRationis.HLE.Audio.Apu.XApuModule;
 
 namespace RuntimeMedia;
 
@@ -146,7 +145,8 @@ internal static unsafe class Program
 
             for (var index = 0; index < guest.Length; index++)
             {
-                Require(Math.Abs(guest[index] - sink.LastPacket[index] * (1.0f / 32768.0f)) < Tolerance, "Guest output unchanged");
+                Require(Math.Abs(guest[index] - sink.LastPacket[index] * (1.0f / 32768.0f)) < Tolerance,
+                    "Guest output unchanged");
             }
 
             Require(XApuModule.AttachPcmSink(handle, 1, null), "Sink detached");

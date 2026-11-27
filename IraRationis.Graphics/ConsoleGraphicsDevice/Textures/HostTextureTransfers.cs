@@ -148,7 +148,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Extend the existing native resource round-trip probe. Original RGBA8 data,
     // two unequal mip extents, nonzero placement, pitched rows and a real GPU copy.
-    private static void VerifyHostTextureTransfers(nint queue, bool deferUpload = false, uint storageFormat = 28, uint copyFormat = 28)
+    private static void VerifyHostTextureTransfers(nint queue, bool deferUpload = false, uint storageFormat = 28,
+        uint copyFormat = 28)
     {
         const int bytes = 2048;
 
@@ -201,7 +202,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             SampleCount = 1
         };
 
-        using var utility = AcquireUtilityContext(bytes, 0, versioned: true);
+        using var utility = AcquireUtilityContext(bytes, 0, true);
         utility.PrepareVersionedUpload(data);
         VerifyHostTextureRoundTrip(queue, description, footprints, data, utility, deferUpload);
 
@@ -239,7 +240,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (!HostTextureViewFormats.IsSampledCompatible(typeless, linearFormat) ||
             !HostTextureViewFormats.IsSampledCompatible(typeless, srgbFormat) ||
             HostTextureViewFormats.IsSampledCompatible(description, srgbFormat) ||
-            !HostTextureViewFormats.TryGetColorCopyFormat(typelessFormat, out var copyFormat) || copyFormat != linearFormat)
+            !HostTextureViewFormats.TryGetColorCopyFormat(typelessFormat, out var copyFormat)
+            || copyFormat != linearFormat)
         {
             throw new InvalidOperationException("BC3 storage and typed view compatibility regressed.");
         }
@@ -256,14 +258,17 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (!SupportsHostTextureSampling(linearFormat))
         {
-            Console.WriteLine("[graphics-probe] BC3 footprint and view contracts passed (CPU only); GPU format unavailable.");
+            Console.WriteLine(
+                "[graphics-probe] BC3 footprint and view contracts passed (CPU only); GPU format unavailable.");
+
             return;
         }
 
         if (!TryPlanTextureTexture(description, out var plan) || plan == null ||
             plan.Bytes != bytes || plan.Pitches.Length != 1 || plan.Pitches[0] != rowPitch || plan.Offsets[0] != 0)
         {
-            throw new InvalidOperationException("Tiled BC3 texture upload footprint differs from the authored block extent.");
+            throw new InvalidOperationException(
+                "Tiled BC3 texture upload footprint differs from the authored block extent.");
         }
 
         var linear = new byte[bytes];
@@ -280,11 +285,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         description.Layout = 0;
         description.Flags = 0;
-        VerifyHostTextureRoundTrip(queue, description, [footprint], linear, utility, deferUpload: true);
-        Console.WriteLine("[graphics-probe] Tiled BC3 blocks passed ordered GPU upload and readback (512x468, layout 0x105).");
+        VerifyHostTextureRoundTrip(queue, description, [footprint], linear, utility, true);
+        Console.WriteLine(
+            "[graphics-probe] Tiled BC3 blocks passed ordered GPU upload and readback (512x468, layout 0x105).");
     }
 
-    private static void WriteAuthoredTiledTexture(ResourceDescription description, byte[] linear, byte[] tiled, uint rowPitch)
+    private static void WriteAuthoredTiledTexture(ResourceDescription description, byte[] linear, byte[] tiled,
+        uint rowPitch)
     {
         var create = (delegate* unmanaged[Stdcall]<ResourceDescription*, nint*, int>)TextureComputer.CreateAddress;
         nint computer = 0;
@@ -329,7 +336,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             foreach (var footprint in footprints)
             {
-                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, upload: true);
+                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, true);
             }
 
             if (deferUpload)
@@ -342,8 +349,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 TransitionHostResource(consumerList, texture, 0, CopySource);
                 foreach (var footprint in footprints)
                 {
-                    RecordHostTextureTransfer(consumerList, texture, readback, bytes, footprint, upload: false);
+                    RecordHostTextureTransfer(consumerList, texture, readback, bytes, footprint, false);
                 }
+
                 TransitionHostResource(consumerList, texture, CopySource, 0);
                 consumer.SubmitAndWait(queue);
                 ordered.CompleteAfterFence();
@@ -353,8 +361,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 TransitionHostResource(list, texture, CopyDestination, CopySource);
                 foreach (var footprint in footprints)
                 {
-                    RecordHostTextureTransfer(list, texture, readback, bytes, footprint, upload: false);
+                    RecordHostTextureTransfer(list, texture, readback, bytes, footprint, false);
                 }
+
                 TransitionHostResource(list, texture, CopySource, 0);
                 utility.SubmitAndWait(queue);
             }
@@ -390,7 +399,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                         if (!result.Slice(offset, count).SequenceEqual(expected.Slice(offset, count)))
                         {
-                            throw new InvalidOperationException($"GPU texture readback differs at subresource {footprint.Subresource}, row {row}.");
+                            throw new InvalidOperationException(
+                                $"GPU texture readback differs at subresource {footprint.Subresource}, row {row}.");
                         }
                     }
                 }

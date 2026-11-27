@@ -168,7 +168,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         return NoInterface;
-
     }
 
     private static int EnumerateDisplay(nint value, uint index, nint* output)

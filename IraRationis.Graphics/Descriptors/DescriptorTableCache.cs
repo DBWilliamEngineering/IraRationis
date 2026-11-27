@@ -13,9 +13,9 @@ namespace IraRationis.Graphics.Descriptors;
 internal sealed class DescriptorTableCache
 {
     internal const int DescriptorsPerTable = 3;
+    private readonly DescriptorBindingCatalog _catalog;
 
     private readonly int _owner = Environment.CurrentManagedThreadId;
-    private readonly DescriptorBindingCatalog _catalog;
     private readonly DescriptorTableCacheSlot[] _slots;
     private ulong _completed;
     private ulong _lastSubmitted;

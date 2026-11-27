@@ -4,7 +4,7 @@
 
 namespace IraRationis.Graphics.Descriptors.Models;
 
-internal sealed unsafe record DescriptorMetadata(
+internal sealed record DescriptorMetadata(
     uint Kind,
     nint Resource,
     long ResourceGeneration,

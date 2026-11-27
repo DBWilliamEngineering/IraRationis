@@ -94,7 +94,8 @@ internal static class DualMaskNativeContract
         const int exportCodeBytes = 6 * sizeof(uint);
 
         Require(code.Length >= ExportCodeOffset + exportCodeBytes, "export code length");
-        Require(metadata.Slice(variantOffset, exportCodeBytes).SequenceEqual(code.Slice(ExportCodeOffset, exportCodeBytes)),
+        Require(
+            metadata.Slice(variantOffset, exportCodeBytes).SequenceEqual(code.Slice(ExportCodeOffset, exportCodeBytes)),
             "matching FP16 export patch");
     }
 
@@ -167,7 +168,7 @@ internal static class DualMaskNativeContract
         reader.Reciprocal(5, vector7);
         reader.MultiplyLegacy(3, vector3, 6);
         reader.Maximum(3, zero, 3);
-        reader.FusedMultiplyAdd(2, vector2, vector5, 0, negations: 5);
+        reader.FusedMultiplyAdd(2, vector2, vector5, 0, 5);
         reader.Log2(3, vector3);
         reader.MultiplyLegacy(3, vector3, 4);
         reader.Exp2(3, vector3);
@@ -181,18 +182,20 @@ internal static class DualMaskNativeContract
         reader.ScalarNoOperation();
         reader.PackHalfTowardZero(0, vector2, 2);
         reader.PackHalfTowardZero(1, vector2, 3);
-        reader.Export(0, 0, 1, 0, 0, done: true, compressed: true, validMask: true);
+        reader.Export(0, 0, 1, 0, 0, true, true, true);
         reader.End();
         reader.Padding();
     }
 
     private static void RequireWords(ReadOnlySpan<byte> bytes, int offset, ReadOnlySpan<uint> expected, string contract)
     {
-        Require(offset >= 0 && offset <= bytes.Length && expected.Length <= (bytes.Length - offset) / sizeof(uint), contract);
+        Require(offset >= 0 && offset <= bytes.Length && expected.Length <= (bytes.Length - offset) / sizeof(uint),
+            contract);
 
         for (var index = 0; index < expected.Length; index++)
         {
-            Require(BinaryPrimitives.ReadUInt32LittleEndian(bytes[(offset + index * sizeof(uint))..]) == expected[index],
+            Require(
+                BinaryPrimitives.ReadUInt32LittleEndian(bytes[(offset + index * sizeof(uint))..]) == expected[index],
                 contract);
         }
     }

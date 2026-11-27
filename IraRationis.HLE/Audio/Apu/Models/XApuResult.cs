@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Apu.Models;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-internal unsafe struct XApuResult
+internal struct XApuResult
 {
     public XApuCommandId Id;
     public uint State;

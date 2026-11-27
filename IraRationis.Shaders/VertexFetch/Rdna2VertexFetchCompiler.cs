@@ -8,6 +8,7 @@ using System.Text;
 using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Native.Models;
+using IraRationis.Shaders.Raster.NativeInstructions;
 using IraRationis.Shaders.VertexFetch.Models;
 
 namespace IraRationis.Shaders.VertexFetch;
@@ -120,8 +121,10 @@ public static class Rdna2VertexFetchCompiler
             var end = name.IndexOf((byte)0);
 
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(expectedElement.Name)) ||
-                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != expectedElement.Index || Word(data, byteOffset + 12) != expectedElement.System ||
-                Word(data, byteOffset + 16) != expectedElement.Component || Word(data, byteOffset + 20) != expectedElement.Register ||
+                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != expectedElement.Index
+                || Word(data, byteOffset + 12) != expectedElement.System ||
+                Word(data, byteOffset + 16) != expectedElement.Component
+                || Word(data, byteOffset + 20) != expectedElement.Register ||
                 data[byteOffset + 24] != expectedElement.Mask || Word(data, byteOffset + 28) != 0)
             {
                 throw new NotSupportedException($"Unsupported {tag} semantic at index {index}.");
@@ -257,18 +260,20 @@ public static class Rdna2VertexFetchCompiler
 
         reader.SkipPrologue();
 
-        reader.Expect("interpolation setup / P0 attribute 0 xyzw", [
-            0xbefc030a, 0xc80a0002, 0xc80e0102,
-            0xc8120202, 0xc8160302
-        ]);
+        const int pixelBodyBytes = 11 * sizeof(uint);
+        var body = new RasterInstructionReader(reader.ReadBytes(pixelBodyBytes));
+        body.Move32(124, 10);
 
-        reader.Expect("interpolation wait", [0xbf800000, 0xbf800000]);
+        for (var component = 0U; component < 4U; component++)
+        {
+            body.InterpolateProvokingVertex(2U + component, 0, component);
+        }
 
-        reader.Expect("pack RTZ half pairs / compressed MRT0 export", [
-            0x5e000702, 0x5e020b04,
-            0xf8001c0f, 0x00000100
-        ]);
-
+        body.ScalarNoOperation();
+        body.ScalarNoOperation();
+        body.PackHalfTowardZero(0, RasterInstructionReader.Vector(2), 3);
+        body.PackHalfTowardZero(1, RasterInstructionReader.Vector(4), 5);
+        body.Export(0, 0, 1, 0, 0, true, true, true);
         reader.End();
     }
 
@@ -388,26 +393,21 @@ public static class Rdna2VertexFetchCompiler
             throw new InvalidOperationException("Synthetic vertex fetch recognition failed.");
         }
 
-        var rejected = false;
-        var bad = (byte[])pixelCode.Clone();
-
-        bad[4] ^= 1; // modify one interpolation operand, not a container hash
-
-        try
+        const int firstInterpolation = sizeof(uint);
+        foreach (var operandByte in new[] { firstInterpolation, firstInterpolation + 2 })
         {
-            RecognizePixel(pixel with
+            var modified = (byte[])pixelCode.Clone();
+            modified[operandByte] ^= 2;
+
+            try
             {
-                Code = bad
-            });
-        }
-        catch (NotSupportedException)
-        {
-            rejected = true;
-        }
+                RecognizePixel(pixel with { Code = modified });
 
-        if (!rejected)
-        {
-            throw new InvalidOperationException("Unsupported pixel variation was accepted.");
+                throw new InvalidOperationException("Unsupported P0 interpolation variation was accepted.");
+            }
+            catch (NotSupportedException)
+            {
+            }
         }
 
         return new VertexFetchShaderPair(EmitVertex(7, 2, fields.Position, fields.Attribute),

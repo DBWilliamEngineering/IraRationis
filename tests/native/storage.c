@@ -21,7 +21,7 @@ typedef struct QueueDesc
     USHORT capacity;
     CHAR priority;
     const char *name;
-    UINT64 unknown;
+    UINT64 options;
 } QueueDesc;
 
 typedef struct Request
@@ -59,6 +59,7 @@ static const BYTE plain[] = {1,2,3,4,5,6,7,8};
 static BYTE raw[8], inflated[8], file_bytes[8];
 static Request request;
 static SIZE_T page_count = 1, pages[1];
+static SIZE_T deferred_pages[1];
 static const BYTE compressed[] = {120,156,99,100,98,102,97,101,99,231,0,0,0,128,0,37};
 
 static void Read(void *queue, UINT64 options, void *destination, const void *source, UINT bytes, UINT64 offset)
@@ -125,14 +126,16 @@ UINT WINAPI ProbeEntry(void *reserved)
     Read(queue, MEMORY_SOURCE | 1, inflated, compressed, (UINT)sizeof(compressed), 0);
     Read(queue, 0, file_bytes, file, (UINT)sizeof(plain), 0);
     Read(queue, MEMORY_SOURCE | PAGE_DESTINATION, pages, plain, (UINT)sizeof(plain), 0);
+    Read(queue, MEMORY_SOURCE | PAGE_DESTINATION | 1, deferred_pages, compressed, (UINT)sizeof(compressed), 0);
     ((EnqueueStatus)SLOT(queue, 4))(queue, status, 0);
     if (((Result)SLOT(status, 4))(status, 0) != PENDING)
     {
         return 17;
     }
     /* Unknown transform must report failure after the preceding status. */
-    Read(queue, MEMORY_SOURCE | 2, raw, plain, (UINT)sizeof(plain), 0);
+    Read(queue, MEMORY_SOURCE | (1ULL << 63), raw, plain, (UINT)sizeof(plain), 0);
     ((EnqueueStatus)SLOT(queue, 4))(queue, status, 1);
+    deferred_pages[0] = pages[0];
     ((Action)SLOT(queue, 6))(queue);
     for (index = 0; index < 10000 && !((Complete)SLOT(status, 3))(status, 1); ++index)
     {

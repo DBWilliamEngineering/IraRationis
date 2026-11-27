@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Cli.Diagnostics.Network.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NetworkTraceProperties
+internal struct NetworkTraceProperties
 {
     public NetworkTraceHeader Header;
     public uint BufferSize;

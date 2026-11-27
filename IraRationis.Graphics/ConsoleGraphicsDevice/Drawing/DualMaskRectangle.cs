@@ -53,7 +53,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var cpu = ((ID3D12DescriptorHeap*)heap)->GetCPUDescriptorHandleForHeapStart();
             var gpu = ((ID3D12DescriptorHeap*)heap)->GetGPUDescriptorHandleForHeapStart();
-            var increment = _host->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            var increment =
+                _host->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE
+                    .D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
             if (cpu.ptr == 0 || gpu.ptr == 0 || increment == 0)
             {
@@ -92,7 +94,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         return source.Description is not { } descriptor || ((ReadDescriptorUInt32(descriptor, 8) >> 9) & 7U) >= 3;
     }
 
-    private static void TransitionDualMaskTextures(nint list, DualMaskRectangleBindings bindings, uint before, uint after)
+    private static void TransitionDualMaskTextures(nint list, DualMaskRectangleBindings bindings, uint before,
+        uint after)
     {
         TransitionHostResource(list, bindings.FirstHost, before, after);
 
@@ -102,7 +105,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void PrepareDualMaskTextures(nint queue, DualMaskRectangleBindings bindings, OrderedTextureUploads? ordered)
+    private static void PrepareDualMaskTextures(nint queue, DualMaskRectangleBindings bindings,
+        OrderedTextureUploads? ordered)
     {
         if (!IsDualMaskSourceCurrent(bindings.First, bindings.FirstHost) ||
             !IsDualMaskSourceCurrent(bindings.Second, bindings.SecondHost))

@@ -13,7 +13,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     private const ulong MaximumHostResourceBytes = 256UL << 20;
     private const ulong HostResourceBudget = 512UL << 20;
-    //TODO: Damon -> Replace the fixed budget with measured DXGI headroom after alias coherence and fence-safe eviction exist.
+    //TODO: Damon William -> Replace the fixed budget with measured DXGI headroom after alias coherence and fence-safe eviction exist.
     internal const uint CopyDestination = 0x400;
     internal const uint CopySource = 0x800;
     internal const uint GenericRead = 0xAC3;
@@ -45,7 +45,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         *output = 0;
 
-        return ((delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, void*, Guid*,
+        return ((delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, void*,
+                Guid*,
                 nint*, int>)Slot(device, 27))
             (device, &properties, 0, &description, state, null, &iid, output);
     }
@@ -108,6 +109,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 return resultCode < 0 ? resultCode : NotImplemented;
             }
+
+            ReserveGpuWritableBacking(resource, footprint.Size);
 
             resource->HostResource = created;
 
@@ -330,27 +333,30 @@ public static unsafe partial class ConsoleGraphicsDevice
                 new ReadOnlySpan<byte>(data, bytes));
 
             VerifyHostTextureTransfers(hostQueue);
-            VerifyHostTextureTransfers(hostQueue, deferUpload: true);
+            VerifyHostTextureTransfers(hostQueue, true);
             VerifyTextureUploadBatch(hostQueue);
             VerifyTiledBc3Transfer(hostQueue);
             if (SupportsHostTextureSampling(65))
             {
-                VerifyHostTextureTransfers(hostQueue, deferUpload: true, storageFormat: 65, copyFormat: 65);
+                VerifyHostTextureTransfers(hostQueue, true, 65, 65);
             }
             else
             {
                 Console.WriteLine("[graphics-probe] R77 A8 sample support unavailable; A8 transfer not tested.");
             }
+
             if (SupportsHostTextureSampling(61))
             {
-                VerifyHostTextureTransfers(hostQueue, deferUpload: true, storageFormat: 60, copyFormat: 61);
+                VerifyHostTextureTransfers(hostQueue, true, 60, 61);
             }
             else
             {
-                Console.WriteLine("[graphics-probe] R77 R8 sample support unavailable; typeless R8 transfer not tested.");
+                Console.WriteLine(
+                    "[graphics-probe] R77 R8 sample support unavailable; typeless R8 transfer not tested.");
             }
 
             VerifyCurveLutGpu(hostQueue);
+            VerifyColorLutInputUpload(hostQueue);
         }
         finally
         {

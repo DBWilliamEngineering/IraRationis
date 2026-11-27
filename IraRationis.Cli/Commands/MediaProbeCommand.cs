@@ -9,7 +9,8 @@ internal static class MediaProbeCommand
 {
     internal static int Execute(string[] args, TextWriter writer)
     {
-        if (args.Length is < 2 or > 3 || (args.Length == 3 && args[2] is not ("--play" or "--stream" or "--gpu" or "--stream-gpu")))
+        if (args.Length is < 2 or > 3
+            || (args.Length == 3 && args[2] is not ("--play" or "--stream" or "--gpu" or "--stream-gpu")))
         {
             PrintUsage(writer);
 
@@ -18,7 +19,7 @@ internal static class MediaProbeCommand
 
         var native = args[0] == "--mf";
 
-        if (args.Length == 3 && args[2] is ("--stream" or "--stream-gpu"))
+        if (args.Length == 3 && args[2] is "--stream" or "--stream-gpu")
         {
             if (native)
             {

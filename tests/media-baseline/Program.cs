@@ -1,7 +1,7 @@
-using IraRationis.Media.Decoding;
-using IraRationis.Media.Audio;
-using IraRationis.Media.Video;
 using System.Buffers.Binary;
+using IraRationis.Media.Audio;
+using IraRationis.Media.Decoding;
+using IraRationis.Media.Video;
 
 VerifyPrimitives();
 

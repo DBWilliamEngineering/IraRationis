@@ -12,7 +12,10 @@ internal sealed class PersistentStorageFixture : IDisposable
         Directory.CreateDirectory(DirectoryPath);
     }
 
-    internal string DirectoryPath { get; }
+    internal string DirectoryPath
+    {
+        get;
+    }
 
     public void Dispose()
     {
@@ -21,7 +24,8 @@ internal sealed class PersistentStorageFixture : IDisposable
         if (!string.Equals(Path.GetDirectoryName(resolved), _temporaryRoot, StringComparison.OrdinalIgnoreCase)
             || !Path.GetFileName(resolved).StartsWith("irx-pls-contract-", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Persistent-storage fixture cleanup escaped its owned temporary directory.");
+            throw new InvalidOperationException(
+                "Persistent-storage fixture cleanup escaped its owned temporary directory.");
         }
 
         if (Directory.Exists(resolved))

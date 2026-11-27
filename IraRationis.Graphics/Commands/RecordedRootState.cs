@@ -4,7 +4,7 @@
 
 namespace IraRationis.Graphics.Commands;
 
-internal sealed unsafe class RecordedRootState
+internal sealed class RecordedRootState
 {
     public readonly Dictionary<uint, uint[]> Constants = new();
     public readonly Dictionary<uint, ulong> Tables = new();

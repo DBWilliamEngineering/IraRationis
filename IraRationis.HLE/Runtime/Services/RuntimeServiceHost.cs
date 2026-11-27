@@ -5,11 +5,9 @@ using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
 using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.HLE.Runtime.Services.Async;
-using IraRationis.HLE.Runtime.Services.Storage;
-using IraRationis.HLE.Runtime.Services.Users;
-using IraRationis.HLE.Runtime.Services.Users.Models;
 using IraRationis.HLE.Runtime.Services.Storage.PersistentLocalStorageService;
 using IraRationis.HLE.Runtime.Services.Users.LocalUserService;
+using IraRationis.HLE.Runtime.Services.Users.Models;
 
 namespace IraRationis.HLE.Runtime.Services;
 
@@ -17,13 +15,13 @@ public sealed unsafe partial class RuntimeServiceHost
 {
     private static RuntimeServiceHost? _active;
     private readonly RuntimeBridgeAbiPolicy _abi;
-    private readonly RuntimeServiceTrace _trace;
-    private readonly Lazy<LocalUserService> _users;
+    private readonly Lock _bindingGate = new();
     private readonly Lazy<PersistentLocalStorageService> _storage;
     private readonly Lazy<TitleRuntimeService> _title;
-    private readonly Lock _bindingGate = new();
-    private nint _query;
+    private readonly RuntimeServiceTrace _trace;
+    private readonly Lazy<LocalUserService> _users;
     private nint _moduleReference;
+    private nint _query;
 
     private RuntimeServiceHost(RuntimeBridgeAbiPolicy abi, TextWriter writer)
     {
@@ -31,7 +29,8 @@ public sealed unsafe partial class RuntimeServiceHost
         _trace = new RuntimeServiceTrace(writer);
         _users = new Lazy<LocalUserService>(CreateUsers);
         _storage = new Lazy<PersistentLocalStorageService>(() => new PersistentLocalStorageService(
-            Path.Combine(RuntimeState.CurrentTitle.Storage, "persistent"), _trace, RuntimeState.CurrentTitle.StorageBytes));
+            Path.Combine(RuntimeState.CurrentTitle.Storage, "persistent"), _trace,
+            RuntimeState.CurrentTitle.StorageBytes));
         _title = new Lazy<TitleRuntimeService>(() => new TitleRuntimeService(RuntimeState.CurrentTitle.Id, _trace));
     }
 
@@ -61,7 +60,8 @@ public sealed unsafe partial class RuntimeServiceHost
 
         if (!abi.Verified)
         {
-            throw new NotSupportedException("The installed runtime ABI is not verified for local services. Disable IRX_RUNTIME_LOCAL_SERVICES to use the host runtime.");
+            throw new NotSupportedException(
+                "The installed runtime ABI is not verified for local services. Disable IRX_RUNTIME_LOCAL_SERVICES to use the host runtime.");
         }
 
         var session = new RuntimeServiceHost(abi, writer);
@@ -71,7 +71,8 @@ public sealed unsafe partial class RuntimeServiceHost
             throw new InvalidOperationException("Local runtime services already own this process.");
         }
 
-        session._trace.Write("Enabled", "localUser=True; persistentStorage=True; onlineIdentity=False; hostServiceAllowlist=True");
+        session._trace.Write("Enabled",
+            "localUser=True; persistentStorage=True; onlineIdentity=False; hostServiceAllowlist=True");
 
         return session;
     }
@@ -79,7 +80,7 @@ public sealed unsafe partial class RuntimeServiceHost
     internal nint? ResolveExport(nint module, byte* name, nint original)
     {
         if (original == 0 || !RuntimeBridgeMemoryReader.TryReadAnsi((nint)name, 64, out var export)
-            || export != "QueryApiImpl")
+                          || export != "QueryApiImpl")
         {
             return null;
         }
@@ -131,7 +132,8 @@ public sealed unsafe partial class RuntimeServiceHost
 
         if (result < 0 || asyncObject == 0)
         {
-            throw new InvalidOperationException($"The runtime async service is unavailable (0x{unchecked((uint)result):X8}).");
+            throw new InvalidOperationException(
+                $"The runtime async service is unavailable (0x{unchecked((uint)result):X8}).");
         }
 
         // These identifiers belong only to the emulator's local profile, not an authenticated online account.
@@ -201,19 +203,22 @@ public sealed unsafe partial class RuntimeServiceHost
         if (*provider == LocalUserService.Provider)
         {
             return _users.Value.TryQuery(*requested, out *output)
-                ? RuntimeServiceResult.Success : RuntimeServiceResult.NoInterface;
+                ? RuntimeServiceResult.Success
+                : RuntimeServiceResult.NoInterface;
         }
 
         if (*provider == PersistentLocalStorageService.ProviderId)
         {
             return _storage.Value.TryQuery(*requested, out *output)
-                ? RuntimeServiceResult.Success : RuntimeServiceResult.NoInterface;
+                ? RuntimeServiceResult.Success
+                : RuntimeServiceResult.NoInterface;
         }
 
         if (*provider == TitleRuntimeService.Provider)
         {
             return _title.Value.TryQuery(*requested, out *output)
-                ? RuntimeServiceResult.Success : RuntimeServiceResult.NoInterface;
+                ? RuntimeServiceResult.Success
+                : RuntimeServiceResult.NoInterface;
         }
 
         if (RuntimeServiceRoutingPolicy.AllowsHost(*provider, *requested))
@@ -221,7 +226,8 @@ public sealed unsafe partial class RuntimeServiceHost
             return InvokeHost(provider, requested, output);
         }
 
-        _trace.Write($"UnsupportedProvider:{*provider:D}", $"interface={*requested:D}; hresult=0x80004002; localHandlesQuarantined=True");
+        _trace.Write($"UnsupportedProvider:{*provider:D}",
+            $"interface={*requested:D}; hresult=0x80004002; localHandlesQuarantined=True");
 
         return RuntimeServiceResult.NoInterface;
     }

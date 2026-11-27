@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Port of Zettrox/ztrx, crates/victory-hle/src/host.rs.
+/**
+ * @file        HostPolicy.cs
+ * @description Resolves allowed Windows imports for the guest.
+ * @author      Damon William
+ * @date        2026-11-27
+ *
+ * @details     Successful module loads are retained for the lifetime of the process.
+ */
 
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Text;
 using IraRationis.PE.Models;
 
 namespace IraRationis.HLE.Runtime;
@@ -11,10 +18,11 @@ public sealed unsafe partial class HostPolicy
 {
     private const uint LoadLibrarySearchSystem32 = 0x00000800;
 
-    private static readonly Lock ModuleLock = new();
-    private static readonly Dictionary<string, nint> Modules = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Lock ModuleLoadGate = new();
+    private static readonly ConcurrentDictionary<string, nint> LoadedModules = new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly string[] DefaultAllow =
+    // Default compatibility names are retained from Zettrox/ztrx, crates/victory-hle/src/host.rs.
+    private static readonly string[] DefaultModuleRules =
     [
         "api-ms-win-core-*", "api-ms-win-eventing-*", "api-ms-win-security-*", "api-ms-win-crt-*",
         "kernel32.dll", "kernelbase.dll", "ntdll.dll", "ucrtbase.dll", "vcruntime140*", "msvcp140*",
@@ -23,29 +31,43 @@ public sealed unsafe partial class HostPolicy
         "ole32.dll", "advapi32.dll", "iphlpapi.dll", "dbghelp.dll", "xaudio2_9.dll", "mfplat.dll", "mfreadwrite.dll"
     ];
 
-    private readonly string[] _allow;
+    private readonly HashSet<string> _exactModuleNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly string[] _moduleFamilyPrefixes;
 
-    public HostPolicy() : this(DefaultAllow)
+    public HostPolicy() : this(DefaultModuleRules)
     {
     }
 
     public HostPolicy(IEnumerable<string> allow)
     {
-        _allow = allow.ToArray();
+        ArgumentNullException.ThrowIfNull(allow);
+
+        var families = new List<string>();
+        foreach (var rule in allow)
+        {
+            if (rule.EndsWith('*'))
+            {
+                families.Add(rule[..^1]);
+            }
+            else
+            {
+                _exactModuleNames.Add(rule);
+            }
+        }
+
+        _moduleFamilyPrefixes = families.ToArray();
     }
 
     public bool Allows(string dll)
     {
-        foreach (var pattern in _allow)
+        if (_exactModuleNames.Contains(dll))
         {
-            if (pattern.EndsWith('*'))
-            {
-                if (dll.AsSpan().StartsWith(pattern.AsSpan(0, pattern.Length - 1), StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            else if (string.Equals(pattern, dll, StringComparison.OrdinalIgnoreCase))
+            return true;
+        }
+
+        foreach (var prefix in _moduleFamilyPrefixes)
+        {
+            if (dll.AsSpan().StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -56,69 +78,45 @@ public sealed unsafe partial class HostPolicy
 
     public nuint? Resolve(string dll, ImportSymbol symbol)
     {
-        if (!OperatingSystem.IsWindows() || !Allows(dll))
+        if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(dll) || dll.AsSpan().IndexOfAny("\0/\\:") >= 0 ||
+            !Allows(dll) || symbol.Name?.Contains('\0') == true)
         {
             return null;
         }
 
-        return ResolveSystemFunction(dll, symbol);
-    }
-
-    private static nuint? ResolveSystemFunction(string dll, ImportSymbol symbol)
-    {
-        if (dll.Length == 0 || dll.Contains('\0') || dll.Contains('/') || dll.Contains('\\') || dll.Contains(':'))
+        var module = GetOrLoadModule(dll);
+        if (module == 0)
         {
             return null;
         }
 
-        var handle = GetModule(dll);
-
-        if (handle == 0)
-        {
-            return null;
-        }
-
-        var address = (nint)0;
-
-        if (symbol.Name is { } name)
-        {
-            if (name.Contains('\0'))
-            {
-                return null;
-            }
-
-            var bytes = Encoding.UTF8.GetBytes(name + '\0');
-
-            fixed (byte* pointer = bytes)
-            {
-                address = GetProcAddress(handle, pointer);
-            }
-        }
-        else
-        {
-            address = GetProcAddress(handle, (byte*)symbol.HintOrOrdinal);
-        }
-
+        var address = symbol.Name is { } name
+            ? GetProcAddressByName(module, name)
+            : GetProcAddressByOrdinal(module, (byte*)symbol.HintOrOrdinal);
         return address == 0 ? null : (nuint)address;
     }
 
-    private static nint GetModule(string dll)
+    private static nint GetOrLoadModule(string dll)
     {
-        lock (ModuleLock)
+        if (LoadedModules.TryGetValue(dll, out var module))
         {
-            if (Modules.TryGetValue(dll, out var existing))
+            return module;
+        }
+
+        lock (ModuleLoadGate)
+        {
+            if (LoadedModules.TryGetValue(dll, out module))
             {
-                return existing;
+                return module;
             }
 
-            var handle = LoadLibraryExW(dll, 0, LoadLibrarySearchSystem32);
-
-            if (handle != 0)
+            module = LoadLibraryExW(dll, 0, LoadLibrarySearchSystem32);
+            if (module != 0)
             {
-                Modules.Add(dll, handle);
+                LoadedModules[dll] = module;
             }
 
-            return handle;
+            return module;
         }
     }
 
@@ -126,7 +124,11 @@ public sealed unsafe partial class HostPolicy
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nint LoadLibraryExW(string fileName, nint file, uint flags);
 
-    [LibraryImport("kernel32.dll")]
+    [LibraryImport("kernel32.dll", EntryPoint = "GetProcAddress")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static unsafe partial nint GetProcAddress(nint module, byte* name);
+    private static partial nint GetProcAddressByOrdinal(nint module, byte* ordinal);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetProcAddress", StringMarshalling = StringMarshalling.Utf8)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint GetProcAddressByName(nint module, string name);
 }

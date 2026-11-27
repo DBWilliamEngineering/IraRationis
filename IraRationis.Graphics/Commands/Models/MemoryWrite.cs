@@ -4,4 +4,4 @@
 
 namespace IraRationis.Graphics.Commands.Models;
 
-internal readonly unsafe record struct MemoryWrite(ulong Address, ulong Value, int Bytes, uint Flags);
+internal readonly record struct MemoryWrite(ulong Address, ulong Value, int Bytes, uint Flags);

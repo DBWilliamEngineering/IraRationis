@@ -141,7 +141,7 @@ internal static unsafe partial class RuntimeBridgeMemoryReader
                 {
                     var byteIndex = characterIndex * characterSize;
                     var character = characterSize == sizeof(char)
-                        ? bytes[byteIndex] | bytes[byteIndex + 1] << 8
+                        ? bytes[byteIndex] | (bytes[byteIndex + 1] << 8)
                         : bytes[byteIndex];
 
                     if (character == 0)
@@ -177,7 +177,7 @@ internal static unsafe partial class RuntimeBridgeMemoryReader
     private static bool TryReadBytes(nint address, Span<byte> bytes)
     {
         if (!OperatingSystem.IsWindows() || !IsValidRange(address, bytes.Length)
-            || !IsReadableRange((nuint)address, bytes.Length))
+                                         || !IsReadableRange((nuint)address, bytes.Length))
         {
             return false;
         }
@@ -203,7 +203,7 @@ internal static unsafe partial class RuntimeBridgeMemoryReader
     private static bool IsValidRange(nint address, int byteCount)
     {
         return byteCount > 0 && (nuint)address > ushort.MaxValue
-            && (nuint)address <= nuint.MaxValue - (nuint)(byteCount - 1);
+                             && (nuint)address <= nuint.MaxValue - (nuint)(byteCount - 1);
     }
 
     private static int GetPageChunkLength(nuint address, int remainingBytes)
@@ -227,7 +227,7 @@ internal static unsafe partial class RuntimeBridgeMemoryReader
             nuint bytesRead;
 
             return ReadProcessMemory(-1, (void*)address, buffer, (nuint)destination.Length, &bytesRead) != 0
-                && bytesRead == (nuint)destination.Length;
+                   && bytesRead == (nuint)destination.Length;
         }
     }
 
@@ -262,9 +262,11 @@ internal static unsafe partial class RuntimeBridgeMemoryReader
         }
 
         return information.State == CommittedMemory && (information.Protection & GuardProtection) == 0
-            && (information.Protection & ReadableProtectionMask) != 0
-            && address >= information.BaseAddress && address - information.BaseAddress < information.RegionSize
-            && (nuint)length <= information.RegionSize - (address - information.BaseAddress);
+                                                    && (information.Protection & ReadableProtectionMask) != 0
+                                                    && address >= information.BaseAddress
+                                                    && address - information.BaseAddress < information.RegionSize
+                                                    && (nuint)length <= information.RegionSize
+                                                    - (address - information.BaseAddress);
     }
 
     [LibraryImport("kernel32.dll")]

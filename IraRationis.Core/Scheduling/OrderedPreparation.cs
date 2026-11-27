@@ -35,7 +35,7 @@ public static class OrderedPreparation
 
         while (offset < total)
         {
-            //TODO: Damon -> Measure preparation and consumption separately before replacing this batch barrier with a pipeline.
+            //TODO: Damon William -> Measure preparation and consumption separately before replacing this batch barrier with a pipeline.
             var count = Math.Min(capacity, total - offset);
 
             try

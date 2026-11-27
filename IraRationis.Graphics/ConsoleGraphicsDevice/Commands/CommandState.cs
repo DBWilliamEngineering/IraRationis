@@ -68,8 +68,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         var uploadPool = rectangleUploads is null ? null : RectangleUploadPool;
         foreach (var hostReference in state.HostViews)
         {
-            if (uploadPool is null || rectangleUploads is null || !rectangleUploads.TryGetValue(hostReference, out var buffer) ||
-                !uploadPool.TryReturn(buffer))
+            if (uploadPool is null || rectangleUploads is null
+                                   || !rectangleUploads.TryGetValue(hostReference, out var buffer) ||
+                                   !uploadPool.TryReturn(buffer))
             {
                 _ = HostRelease(hostReference);
             }

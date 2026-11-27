@@ -2490,10 +2490,13 @@ public static class Rdna2ColorLutCompiler
 
         var programs = NativeProgramReader.Read(ShaderContainer.Parse(shader));
 
-        if (programs is not [{
+        if (programs is not
+            [
+                {
                     Stage: NativeShaderStage.Compute, Wave64: true,
                     VectorRegisters: 28, ScalarRegisters: 79, LocalBytes: 0, Threads: [8, 8, 1]
-                } program ]
+                } program
+            ]
             || program.Code.Length != 12928
             || program.RootLayout.Length != 920
             || program.UsedResources.Length != 80

@@ -142,7 +142,7 @@ public sealed unsafe partial class WindowsPcmMonitor : IPcmPacketSink, IDisposab
 
             var progress = Stopwatch.StartNew();
 
-            for(;;)
+            for (;;)
             {
                 for (var slot = 0; slot < NativeSlots; slot++)
                 {

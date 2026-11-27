@@ -5,9 +5,9 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -334,7 +334,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 NativeMemory.Clear((void*)memory, (nuint)info.Size);
             }
 
-            var resultCode = NewResource(*description, *properties, flags, (ulong)memory, 0, memory, iid, output, hooks.Free,
+            var resultCode = NewResource(*description, *properties, flags, (ulong)memory, 0, memory, iid, output,
+                hooks.Free,
                 attributes);
 
             return ReportCommittedResult(operation, resultCode, resultCode == 0 ? *output : 0);
@@ -748,7 +749,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 >)&ResourceAllocationInfo;
 
         device[27] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, Guid*,
+            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint,
+                Guid*,
                 nint*, int>)&CreateCommittedResource;
 
         device[28] = (nint)(delegate* unmanaged[Stdcall]<nint, HeapDescription*, Guid*, nint*, int>)&CreateResourceHeap;
@@ -764,7 +766,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         device[76] = device[27];
 
         device[127] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint, nint,
+            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, nint,
+                nint,
                 uint, uint*, Guid*, nint*, int>)&CreateCommittedResource3;
 
         device[133] =
@@ -781,7 +784,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         resource[11] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong>)&ResourceAddress;
 
-        resource[14] = (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint*, int>)&ResourceHeapProperties;
+        resource[14] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint*, int>)&ResourceHeapProperties;
 
         _resourceTable = (nint)resource;
 

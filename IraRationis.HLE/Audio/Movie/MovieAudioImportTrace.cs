@@ -38,33 +38,33 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
     private static readonly long ActiveMovieWindowTicks = Stopwatch.Frequency / 2;
 
     private static MovieAudioImportTrace? _binding;
+    private readonly nint _binkAsyncWaitAddress;
+    private readonly nint _binkWaitAddress;
+    private readonly MovieAudioEndpointTrace? _endpointTrace;
+    private readonly nint _factoryAddress;
+    private readonly MovieAudioFrameTrace? _frameTrace;
+    private readonly nint _lockAddress;
+    private readonly MovieMixerWaitAudit _mixerWaitAudit = new();
+    private readonly bool _mixerWaitAuditEnabled = MixerWaitAuditEnabled;
+    private readonly nint _openTrackAddress;
+    private readonly bool _preciseMixerWaitEnabled;
+    private readonly nint _readyAddress;
+    private readonly nint _registerAddress;
+    private readonly Lock _registrationLock = new();
+    private readonly Timer _reporter;
 
     private readonly IImportResolver _resolver;
-    private readonly nint _registerAddress;
-    private readonly nint _factoryAddress;
-    private readonly nint _openTrackAddress;
-    private readonly nint _readyAddress;
-    private readonly nint _lockAddress;
-    private readonly nint _unlockAddress;
-    private readonly Lock _registrationLock = new();
-    private readonly ConcurrentDictionary<nint, MovieAudioTrack> _tracks = new();
-    private readonly MovieMixerWaitAudit _mixerWaitAudit = new();
-    private readonly MovieAudioEndpointTrace? _endpointTrace;
-    private readonly MovieAudioFrameTrace? _frameTrace;
-    private readonly nint _binkWaitAddress;
-    private readonly nint _binkAsyncWaitAddress;
-    private readonly bool _mixerWaitAuditEnabled = MixerWaitAuditEnabled;
-    private readonly bool _preciseMixerWaitEnabled;
-    private readonly Timer _reporter;
     private readonly long _started = Stopwatch.GetTimestamp();
+    private readonly ConcurrentDictionary<nint, MovieAudioTrack> _tracks = new();
+    private readonly nint _unlockAddress;
+    private int _disposed;
+    private nint _endpointWaitAddress;
+    private long _lastAcceptedMovieBlock;
     private int _nextTrack;
     private int _reportedRegistration;
     private int _reporting;
     private int _reports;
-    private int _disposed;
     private nint _sleepAddress;
-    private nint _endpointWaitAddress;
-    private long _lastAcceptedMovieBlock;
 
     private MovieAudioImportTrace(IImportResolver resolver, nuint title, nuint registration, LoadedImage library)
     {
@@ -120,18 +120,8 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         get
         {
             return Volatile.Read(ref _binding) is { } trace && Volatile.Read(ref trace._disposed) == 0 &&
-                Volatile.Read(ref trace._endpointWaitAddress) != 0;
+                   Volatile.Read(ref trace._endpointWaitAddress) != 0;
         }
-    }
-
-    internal static bool TryAttachEndpointMixer(nint state)
-    {
-        return Volatile.Read(ref _binding)?._endpointTrace?.TryAttach(state) == true;
-    }
-
-    internal static void DetachEndpointMixer(nint state)
-    {
-        Volatile.Read(ref _binding)?._endpointTrace?.Detach(state);
     }
 
     private static bool MixerWaitAuditEnabled
@@ -157,49 +147,16 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         get
         {
             return Volatile.Read(ref _binding) is { } trace && Volatile.Read(ref trace._disposed) == 0 &&
-                Volatile.Read(ref trace._sleepAddress) != 0;
+                   Volatile.Read(ref trace._sleepAddress) != 0;
         }
     }
 
-    public static MovieAudioImportTrace? Begin(IImportResolver resolver, LoadedImage title, LoadedImage? library)
+    public void Dispose()
     {
-        if (!Requested)
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            return null;
+            _reporter.Dispose();
         }
-
-        if (library is null || !MatchesProfile(title.OriginalHash, library.OriginalHash) ||
-            title.Info.SizeOfImage <= FactoryRva || library.Info.SizeOfImage <= RegistrationRva ||
-            library.Export(new ImportSymbol(RegistrationName, 0)) is not { } address ||
-            address != library.BaseAddress + RegistrationRva)
-        {
-            Note("enabled=False; reason=unverified-title-or-library");
-
-            return null;
-        }
-
-        var trace = new MovieAudioImportTrace(resolver, title.BaseAddress, address, library);
-
-        // Bound callbacks may outlive this trace's reporting scope. Keep their forwards valid.
-        if (Interlocked.CompareExchange(ref _binding, trace, null) is not null)
-        {
-            trace.Dispose();
-
-            return null;
-        }
-
-        trace._reporter.Change(2_000, 2_000);
-        Note($"enabled=True; scope=Bink-to-guest-voice; units=PCM-bytes; periodMs=2000; " +
-            $"mixerWaitAudit={trace._mixerWaitAuditEnabled}; mixerPreciseWaitRequested={trace._preciseMixerWaitEnabled}; " +
-            $"endpointProbe={trace._endpointTrace != null}; frameProbe={trace._frameTrace != null}");
-
-        return trace;
-    }
-
-    internal static bool MatchesProfile(string titleHash, string libraryHash)
-    {
-        return string.Equals(titleHash, AudioMixerScheduling.ObservedBuild, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(libraryHash, LibraryHash, StringComparison.OrdinalIgnoreCase);
     }
 
     public ImportResolution? Resolve(string dll, ImportSymbol symbol)
@@ -268,19 +225,66 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
                     Note("endpointWaitAuditBound=True");
                 }
 
-                return endpoint with { Address = (nuint)(delegate* unmanaged[Stdcall]<nint, uint, uint>)&WaitForEndpointEvent };
+                return endpoint with
+                {
+                    Address = (nuint)(delegate* unmanaged[Stdcall]<nint, uint, uint>)&WaitForEndpointEvent
+                };
             }
         }
 
         return resolution;
     }
 
-    public void Dispose()
+    internal static bool TryAttachEndpointMixer(nint state)
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        return Volatile.Read(ref _binding)?._endpointTrace?.TryAttach(state) == true;
+    }
+
+    internal static void DetachEndpointMixer(nint state)
+    {
+        Volatile.Read(ref _binding)?._endpointTrace?.Detach(state);
+    }
+
+    public static MovieAudioImportTrace? Begin(IImportResolver resolver, LoadedImage title, LoadedImage? library)
+    {
+        if (!Requested)
         {
-            _reporter.Dispose();
+            return null;
         }
+
+        if (library is null || !MatchesProfile(title.OriginalHash, library.OriginalHash) ||
+            title.Info.SizeOfImage <= FactoryRva || library.Info.SizeOfImage <= RegistrationRva ||
+            library.Export(new ImportSymbol(RegistrationName, 0)) is not { } address ||
+            address != library.BaseAddress + RegistrationRva)
+        {
+            Note("enabled=False; reason=unverified-title-or-library");
+
+            return null;
+        }
+
+        var trace = new MovieAudioImportTrace(resolver, title.BaseAddress, address, library);
+
+        // Bound callbacks may outlive this trace's reporting scope. Keep their forwards valid.
+        if (Interlocked.CompareExchange(ref _binding, trace, null) is not null)
+        {
+            trace.Dispose();
+
+            return null;
+        }
+
+        trace._reporter.Change(2_000, 2_000);
+        Note($"enabled=True; scope=Bink-to-guest-voice; units=PCM-bytes; periodMs=2000; " +
+             $"mixerWaitAudit={trace._mixerWaitAuditEnabled}; mixerPreciseWaitRequested={trace._preciseMixerWaitEnabled}; "
+             +
+             $"endpointProbe={trace._endpointTrace != null}; frameProbe={trace._frameTrace != null}");
+
+        return trace;
+    }
+
+    internal static bool MatchesProfile(string titleHash, string libraryHash)
+    {
+        return string.Equals(titleHash, AudioMixerScheduling.ObservedBuild, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(libraryHash, LibraryHash, StringComparison.OrdinalIgnoreCase);
     }
 
     [UnmanagedCallersOnly]
@@ -332,7 +336,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
     private bool ObserveMovieFrame(nint movie)
     {
         return Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _reports) < MaximumReports &&
-            _frameTrace?.Observes(movie) == true;
+               _frameTrace?.Observes(movie) == true;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -342,9 +346,11 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         var original = (delegate* unmanaged[Stdcall]<uint, void>)Volatile.Read(ref trace._sleepAddress);
 
         if (!AudioMixerScheduling.IsCurrentMixerObserved || Volatile.Read(ref trace._disposed) != 0 ||
-            Volatile.Read(ref trace._reports) >= MaximumReports || milliseconds > MovieMixerWaitAudit.MaximumTimedWaitMilliseconds)
+            Volatile.Read(ref trace._reports) >= MaximumReports
+            || milliseconds > MovieMixerWaitAudit.MaximumTimedWaitMilliseconds)
         {
             original(milliseconds);
+
             return;
         }
 
@@ -352,6 +358,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         {
             trace._mixerWaitAudit.RecordYield();
             original(milliseconds);
+
             return;
         }
 

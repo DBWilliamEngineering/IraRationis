@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Graphics.Presentation.Models;
-using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
+using GraphicsDevice = IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Presentation;
 
@@ -312,7 +312,8 @@ internal static unsafe class GuestPreviewWindow
 
             fixed (byte* pixels = frame.Pixels)
             {
-                displayed = StretchDIBits(deviceContext, coordinateX, coordinateY, width, height, 0, 0, frame.Width, frame.Height,
+                displayed = StretchDIBits(deviceContext, coordinateX, coordinateY, width, height, 0, 0, frame.Width,
+                    frame.Height,
                     pixels, &info, 0, 0x00CC0020) > 0;
             }
 
@@ -362,7 +363,8 @@ internal static unsafe class GuestPreviewWindow
                 ? "No guest frame received yet."
                 : $"Preview frame #{frame.Id}: no non-black sampled pixels.");
 
-            WriteStatusLine(deviceContext, left, top + 128, "Guest GPU preview  |  See console for detailed diagnostics.");
+            WriteStatusLine(deviceContext, left, top + 128,
+                "Guest GPU preview  |  See console for detailed diagnostics.");
         }
         finally
         {
@@ -406,7 +408,8 @@ internal static unsafe class GuestPreviewWindow
     private static extern int DestroyWindow(nint window);
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern int PeekMessageW(out PreviewWindowMessage message, nint window, uint min, uint max, uint remove);
+    private static extern int PeekMessageW(out PreviewWindowMessage message, nint window, uint min, uint max,
+        uint remove);
 
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern int TranslateMessage(ref PreviewWindowMessage message);
@@ -460,7 +463,8 @@ internal static unsafe class GuestPreviewWindow
     private static extern int TextOutW(nint deviceContext, int coordinateX, int coordinateY, string text, int count);
 
     [DllImport("gdi32.dll", ExactSpelling = true)]
-    private static extern int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height, uint operation);
+    private static extern int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height,
+        uint operation);
 
     [DllImport("gdi32.dll", ExactSpelling = true)]
     private static extern int SetStretchBltMode(nint deviceContext, int mode);

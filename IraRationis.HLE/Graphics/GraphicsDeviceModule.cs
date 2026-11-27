@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using IraRationis.HLE.Memory;
-using IraRationis.HLE.Runtime.Models;
 using IraRationis.Graphics.ConsoleGraphicsDevice;
+using IraRationis.HLE.Memory;
 using IraRationis.HLE.Memory.XMemModule;
+using IraRationis.HLE.Runtime.Models;
 
 namespace IraRationis.HLE.Graphics;
 

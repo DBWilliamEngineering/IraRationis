@@ -3,8 +3,8 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using IraRationis.HLE.Kernel.Models;
 using IraRationis.HLE.Audio;
+using IraRationis.HLE.Kernel.Models;
 using IraRationis.HLE.Runtime.Models;
 using IraRationis.Loader.Threads;
 

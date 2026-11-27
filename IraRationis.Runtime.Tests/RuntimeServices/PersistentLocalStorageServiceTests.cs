@@ -14,7 +14,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
     internal static void Run()
     {
         Require(Marshal.SizeOf<PersistentStorageSpaceInfo>() == 32
-                && Marshal.OffsetOf<PersistentStorageSpaceInfo>(nameof(PersistentStorageSpaceInfo.AvailableFreeBytes)) == 0
+                && Marshal.OffsetOf<PersistentStorageSpaceInfo>(nameof(PersistentStorageSpaceInfo.AvailableFreeBytes))
+                == 0
                 && Marshal.OffsetOf<PersistentStorageSpaceInfo>(nameof(PersistentStorageSpaceInfo.TotalFreeBytes)) == 8
                 && Marshal.OffsetOf<PersistentStorageSpaceInfo>(nameof(PersistentStorageSpaceInfo.UsedBytes)) == 16
                 && Marshal.OffsetOf<PersistentStorageSpaceInfo>(nameof(PersistentStorageSpaceInfo.TotalBytes)) == 24,
@@ -25,7 +26,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
         UsageTraversalHasAnExplicitBound();
         FilesystemFailureDoesNotPublishAPartialPath();
 
-        Console.WriteLine("Authored persistent local storage path, space, lifetime, and bounded traversal contracts passed.");
+        Console.WriteLine(
+            "Authored persistent local storage path, space, lifetime, and bounded traversal contracts passed.");
     }
 
     private static void PathBuffersAndInterfaceOwnership()
@@ -77,7 +79,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
         var unknownInterface = Guid.Empty;
         nint queried = 123;
 
-        Require(queryInterface(address, &unknownInterface, &queried) == RuntimeServiceResult.NoInterface && queried == 0,
+        Require(
+            queryInterface(address, &unknownInterface, &queried) == RuntimeServiceResult.NoInterface && queried == 0,
             "IUnknown queries must not manufacture support for unrelated interfaces.");
 
         var release = (delegate* unmanaged[Stdcall]<nint, uint>)methods[2];
@@ -108,7 +111,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
         var reopened = new PersistentLocalStorageService(directory, trace, 65536);
         Require(File.ReadAllBytes(Path.Combine(directory, "cache.bin")).SequenceEqual(new byte[] { 1, 2, 3 }),
             "Recreating a storage service must preserve existing title contents.");
-        Require(reopened.TryQuery(PersistentLocalStorageService.InterfaceId, out var address), "Reopened storage must resolve.");
+        Require(reopened.TryQuery(PersistentLocalStorageService.InterfaceId, out var address),
+            "Reopened storage must resolve.");
 
         var getSpace = (delegate* unmanaged[Stdcall]<nint, PersistentStorageSpaceInfo*, int>)(*(nint**)address)[5];
         var space = default(PersistentStorageSpaceInfo);
@@ -117,8 +121,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
                 && getSpace(address, &space) == RuntimeServiceResult.Success,
             "Space queries must reject null output and report the actual owned directory.");
         Require(space.UsedBytes == 8 && space.TotalBytes == 65536
-                && space.AvailableFreeBytes <= space.TotalFreeBytes
-                && space.TotalFreeBytes <= space.TotalBytes - space.UsedBytes,
+                                     && space.AvailableFreeBytes <= space.TotalFreeBytes
+                                     && space.TotalFreeBytes <= space.TotalBytes - space.UsedBytes,
             "Space results must include nested title files and respect the reported capacity and host availability.");
 
         var overCapacity = new PersistentStorageDirectory(directory, 4).ReadSpaceInfo();
@@ -145,7 +149,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
             rejected = true;
         }
 
-        Require(rejected, "The storage usage bound must count directories as well as files and reject incomplete snapshots.");
+        Require(rejected,
+            "The storage usage bound must count directories as well as files and reject incomplete snapshots.");
     }
 
     private static void FilesystemFailureDoesNotPublishAPartialPath()
@@ -153,7 +158,8 @@ internal static unsafe class PersistentLocalStorageServiceTests
         using var fixture = new PersistentStorageFixture();
         var directory = Path.Combine(fixture.DirectoryPath, "blocked");
         var service = new PersistentLocalStorageService(directory, new RuntimeServiceTrace(TextWriter.Null));
-        Require(service.TryQuery(PersistentLocalStorageService.InterfaceId, out var address), "Authored blocked storage must resolve.");
+        Require(service.TryQuery(PersistentLocalStorageService.InterfaceId, out var address),
+            "Authored blocked storage must resolve.");
         Directory.Delete(directory);
         File.WriteAllText(directory, "authored obstruction");
 

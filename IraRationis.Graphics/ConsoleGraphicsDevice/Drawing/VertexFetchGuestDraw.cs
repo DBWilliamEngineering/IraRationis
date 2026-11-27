@@ -3,7 +3,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Diagnostics.Models;
@@ -14,6 +13,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
@@ -33,8 +33,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<nint, VertexFetchPipeline>>
         VertexFetchPipelines = new();
 
-    private static readonly NativePipelineCache<GraphicsPipelineMetadata, VertexFetchPipeline> SharedVertexFetchPipelines =
-        new("vertex fetch", static value => (value.Root, value.Pipeline));
+    private static readonly NativePipelineCache<GraphicsPipelineMetadata, VertexFetchPipeline>
+        SharedVertexFetchPipelines =
+            new("vertex fetch", static value => (value.Root, value.Pipeline));
     private static readonly NativePipelineCache<GraphicsPipelineMetadata, RectanglePipeline> SharedRectanglePipelines =
         new("rectangle", static value => (value.Root, value.Pipeline));
     private static readonly NativePipelineCache<GraphicsPipelineMetadata, RectanglePipeline> SharedTexturedPipelines =
@@ -47,7 +48,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         _ = ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(value, 1))(value);
     }
 
-    private static bool TryRecordVertexFetchGuestDraw(nint self, uint vertices, uint instances, uint first, uint firstInstance)
+    private static bool TryRecordVertexFetchGuestDraw(nint self, uint vertices, uint instances, uint first,
+        uint firstInstance)
     {
         using var stageTiming = BeginTiming(GraphicsStage.RecordVertexFetch);
 
@@ -77,13 +79,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             instances != 1 || first != 0 || firstInstance != 0)
         {
             return RejectVertexFetchDraw($"unsupported draw arguments: vertices={vertices}, instances={instances}, " +
-                             $"first={first}, firstInstance={firstInstance}");
+                                         $"first={first}, firstInstance={firstInstance}");
         }
 
         if (state.Topology != 4 || state.Viewports is not { Length: 1 } || state.Scissors is not { Length: 1 })
         {
             return RejectVertexFetchDraw($"unsupported raster state: topology={state.Topology}, " +
-                             $"viewports={state.Viewports?.Length ?? 0}, scissors={state.Scissors?.Length ?? 0}");
+                                         $"viewports={state.Viewports?.Length ?? 0}, scissors={state.Scissors?.Length ?? 0}");
         }
 
         if (state.Targets.Length != 1)
@@ -95,8 +97,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.Graphics.Views.Count != 1 || !state.Graphics.Views.TryGetValue(0, out var source))
         {
             return RejectVertexFetchDraw($"unsupported root bindings: tables={state.Graphics.Tables.Count}, " +
-                             $"constants={state.Graphics.Constants.Count}, views={state.Graphics.Views.Count}; " +
-                             "expected only root SRV slot zero");
+                                         $"constants={state.Graphics.Constants.Count}, views={state.Graphics.Views.Count}; "
+                                         +
+                                         "expected only root SRV slot zero");
         }
 
         if (source.Kind != 1 || source.Address == 0 || (source.Address & 3UL) != 0)
@@ -109,7 +112,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.UploadBytes > UploadBudget - VertexFetchUploadCapacity)
         {
             return RejectVertexFetchDraw($"command-list budget exceeded: boundaries={state.MemoryBoundaries.Count}, " +
-                             $"hostReferences={state.HostViews.Count}, uploadBytes={state.UploadBytes}");
+                                         $"hostReferences={state.HostViews.Count}, uploadBytes={state.UploadBytes}");
         }
 
         VertexFetchPipeline? translated;
@@ -137,14 +140,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat,
-                    out var guestTarget, reportFailure: true))
+                    out var guestTarget, true))
             {
                 return RejectVertexFetchDraw($"RTV resolution failed: handle=0x{state.Targets[0]:X}");
             }
 
             if (colorFormat != translated.ColorFormat)
             {
-                return RejectVertexFetchDraw($"RTV format {colorFormat} does not match PSO format {translated.ColorFormat}");
+                return RejectVertexFetchDraw(
+                    $"RTV format {colorFormat} does not match PSO format {translated.ColorFormat}");
             }
 
             nint depth = 0;
@@ -159,7 +163,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 if (depthFormat != 20 || color == depth)
                 {
-                    return RejectVertexFetchDraw($"unsupported depth target: format={depthFormat}, aliasesColor={color == depth}");
+                    return RejectVertexFetchDraw(
+                        $"unsupported depth target: format={depthFormat}, aliasesColor={color == depth}");
                 }
             }
 
@@ -167,7 +172,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             // Unused guest IA vertex and index views have no effect on this draw.
 
             // Capacity is fixed for this diagnostic slice; no guest payload is read during recording.
-            var resultCode = CreateHostResource(HostBufferDescription(VertexFetchUploadCapacity), 2, GenericRead, &upload);
+            var resultCode =
+                CreateHostResource(HostBufferDescription(VertexFetchUploadCapacity), 2, GenericRead, &upload);
 
             if (resultCode < 0 || upload == 0)
             {
@@ -235,8 +241,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             SealMemoryBoundary(self, state, null, null, draw: new VertexFetchDrawBoundary(deferred, true));
 
             TraceGraphicsSuccess($"[graphics] IRX-GFX-DRAW-R13: RECORDED guest draw; " +
-                     $"source=0x{source.Address:X}, vertices={vertices}, colorFormat={colorFormat}, " +
-                     $"depthBound={depth != 0}, boundaries={state.MemoryBoundaries.Count}; awaiting submission.");
+                                 $"source=0x{source.Address:X}, vertices={vertices}, colorFormat={colorFormat}, " +
+                                 $"depthBound={depth != 0}, boundaries={state.MemoryBoundaries.Count}; awaiting submission.");
 
             return true;
         }
@@ -444,7 +450,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             else
             {
                 TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R13: GPU COMPLETED guest draw " +
-                    "(CPU-authoritative source assumption; presentation not verified).");
+                                     "(CPU-authoritative source assumption; presentation not verified).");
             }
 
             TraceColor(queue, upload.Target, "R13-output");
@@ -525,6 +531,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        TraceGraphicsSuccess($"[graphics] IRX-GFX-DRAW-R13: UPLOADED {bytes} guest bytes after preceding GPU boundaries.");
+        TraceGraphicsSuccess(
+            $"[graphics] IRX-GFX-DRAW-R13: UPLOADED {bytes} guest bytes after preceding GPU boundaries.");
     }
 }

@@ -10,8 +10,10 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
-    internal static readonly bool EnableVerboseGraphics = Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
-    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts = new();
+    internal static readonly bool EnableVerboseGraphics =
+        Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
+    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts =
+        new();
     private static readonly object RuntimeMetricsGate = new();
     private static Timer? _runtimeMetricsTimer;
     internal static long _fenceCreations, _fenceReuses, _fenceWaits, _fenceTicks;
@@ -40,7 +42,8 @@ public static partial class ConsoleGraphicsDevice
 
     // Only repetitive success messages use this method. Failures, first-use
     // markers and correctness evidence retain their original logging paths.
-    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "",
+        [CallerLineNumber] int line = 0)
     {
         if (EnableVerboseGraphics)
         {
@@ -103,7 +106,8 @@ public static partial class ConsoleGraphicsDevice
             {
                 _lastRuntimeMetricsReport = Stopwatch.GetTimestamp();
 
-                Volatile.Write(ref _runtimeMetricsTimer, new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
+                Volatile.Write(ref _runtimeMetricsTimer,
+                    new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
             }
         }
     }
@@ -112,7 +116,8 @@ public static partial class ConsoleGraphicsDevice
     {
         var now = Stopwatch.GetTimestamp();
 
-        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency || !Monitor.TryEnter(RuntimeMetricsGate))
+        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency
+            || !Monitor.TryEnter(RuntimeMetricsGate))
         {
             return;
         }
@@ -153,12 +158,14 @@ public static partial class ConsoleGraphicsDevice
 
             if (SkipEmptyDrawSegments)
             {
-                Console.Error.WriteLine($"[performance] Empty draw preparation segments skipped: {Interlocked.Read(ref _skippedEmptyDrawSegments)}.");
+                Console.Error.WriteLine(
+                    $"[performance] Empty draw preparation segments skipped: {Interlocked.Read(ref _skippedEmptyDrawSegments)}.");
             }
 
             if (EnableBatchedTextureUploads)
             {
-                Console.Error.WriteLine($"[performance] Texture upload queue submissions saved: {Interlocked.Read(ref _textureUploadSubmitsSaved)}.");
+                Console.Error.WriteLine(
+                    $"[performance] Texture upload queue submissions saved: {Interlocked.Read(ref _textureUploadSubmitsSaved)}.");
             }
 
             var rectangleUploads = Interlocked.Read(ref _rectangleUploadSlices);
@@ -166,12 +173,16 @@ public static partial class ConsoleGraphicsDevice
             if (rectangleUploads != 0)
             {
                 Console.Error.WriteLine($"[performance] Rectangle uploads: paged={UseRectangleUploadPages}; " +
-                    $"slices={rectangleUploads}; resources={Interlocked.Read(ref _rectangleUploadAllocations)}; " +
-                    $"resourceBytes={Interlocked.Read(ref _rectangleUploadAllocatedBytes)}; " +
-                    $"largePaged={UseLargeRectangleUploadPages}; largePages={Interlocked.Read(ref _largeRectangleUploadPages)}; " +
-                    $"largeReuses={Interlocked.Read(ref _largeRectangleUploadReuses)}; " +
-                    $"largeFallbacks={Interlocked.Read(ref _largeRectangleUploadFallbacks)}; " +
-                    $"recycling={RectangleUploadPool is not null}; recycledBuffers={Interlocked.Read(ref _recycledRectangleUploadBuffers)}.");
+                                        $"slices={rectangleUploads}; resources={Interlocked.Read(ref _rectangleUploadAllocations)}; "
+                                        +
+                                        $"resourceBytes={Interlocked.Read(ref _rectangleUploadAllocatedBytes)}; " +
+                                        $"largePaged={UseLargeRectangleUploadPages}; largePages={Interlocked.Read(ref _largeRectangleUploadPages)}; "
+                                        +
+                                        $"largeReuses={Interlocked.Read(ref _largeRectangleUploadReuses)}; " +
+                                        $"largeFallbacks={Interlocked.Read(ref _largeRectangleUploadFallbacks)}; " +
+                                        $"recycling={RectangleUploadPool is not null}; recycledBuffers={Interlocked.Read(ref _recycledRectangleUploadBuffers)}; "
+                                        +
+                                        $"recycled64KiBPages={Interlocked.Read(ref _recycledRectangleUploadPages)}.");
             }
 
             _previousGuestWaits = guestWaits;

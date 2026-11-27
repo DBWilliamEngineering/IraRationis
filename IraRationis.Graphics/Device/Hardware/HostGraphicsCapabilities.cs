@@ -27,9 +27,9 @@ public static unsafe class HostGraphicsCapabilities
             AdapterName = adapterName,
             VendorId = description.VendorId,
             DeviceId = description.DeviceId,
-            DedicatedVideoMemoryBytes = (ulong)description.DedicatedVideoMemory,
-            DedicatedSystemMemoryBytes = (ulong)description.DedicatedSystemMemory,
-            SharedSystemMemoryBytes = (ulong)description.SharedSystemMemory,
+            DedicatedVideoMemoryBytes = description.DedicatedVideoMemory,
+            DedicatedSystemMemoryBytes = description.DedicatedSystemMemory,
+            SharedSystemMemoryBytes = description.SharedSystemMemory,
             LocalMemoryBudget = localMemoryBudget,
             LocalMemoryQueryResult = queryResult,
             RaytracingTierProbeResult = raytracingTierProbeResult,
@@ -74,7 +74,7 @@ public static unsafe class HostGraphicsCapabilities
         {
             var memoryInformation = default(DXGI_QUERY_VIDEO_MEMORY_INFO);
 
-            queryResult = (int)budgetAdapter->QueryVideoMemoryInfo(0,
+            queryResult = budgetAdapter->QueryVideoMemoryInfo(0,
                 DXGI_MEMORY_SEGMENT_GROUP.DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memoryInformation);
 
             if (queryResult >= 0)

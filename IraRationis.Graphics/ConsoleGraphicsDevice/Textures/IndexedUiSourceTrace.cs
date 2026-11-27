@@ -34,7 +34,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 if (!ReportedIndexedUiSources.TryGetValue(group, out var reported))
                 {
-                    reported = new();
+                    reported = new HashSet<(ulong Token, long ResourceIdentity, IntPtr Writer)>();
                     ReportedIndexedUiSources.Add(group, reported);
                 }
 
@@ -56,11 +56,16 @@ public static unsafe partial class ConsoleGraphicsDevice
             var authority = writer == 0 ? "guest-cpu" : writer == queue ? "same-queue-gpu" : "other-queue-gpu";
 
             Console.Error.WriteLine(
-                $"[graphics] Indexed UI source: presents={Interlocked.Read(ref _presentSuccesses)}; variant={upload.Variant}; " +
-                $"targetFormat={upload.ColorFormat}; slot={slot}; descriptor={source.Token}; descriptorKind={source.Kind}; " +
-                $"address=0x{resource->Address:X}; extent={description.Width}x{description.Height}x{description.DepthOrArraySize}; " +
-                $"storageFormat={description.Format}; viewFormat={viewFormat}; viewDimension={viewDimension}; mapping=0x{mapping:X}; " +
-                $"layout=0x{description.Layout:X}; firstMip={firstMip}; viewMips={mips}; firstSlice={firstSlice}; viewSlices={slices}; " +
+                $"[graphics] Indexed UI source: presents={Interlocked.Read(ref _presentSuccesses)}; variant={upload.Variant}; "
+                +
+                $"targetFormat={upload.ColorFormat}; slot={slot}; descriptor={source.Token}; descriptorKind={source.Kind}; "
+                +
+                $"address=0x{resource->Address:X}; extent={description.Width}x{description.Height}x{description.DepthOrArraySize}; "
+                +
+                $"storageFormat={description.Format}; viewFormat={viewFormat}; viewDimension={viewDimension}; mapping=0x{mapping:X}; "
+                +
+                $"layout=0x{description.Layout:X}; firstMip={firstMip}; viewMips={mips}; firstSlice={firstSlice}; viewSlices={slices}; "
+                +
                 $"authority={authority}.");
         }
     }
