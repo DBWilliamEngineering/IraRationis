@@ -1,4 +1,4 @@
-/**
+/*
  * @file        BcPackDictionaryFile.cs
  * @description Loads optional local BC1 dictionary data for the storage pipeline.
  * @author      Damon William
@@ -16,6 +16,7 @@ namespace IraRationis.HLE.Storage.BcPack;
 internal static unsafe class BcPackDictionaryFile
 {
     private const int MaximumFileBytes = 32 * 1024;
+
     private static readonly Lazy<BcPackBc1Dictionary> LocalDictionary = new(Load);
 
     internal static BcPackBc1Dictionary Dictionary
@@ -29,6 +30,7 @@ internal static unsafe class BcPackDictionaryFile
     private static BcPackBc1Dictionary Load()
     {
         var path = Environment.GetEnvironmentVariable("IRX_BCPACK_BC1_DICTIONARY");
+
         if (string.IsNullOrWhiteSpace(path))
         {
             return BcPackBc1Dictionary.Empty;
@@ -37,6 +39,7 @@ internal static unsafe class BcPackDictionaryFile
         try
         {
             using var input = File.OpenRead(path);
+
             if (input.Length > MaximumFileBytes)
             {
                 throw new InvalidDataException("Dictionary file exceeds 32 KiB.");
@@ -47,6 +50,7 @@ internal static unsafe class BcPackDictionaryFile
             var history = ReadTable(root.GetProperty("endpointHistory"), 255, uint.MaxValue);
             var selectors = ReadTable(root.GetProperty("quadrantCodes"), 256, byte.MaxValue);
             var quadrantCodes = new byte?[selectors.Length];
+
             for (var index = 0; index < selectors.Length; index++)
             {
                 quadrantCodes[index] = (byte?)selectors[index];
@@ -58,6 +62,7 @@ internal static unsafe class BcPackDictionaryFile
             }
 
             Console.WriteLine("[dstorage] Local BC1 dictionary loaded.");
+
             return dictionary;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException
@@ -65,6 +70,7 @@ internal static unsafe class BcPackDictionaryFile
                                          or ArgumentException or NotSupportedException)
         {
             Console.Error.WriteLine($"[dstorage] Local BC1 dictionary unavailable. {exception.Message}");
+
             return BcPackBc1Dictionary.Empty;
         }
     }
@@ -78,11 +84,13 @@ internal static unsafe class BcPackDictionaryFile
 
         var entries = new uint?[expectedEntries];
         var index = 0;
+
         foreach (var entry in table.EnumerateArray())
         {
             if (entry.ValueKind == JsonValueKind.Null)
             {
                 index++;
+
                 continue;
             }
 

@@ -633,8 +633,10 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void MeshGuest(nint self, uint coordinateX, uint coordinateY, uint coordinateZ)
+    private static void MeshGuest(nint self, uint groupCountX, uint groupCountY, uint groupCountZ)
     {
+        CaptureBlockedMeshDispatch(self, groupCountX, groupCountY, groupCountZ);
+
         IncompleteOperation(self, "DispatchMesh", "translated mesh pipeline");
     }
 

@@ -24,10 +24,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         Environment.GetEnvironmentVariable("IRX_GUARDED_MEMORY_PUBLICATION") == "1";
     private static readonly bool SkipEmptyDrawSegments =
         Environment.GetEnvironmentVariable("IRX_SKIP_EMPTY_DRAW_SEGMENTS") == "1";
+    private const string ReuseStateOnlyMemorySegmentsVariable = "IRX_REUSE_STATE_ONLY_MEMORY_SEGMENTS";
+    private static readonly bool ReuseStateOnlyMemorySegments =
+        Environment.GetEnvironmentVariable(ReuseStateOnlyMemorySegmentsVariable) == "1";
     private static int _guardedPublicationUnavailable;
     private static long _guardedPublicationHits;
     private static long _guardedPublicationMisses;
     private static long _skippedEmptyDrawSegments;
+    private static long _reusedStateOnlyMemorySegments;
 
     [DllImport("irx-native", EntryPoint = "IrxTryPublishResidentScalar", ExactSpelling = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.ApplicationDirectory)]
@@ -46,6 +50,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var count = accepted
                 ? Interlocked.Increment(ref _guardedPublicationHits)
                 : Interlocked.Increment(ref _guardedPublicationMisses);
+
             if (count <= 2 || (count & (count - 1)) == 0)
             {
                 Console.Error.WriteLine(
@@ -167,12 +172,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return;
         }
 
-        if (SkipEmptyDrawSegments && !state.HasHostGpuWork && boundary.IsDrawPreparation)
+        if (!state.HasHostGpuWork && TryKeepOpenHostSegment(boundary, state))
         {
-            // Keep the open list with its raster state. Preserve the CPU action and queue fence.
-            state.MemoryBoundaries.Add(boundary with { Host = 0 });
-            Interlocked.Increment(ref _skippedEmptyDrawSegments);
-
             return;
         }
 
@@ -202,7 +203,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         nint next = 0;
 
-        resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device, 12))
+        resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot(device,
+            HostCreateCommandListSlot))
             (device, 0, *(uint*)(self + 0x10), allocator, 0, &id, &next);
 
         if (resultCode < 0 || next == 0)
@@ -231,14 +233,48 @@ public static unsafe partial class ConsoleGraphicsDevice
         ReplayRasterState(self, state);
     }
 
+    private static bool TryKeepOpenHostSegment(MemoryBoundary boundary, RecordedCommandState state)
+    {
+        if (SkipEmptyDrawSegments && boundary.IsDrawPreparation)
+        {
+            Interlocked.Increment(ref _skippedEmptyDrawSegments);
+        }
+        else if (ReuseStateOnlyMemorySegments && boundary.IsScalarMemoryBoundary)
+        {
+            Interlocked.Increment(ref _reusedStateOnlyMemorySegments);
+        }
+        else
+        {
+            return false;
+        }
+
+        // Preserve the guest's ordered CPU action and queue fence without submitting the state-only list.
+        state.MemoryBoundaries.Add(boundary with { Host = 0 });
+
+        return true;
+    }
+
     private static bool CompareMemory(ulong value, ulong reference, uint comparison, int bytes)
     {
-        if (bytes == 4)
+        if (bytes != 4)
         {
-            value = (uint)value;
-
-            reference = (uint)reference;
+            return comparison switch
+            {
+                1 => false,
+                2 => value < reference,
+                3 => value == reference,
+                4 => value <= reference,
+                5 => value > reference,
+                6 => value != reference,
+                7 => value >= reference,
+                8 => true,
+                _ => false
+            };
         }
+
+        value = (uint)value;
+
+        reference = (uint)reference;
 
         return comparison switch
         {
@@ -379,10 +415,24 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 if (segment != 0)
                 {
-                    ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &segment);
+                    ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, HostExecuteCommandListsSlot))
+                        (queue, 1, &segment);
                 }
 
-                completion.Wait(queue);
+                var fenceStage = (segment != 0, ordered?.HasPendingUploads == true, boundary.IsScalarMemoryBoundary)
+                    switch
+                    {
+                        (true, _, _) => GraphicsStage.SegmentFenceWait,
+                        (_, true, _) => GraphicsStage.UploadFenceWait,
+                        (_, _, true) => GraphicsStage.StateOnlyMemoryFenceWait,
+                        _ => GraphicsStage.EmptyPreparationFenceWait
+                    };
+
+                using (BeginTiming(fenceStage))
+                {
+                    completion.Wait(queue);
+                }
+
                 ordered?.CompleteAfterFence();
 
                 if (boundary.Write is { } write)
@@ -468,7 +518,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &hostList);
+        ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, HostExecuteCommandListsSlot))
+            (queue, 1, &hostList);
         // Earlier segments are retained until reset; the final segment uses the guest fence lifecycle.
     }
 

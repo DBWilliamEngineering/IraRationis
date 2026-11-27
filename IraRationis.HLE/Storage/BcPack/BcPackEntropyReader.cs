@@ -1,4 +1,4 @@
-/**
+/*
  * @file        BcPackEntropyReader.cs
  * @description Schedules shared compressed bytes among BCPack entropy lanes.
  * @author      Damon William
@@ -33,6 +33,7 @@ internal ref struct BcPackEntropyReader
         _expectedUnits = expectedUnits;
         // O(compressed bytes + output units) with a fixed number of lanes per format.
         _maximumRounds = expectedUnits * 20L + source.Length + 200;
+
         for (var lane = 0; lane < widths.Length; lane++)
         {
             _lanes[lane] = new BcPackEntropyLane(widths[lane]);
@@ -60,6 +61,7 @@ internal ref struct BcPackEntropyReader
         }
 
         _unitsRead++;
+
         return true;
     }
 
@@ -79,6 +81,7 @@ internal ref struct BcPackEntropyReader
         }
 
         var padding = _source[_offset..];
+
         return padding.Length <= MaximumTrailingPadding && padding.IndexOfAnyExcept((byte)0) < 0;
     }
 
@@ -91,9 +94,11 @@ internal ref struct BcPackEntropyReader
 
         var stalledLanes = 0;
         var bytesServed = 0;
+
         for (var index = 0; index < _lanes.Length; index++)
         {
             ref var lane = ref _lanes[index];
+
             if (!lane.NeedsByte)
             {
                 continue;
@@ -102,6 +107,7 @@ internal ref struct BcPackEntropyReader
             if (bytesServed == ReadsPerRound)
             {
                 stalledLanes |= 1 << index;
+
                 continue;
             }
 

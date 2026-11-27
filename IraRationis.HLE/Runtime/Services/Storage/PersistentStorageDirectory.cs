@@ -63,7 +63,7 @@ internal sealed class PersistentStorageDirectory
     private ulong MeasureUsedBytes()
     {
         // O(entries), capped at 4096 by default; only this title's directory is traversed.
-        //TODO: Damon William -> Replace bounded scans with accounting once guest file writes share one ownership boundary.
+        //TODO: Damon William William -> Replace bounded scans with accounting once guest file writes share one ownership boundary.
         var pending = new Stack<string>();
         pending.Push(Path);
         var visitedEntries = 0;

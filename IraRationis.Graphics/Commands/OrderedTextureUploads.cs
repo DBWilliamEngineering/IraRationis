@@ -12,8 +12,16 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
     internal const int MaximumPending = 8;
     private readonly List<UtilityContext> _pending = [];
     private readonly List<nint>? _queuedDestinations =
-        batchIndependentUploads ? new List<IntPtr>(MaximumPending) : null;
+        batchIndependentUploads ? [with(MaximumPending)] : null;
     private int _submittedCount;
+
+    internal bool HasPendingUploads
+    {
+        get
+        {
+            return _pending.Count != 0;
+        }
+    }
 
     public void Dispose()
     {
@@ -36,6 +44,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
             }
 
             _pending.Add(context);
+
             destinations.Add(destination);
 
             return;
@@ -59,6 +68,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
     internal void SubmitBeforeConsumer()
     {
         var queued = _pending.Count - _submittedCount;
+
         if (queued == 0)
         {
             return;
@@ -84,6 +94,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
 
         _submittedCount = _pending.Count;
         _queuedDestinations!.Clear();
+
         GraphicsDevice.RecordTextureUploadSubmitsSaved(queued - 1);
     }
 
@@ -95,6 +106,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         }
 
         var count = _pending.Count;
+
         if (_submittedCount != count)
         {
             throw new InvalidOperationException("Texture upload completion is missing a submission.");
@@ -108,6 +120,7 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
 
         _pending.Clear();
         _submittedCount = 0;
+
         GraphicsDevice.ReportOrderedTextureUploads(count);
     }
 
@@ -119,8 +132,11 @@ internal sealed class OrderedTextureUploads(nint queue, bool batchIndependentUpl
         }
 
         SubmitBeforeConsumer();
+
         using var completion = new HostCompletionFence();
+
         completion.Wait(queue);
+
         CompleteAfterFence();
     }
 }

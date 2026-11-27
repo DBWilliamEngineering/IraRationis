@@ -19,6 +19,14 @@ internal readonly record struct MemoryBoundary(
     PlanarColorDrawBoundary? PlanarColor = null,
     IndexedUiBoundary? IndexedUi = null)
 {
+    internal bool IsScalarMemoryBoundary
+    {
+        get
+        {
+            return Write.HasValue || Wait.HasValue;
+        }
+    }
+
     internal bool IsDrawPreparation
     {
         get

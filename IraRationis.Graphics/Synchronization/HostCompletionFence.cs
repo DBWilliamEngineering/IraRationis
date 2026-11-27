@@ -10,7 +10,7 @@ namespace IraRationis.Graphics.Synchronization;
 internal sealed unsafe class HostCompletionFence : IDisposable
 {
     private const int MaximumIdle = 16;
-    private static readonly object PoolGate = new();
+    private static readonly Lock PoolGate = new();
     private static readonly Stack<HostCompletionFenceFenceTimeline> Idle = new();
     private HostCompletionFenceFenceTimeline? _timeline;
     private bool _waiting;
@@ -70,7 +70,8 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
     public void Wait(nint queue)
     {
-        var timeline = _timeline ?? throw new ObjectDisposedException(nameof(HostCompletionFence));
+        var timeline = _timeline
+                       ?? throw new ObjectDisposedException(nameof(HostCompletionFence));
 
         if (_waiting || timeline.Value >= ulong.MaxValue - 1)
         {
@@ -81,16 +82,18 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         var started = Stopwatch.GetTimestamp();
         var value = ++timeline.Value;
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(queue, 14))(queue,
-            timeline.Fence,
-            value);
+        var resultCode =
+            ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(queue, 14))
+            (queue, timeline.Fence, value);
 
         if (resultCode < 0)
         {
             Environment.FailFast($"[graphics] Completion fence signal failed: 0x{resultCode:X8}.");
         }
 
-        var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)GraphicsDevice.Slot(timeline.Fence, 8);
+        var getCompleted =
+            (delegate* unmanaged[Stdcall]<nint, ulong>)GraphicsDevice.Slot(timeline.Fence, 8);
+
         var completed = getCompleted(timeline.Fence);
 
         if (completed == ulong.MaxValue)
@@ -100,11 +103,9 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         if (completed < value)
         {
-            // A previously leased timeline has no outstanding registration.
-            // Reset before registering this signal's event, never after.
-            timeline.Completion.Reset();
-
-            var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(timeline.Fence, 9);
+            // The previous wait consumed the auto-reset event's only signal before releasing the lease.
+            var setEvent =
+                (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(timeline.Fence, 9);
 
             resultCode = setEvent(timeline.Fence, value, timeline.Completion.SafeWaitHandle.DangerousGetHandle());
 

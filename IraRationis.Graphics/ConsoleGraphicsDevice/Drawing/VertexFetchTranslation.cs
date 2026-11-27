@@ -39,8 +39,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             return;
         }
 
-        var vertex = pipeline.Shaders.SingleOrDefault(static shader => shader.Stage == 1);
-        var pixel = pipeline.Shaders.SingleOrDefault(static shader => shader.Stage == 2);
+        var vertex =
+            pipeline.Shaders.SingleOrDefault(static shader => shader.Stage == 1);
+
+        var pixel =
+            pipeline.Shaders.SingleOrDefault(static shader => shader.Stage == 2);
 
         if (vertex == null || pixel == null)
         {
@@ -52,7 +55,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             var root = RootSignatureBlob(pipeline.Root).ToArray();
-            var pair = Rdna2VertexFetchCompiler.Translate(vertex.Container.Bytes, pixel.Container.Bytes, root);
+
+            var pair =
+                Rdna2VertexFetchCompiler.Translate(vertex.Container.Bytes, pixel.Container.Bytes, root);
 
             report.WriteLine(
                 $"[graphics] IRX-GFX-SHADER-R10: recognized native vertex-fetch / P0 half-RTZ shader pair; " +
@@ -61,9 +66,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (directory != null)
             {
-                File.WriteAllText(Path.Combine(directory, "translated-vs.hlsl"), pair.VertexSource);
+                File.WriteAllText(
+                    Path.Combine(directory, "translated-vs.hlsl"), pair.VertexSource);
 
-                File.WriteAllText(Path.Combine(directory, "translated-ps.hlsl"), pair.PixelSource);
+                File.WriteAllText(
+                    Path.Combine(directory, "translated-ps.hlsl"), pair.PixelSource);
             }
 
             // The Windows compiler is a system-provided native API invoked
@@ -75,12 +82,14 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 if (vertexShader != null)
                 {
-                    File.WriteAllBytes(Path.Combine(directory, "translated-vs.dxbc"), vertexShader);
+                    File.WriteAllBytes(
+                        Path.Combine(directory, "translated-vs.dxbc"), vertexShader);
                 }
 
                 if (pixelShader != null)
                 {
-                    File.WriteAllBytes(Path.Combine(directory, "translated-ps.dxbc"), pixelShader);
+                    File.WriteAllBytes(
+                        Path.Combine(directory, "translated-ps.dxbc"), pixelShader);
                 }
             }
 
@@ -114,15 +123,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var bytecode = TranslatedShaderCache.GetOrCompile(source, profile, Compile, out var reused);
 
-        if (reused && bytecode != null)
+        if (!reused || bytecode == null)
         {
-            var hits = Interlocked.Increment(ref _translatedShaderCacheHits);
+            return bytecode;
+        }
 
-            if (hits <= 4 || (hits & (hits - 1)) == 0)
-            {
-                report.WriteLine(
-                    $"[graphics] IRX-GFX-SHADER-R19: cache hit #{hits}, {profile}, bytes={bytecode.Length}.");
-            }
+        var hits = Interlocked.Increment(ref _translatedShaderCacheHits);
+
+        if (hits <= 4 || (hits & (hits - 1)) == 0)
+        {
+            report.WriteLine(
+                $"[graphics] IRX-GFX-SHADER-R19: cache hit #{hits}, {profile}, bytes={bytecode.Length}.");
         }
 
         return bytecode;
@@ -237,8 +248,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        var targets = guest.State.SingleOrDefault(static record => record.Kind == 15);
-        var depthFormat = guest.State.SingleOrDefault(static record => record.Kind == 16);
+        var targets =
+            guest.State.SingleOrDefault(static record => record.Kind == 15);
+
+        var depthFormat =
+            guest.State.SingleOrDefault(static record => record.Kind == 16);
 
         if (targets is not { Bytes.Length: 40 } || depthFormat is not { Bytes.Length: 8 } ||
             BinaryPrimitives.ReadUInt32LittleEndian(targets.Bytes) != 15 ||
@@ -399,7 +413,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         try
         {
-            var resultCode = SerializeRootNative(&description, &blob, &errors);
+            var resultCode =
+                SerializeRootNative(&description, &blob, &errors);
 
             report.WriteLine($"[graphics] R10 host root serialization HRESULT=0x{resultCode:X8}.");
 
@@ -738,6 +753,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         VerifyIndexedUiSampler();
         VerifyIndexedUiDualAlpha();
         VerifyIndexedUiBatchedMask();
+        VerifyIndexedUiBatchedDualTexture();
         VerifyIndexedUiTransformedTexture();
 
         //TODO: This is a crazy conditional we need to review...

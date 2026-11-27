@@ -7,6 +7,7 @@ namespace IraRationis.Core.Scheduling;
 ///     Inputs must be immutable or exclusively owned; preparation must not submit GPU work.
 ///     Prepared results are managed snapshots, not borrowed pointers or GPU resource leases.
 /// </summary>
+/// 
 public static class OrderedPreparation
 {
     public static void Execute<TInput, TPrepared>(IReadOnlyList<TInput> inputs,

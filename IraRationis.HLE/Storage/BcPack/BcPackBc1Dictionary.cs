@@ -1,4 +1,4 @@
-/**
+/*
  * @file        BcPackBc1Dictionary.cs
  * @description Stores verified BC1 endpoint and selector dictionary entries.
  * @author      Damon William
@@ -16,6 +16,7 @@ internal sealed class BcPackBc1Dictionary
     private const int HistorySize = 255;
     private const int SelectorCount = 256;
     private const int UniformSelectorCount = 4;
+
     private readonly uint?[] _endpointHistory;
     private readonly byte?[] _quadrantCodes;
 
@@ -31,16 +32,20 @@ internal sealed class BcPackBc1Dictionary
         out BcPackBc1Dictionary? dictionary)
     {
         dictionary = null;
+
         if (endpointHistory.Length != HistorySize || quadrantCodes.Length != SelectorCount)
         {
             return false;
         }
 
         Span<bool> used = stackalloc bool[SelectorCount];
+
         used.Clear();
+
         for (var index = 0; index < UniformSelectorCount; index++)
         {
             var code = UniformQuadrantCode(index);
+
             if (quadrantCodes[index] is { } configured && configured != code)
             {
                 return false;
@@ -65,19 +70,23 @@ internal sealed class BcPackBc1Dictionary
         }
 
         dictionary = new BcPackBc1Dictionary(endpointHistory.ToArray(), quadrantCodes.ToArray());
+
         return true;
     }
 
     internal bool TryGetEndpointPair(int distanceBeforeStart, out uint endpoints)
     {
         var index = distanceBeforeStart - 1;
+
         if ((uint)index < (uint)_endpointHistory.Length && _endpointHistory[index] is { } entry)
         {
             endpoints = entry;
+
             return true;
         }
 
         endpoints = 0;
+
         return false;
     }
 
@@ -86,16 +95,19 @@ internal sealed class BcPackBc1Dictionary
         if (selector < UniformSelectorCount)
         {
             code = UniformQuadrantCode(selector);
+
             return true;
         }
 
         if (selector < _quadrantCodes.Length && _quadrantCodes[selector] is { } entry)
         {
             code = entry;
+
             return true;
         }
 
         code = 0;
+
         return false;
     }
 

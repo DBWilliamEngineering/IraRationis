@@ -8,8 +8,6 @@ $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudi
 if (!$installation) { throw 'MSVC x64 tools are not installed.' }
 $vcvars = Join-Path $installation 'VC\Auxiliary\Build\vcvars64.bat'
 $source = Join-Path $PSScriptRoot 'ExceptionHandler.cpp'
-$memory = Join-Path $PSScriptRoot 'MemoryProbe.cpp'
-$presentation = Join-Path $PSScriptRoot 'PresentationProbe.cpp'
 $test = Join-Path $PSScriptRoot 'DecoderTests.cpp'
 $memoryAccessContracts = Join-Path $PSScriptRoot 'MemoryAccessQueryTests.cpp'
 $script = Join-Path $OutputDirectory 'build-native.cmd'
@@ -23,7 +21,7 @@ cl /nologo /std:c++20 /W4 /WX /O2 /MT /EHsc "$test" /Fe:decoder-tests.exe || exi
 decoder-tests.exe || exit /b 1
 cl /nologo /std:c++20 /W4 /WX /O2 /MT /EHsc "$memoryAccessContracts" /Fe:memory-access-query-tests.exe || exit /b 1
 memory-access-query-tests.exe || exit /b 1
-cl /nologo /std:c++20 /W4 /WX /O2 /Z7 /MT /EHsc /LD "$source" "$memory" "$presentation" /link d3d12.lib dxgi.lib d3dcompiler.lib user32.lib /OUT:irx-native.dll /DEBUG:FULL /OPT:REF,ICF /INCREMENTAL:NO /PDB:irx-native.pdb || exit /b 1
+cl /nologo /std:c++20 /W4 /WX /O2 /Z7 /MT /EHsc /LD "$source" /link /OUT:irx-native.dll /DEBUG:FULL /OPT:REF,ICF /INCREMENTAL:NO /PDB:irx-native.pdb || exit /b 1
 "@ | Set-Content -Encoding ASCII $script
 & cmd.exe /d /c "`"$script`""
 if ($LASTEXITCODE -ne 0) { throw "Native component build failed ($LASTEXITCODE)." }

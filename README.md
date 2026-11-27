@@ -100,10 +100,12 @@ Historical measurements and their limits remain in the [Architecture Atlas](docs
 
 ## Engineering direction
 
-- Implement runtime behavior in C# wherever possible. C++ is reserved for genuine platform requirements, such as the vectored exception boundary, and existing native probes.
+- Implement runtime behavior and diagnostics in C# wherever possible. Keep native code for fault handling and other verified platform requirements. Remove each replaced C++ source and its build wiring once its managed entry point is in place.
 - Make ownership, ordering, lifetime, and failures explicit. Use bounded workers for independent preparation and preserve guest-visible submission order.
 - Use component folders and namespaces, one top-level type per file, and no authored nested types. Keep models with their owning component; create shared abstractions when actual consumers justify them.
-- Prefer descriptive names, deliberate spacing, and self-documenting control flow. Comments explain constraints, contracts, and performance costs. Use `//TODO: Damon William -> ...` for actionable follow-ups.
+- Keep related declarations and work grouped. Add one blank line between declarations and a guard or loop, around a control-flow block when it separates work, and before a return or yield that follows other work. Keep `else`, `catch`, and `finally` with their associated block.
+- Prefer descriptive names and self-documenting control flow. Comments explain constraints, contracts, and performance costs. Use `//TODO: Damon William -> ...` for actionable follow-ups.
+- Use named constants for ABI slots, binary layout offsets, configuration keys, units, limits, and test patterns. Reuse the platform enum or an existing project constant when it defines the same value. Keep a guest ABI constant with its registration and use it in callers and probes.
 - Apply SOLID, DRY, YAGNI, and design patterns where they simplify real responsibilities. Reduce cyclomatic/Halstead complexity while improving maintainability; moving files alone does not establish a metric improvement.
 - Base optimizations on traces and observed results. Document meaningful time/space complexity and preserve correctness.
 
@@ -148,7 +150,7 @@ Solid edges show implemented paths, not complete API coverage. The authored medi
 | `IraRationis.Media` | Audio, video, decoding, playback, and presentation |
 | `IraRationis.Game` / `IraRationis.Pipeline` | Build identification, archives, and conversion infrastructure |
 | `IraRationis.Generators` | Compile-time ABI fallback generation |
-| `IraRationis.Native` | Native exception boundary and independent native probes |
+| `IraRationis.Native` | Windows exception handling, guarded publication, and their native contracts |
 | `IraRationis.Runtime.Tests` / `tests` | Component contracts and authored CPU, GPU, media, and native fixtures |
 
 `ConsoleGraphicsDevice` remains one partial public facade, organized into folders such as `ConsoleGraphicsDevice/Drawing/VertexFetchSourceProbe.cs`. Its generated ABI slots retain that type identity. Extracted types use component namespaces and individual files.
@@ -214,6 +216,7 @@ $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 .\artifacts\native\irx.exe instruction-probe
 .\artifacts\native\irx.exe present-probe --seconds 5 --fps 60
 .\artifacts\native\irx.exe memory-probe --self-test
+.\artifacts\native\irx.exe memory-probe --mib 1 --iterations 1
 ```
 
 These commands can open a window or play audio. `--stream` and `--stream-gpu` use FFmpeg; `--mf` supports batch inspection, `--play`, and `--gpu`. See [media validation](tests/media-baseline/README.md), [GPU contracts](tests/gpu-media/README.md), and [authored runtime integration](docs/RUNTIME-INTEGRATION.md) for fixture expectations and boundaries.

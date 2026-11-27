@@ -1,4 +1,4 @@
-/**
+/*
  * @file        PhysicalPageWriteFailure.cs
  * @description Identifies the cause of a failed guest physical-page write.
  * @author      Damon William

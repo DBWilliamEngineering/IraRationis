@@ -310,7 +310,7 @@ public static unsafe partial class GameInputModule
         }
     }
 
-    //TODO: Damon William -> Correlate reading registrations with the account-picker stall; successful registration currently delivers no readings.
+    //TODO: Damon William William -> Correlate reading registrations with the account-picker stall; successful registration currently delivers no readings.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int RegisterReading(nint self, nint device, uint kind, float threshold, nint context, nint callback,
         nint output)

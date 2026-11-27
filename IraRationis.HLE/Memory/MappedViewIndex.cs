@@ -10,7 +10,7 @@ namespace IraRationis.HLE.Memory;
 /// </summary>
 internal sealed class MappedViewIndex<T> where T : class
 {
-    private readonly SortedSet<MappedViewEntry<T>> _entries = new(MappedViewEntryComparer<T>.Instance);
+    private readonly SortedSet<MappedViewEntry<T>> _entries = [with(MappedViewEntryComparer<T>.Instance)];
 
     public void Add(ulong address, ulong size, T value)
     {
@@ -103,7 +103,7 @@ internal sealed class MappedViewIndex<T> where T : class
         }
 
         // Capture references before the owner unmaps, removes or splits views.
-        return overlaps.ToArray();
+        return [.. overlaps];
     }
 
     private MappedViewEntry<T> FindAtOrBefore(ulong address)

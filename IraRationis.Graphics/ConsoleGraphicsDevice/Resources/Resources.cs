@@ -59,12 +59,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             NativeMemory.AlignedFree((void*)((HeapObject*)value)->Memory);
         }
 
-        foreach (var key in ResourcePrivateData.Keys)
+        foreach (var key in ResourcePrivateData.Keys
+                     .Where(key => key.Item1 == value))
         {
-            if (key.Item1 == value)
-            {
-                _ = ResourcePrivateData.TryRemove(key, out _);
-            }
+            _ = ResourcePrivateData.TryRemove(key, out _);
         }
 
         _ = LiveObjects.TryRemove(value, out _);
@@ -163,28 +161,19 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         try
         {
-            value = (ResourceObject*)NativeMemory.AllocZeroed((nuint)sizeof(ResourceObject));
+            value =
+                (ResourceObject*)NativeMemory.AllocZeroed((nuint)sizeof(ResourceObject));
 
             value->Header.Table = _resourceTable;
-
             value->Header.References = 1;
-
             value->Description = description;
-
             value->Properties = properties;
-
             value->HeapFlags = flags;
-
             value->Address = address;
-
             value->Generation = Interlocked.Increment(ref _nextResourceGeneration);
-
             value->OwningHeap = heap;
-
             value->OwnedMemory = owned;
-
             value->FreeHook = freeHook;
-
             value->AllocationAttributes = attributes;
 
             LiveObjects[(nint)value] = _resourceTable;
@@ -220,13 +209,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             *output = 0;
         }
 
-        if (description == null || address == 0 || address > (ulong)nint.MaxValue
-            || description->Dimension is < 1 or > 4 || description->Width == 0)
-        {
-            return InvalidArgument;
-        }
-
-        if (!ResourceFootprint(*description, out var info) || info.Size > (ulong)nint.MaxValue - address)
+        if (description == null
+            || address == 0
+            || address > (ulong)nint.MaxValue
+            || description->Dimension is < 1 or > 4
+            || description->Width == 0
+            || !ResourceFootprint(*description, out var info)
+            || info.Size > (ulong)nint.MaxValue - address)
         {
             return InvalidArgument;
         }
@@ -368,20 +357,21 @@ public static unsafe partial class ConsoleGraphicsDevice
         ResourceDescription* description, uint layout, nint clear, nint session, uint castableCount, uint* castable,
         Guid* iid, nint* output)
     {
-        if (session != 0 || castableCount != 0)
+        if (session == 0 && castableCount == 0)
         {
-            if (output != null)
-            {
-                *output = 0;
-            }
-
-            Console.Error.WriteLine(
-                $"[graphics] CreateCommittedResource3: unsupported session=0x{(nuint)session:X}, castableCount={castableCount}.");
-
-            return ReportCommittedResult("CreateCommittedResource3", NotImplemented, 0);
+            return CreateCommittedBacking("CreateCommittedResource3", properties, flags, description, iid, output);
         }
 
-        return CreateCommittedBacking("CreateCommittedResource3", properties, flags, description, iid, output);
+        if (output != null)
+        {
+            *output = 0;
+        }
+
+        Console.Error.WriteLine(
+            $"[graphics] CreateCommittedResource3: unsupported session=0x{(nuint)session:X}, castableCount={castableCount}.");
+
+        return ReportCommittedResult("CreateCommittedResource3", NotImplemented, 0);
+
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -423,13 +413,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             value = (HeapObject*)NativeMemory.AllocZeroed((nuint)sizeof(HeapObject));
-
             value->Header.Table = _heapTable;
-
             value->Header.References = 1;
-
             value->Description = *description;
-
             value->Memory = memory;
 
             LiveObjects[(nint)value] = _heapTable;
@@ -441,7 +427,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         catch (OutOfMemoryException)
         {
             NativeMemory.Free(value);
-
             NativeMemory.AlignedFree((void*)memory);
 
             return OutOfMemory;
@@ -770,7 +755,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 nint,
                 uint, uint*, Guid*, nint*, int>)&CreateCommittedResource3;
 
-        device[133] =
+        device[CreateResourceAtAddressSlot] =
             (nint)(delegate* unmanaged[Stdcall]<nint, ulong, ResourceDescription*, uint, nint, Guid*, nint*, int>)
             &CreateResourceAtAddress;
 

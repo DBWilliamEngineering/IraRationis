@@ -162,6 +162,12 @@ public static partial class ConsoleGraphicsDevice
                     $"[performance] Empty draw preparation segments skipped: {Interlocked.Read(ref _skippedEmptyDrawSegments)}.");
             }
 
+            if (ReuseStateOnlyMemorySegments)
+            {
+                Console.Error.WriteLine(
+                    $"[performance] State-only memory segments reused: {Interlocked.Read(ref _reusedStateOnlyMemorySegments)}.");
+            }
+
             if (EnableBatchedTextureUploads)
             {
                 Console.Error.WriteLine(

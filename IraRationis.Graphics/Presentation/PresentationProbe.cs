@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Globalization;
-using System.Runtime.InteropServices;
 
 namespace IraRationis.Graphics.Presentation;
 
-public static unsafe class PresentationProbe
+public static class PresentationProbe
 {
+    private const uint DefaultDurationSeconds = 10;
+    private const uint MaximumDurationSeconds = 120;
+    private const uint DefaultFramesPerSecond = 60;
+    private const uint MaximumFramesPerSecond = 240;
+
     public static int Execute(string[] args, TextWriter writer)
     {
-        var seconds = 10U;
-        var fps = 60U;
+        var seconds = DefaultDurationSeconds;
+        var framesPerSecond = DefaultFramesPerSecond;
         var gpuUpload = false;
 
         for (var index = 0; index < args.Length; index++)
@@ -32,13 +36,13 @@ public static unsafe class PresentationProbe
 
             switch (option)
             {
-                case "--seconds" when value is >= 1 and <= 120:
+                case "--seconds" when value is >= 1 and <= MaximumDurationSeconds:
                     seconds = value;
 
                     break;
 
-                case "--fps" when value is >= 1 and <= 240:
-                    fps = value;
+                case "--fps" when value is >= 1 and <= MaximumFramesPerSecond:
+                    framesPerSecond = value;
 
                     break;
 
@@ -47,23 +51,14 @@ public static unsafe class PresentationProbe
             }
         }
 
-        var module = NativeLibrary.Load(Path.Combine(AppContext.BaseDirectory, "irx-native.dll"));
-        var run = (delegate* unmanaged[Stdcall]<uint, uint, uint, int>)NativeLibrary.GetExport(module,
-            "irx_present_probe");
+        writer.WriteLine("Synthetic presentation probe. No game executable or video is loaded.");
 
-        try
-        {
-            writer.WriteLine("Synthetic presentation probe. No game executable or video is loaded.");
+        using var session = new PresentationProbeSession(writer, gpuUpload);
 
-            var result = run(seconds, fps, gpuUpload ? 1U : 0U);
+        var result = session.Run(seconds, framesPerSecond);
 
-            writer.WriteLine($"Presentation HRESULT: 0x{unchecked((uint)result):X8}");
+        writer.WriteLine($"Presentation HRESULT: 0x{unchecked((uint)result):X8}");
 
-            return result < 0 ? 1 : 0;
-        }
-        finally
-        {
-            NativeLibrary.Free(module);
-        }
+        return result < 0 ? 1 : 0;
     }
 }

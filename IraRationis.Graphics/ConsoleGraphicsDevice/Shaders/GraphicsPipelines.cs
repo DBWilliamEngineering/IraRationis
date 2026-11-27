@@ -88,8 +88,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return InvalidArgument;
         }
 
-        Span<ShaderBytecode> stages = stackalloc ShaderBytecode[5]
-            { description->Vertex, description->Pixel, description->Domain, description->Hull, description->Geometry };
+        Span<ShaderBytecode> stages = [description->Vertex, description->Pixel, description->Domain, description->Hull, description->Geometry
+        ];
 
         ReadOnlySpan<uint> kinds = [1, 2, 3, 4, 5];
 
@@ -258,7 +258,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         try
         {
-            retained = new List<PipelineShader>(stages.Length);
+            retained = [with(stages.Length)];
 
             pipeline = (PipelineObject*)NativeMemory.AllocZeroed((nuint)sizeof(PipelineObject));
 
@@ -292,7 +292,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                             return OutOfMemory;
                         }
 
-                        shader = new ComputeShaderContainer(bytes.ToArray());
+                        shader = new ComputeShaderContainer([.. bytes]);
 
                         var reference = new PipelineShader(kinds[index], hash, shader);
 

@@ -7,6 +7,8 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private const int CreateResourceAtAddressSlot = 133;
+
     private static readonly Lock EvidenceGate = new();
     private static string? _evidencePath;
 
@@ -58,7 +60,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         [86] = "CreatePipelineStateStream",
         [108] = "GetResourceAllocationInfo2",
         [127] = "CreateCommittedResource3",
-        [133] = "CreateResourceAtAddress"
+        [CreateResourceAtAddressSlot] = nameof(CreateResourceAtAddress)
     };
 
     private static readonly Dictionary<int, string> ListMethods = new()
@@ -255,40 +257,42 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static string? MethodName(string kind, int index)
     {
-        if (kind == "list-new")
+        switch (kind)
         {
-            switch (index)
+            case "list-new":
             {
-                case 142:
-                    return "UnknownState_0x470";
+                switch (index)
+                {
+                    case 142:
+                        return "UnknownState_0x470";
 
-                case 146:
-                    return "EnhancedBarrierGroups";
+                    case 146:
+                        return "EnhancedBarrierGroups";
 
-                case 148:
-                    return "AllocateUpload";
+                    case 148:
+                        return "AllocateUpload";
+                }
+
+                switch (index)
+                {
+                    case >= 61:
+                        index -= 2;
+
+                        break;
+
+                    case >= 59:
+                        return null;
+                }
+
+                break;
             }
-
-            if (index >= 61)
-            {
+            case "queue-new" when index >= 16:
                 index -= 2;
-            }
-            else if (index >= 59)
-            {
-                return null;
-            }
-        }
 
-        if (kind == "queue-new")
-        {
-            if (index >= 16)
-            {
-                index -= 2;
-            }
-            else if (index >= 14)
-            {
+                break;
+
+            case "queue-new" when index >= 14:
                 return null;
-            }
         }
 
         var methods = Inventory(kind);
@@ -391,29 +395,17 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             ValidateTables(AllTables(_deviceTable));
-
             ValidateRootSignatureRegistration((nint*)_deviceTable);
-
             ValidateComputePipelineRegistration((nint*)_deviceTable);
-
             ValidateQueryHeapRegistration((nint*)_deviceTable);
-
             ValidateDeviceBatchRegistration((nint*)_deviceTable);
-
             ValidateOptionalDeviceRegistration((nint*)_deviceTable);
-
             ValidateCommandStateRegistration();
-
             ValidateCommandMemoryRegistration();
-
             ValidateBarrierRegistration();
-
             VerifyOptionalDeviceAbi((nint*)_deviceTable);
-
             VerifyCommandStateAbi();
-
             VerifyCommandMemoryAbi();
-
             VerifyKnownListOperations();
         }
     }
@@ -433,21 +425,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             tables = AllTables(_deviceTable);
 
             ValidateTables(tables);
-
             ValidateRootSignatureRegistration((nint*)_deviceTable);
-
             ValidateComputePipelineRegistration((nint*)_deviceTable);
-
             ValidateQueryHeapRegistration((nint*)_deviceTable);
-
             ValidateDeviceBatchRegistration((nint*)_deviceTable);
-
             ValidateOptionalDeviceRegistration((nint*)_deviceTable);
-
             ValidateCommandStateRegistration();
-
             ValidateCommandMemoryRegistration();
-
             ValidateBarrierRegistration();
         }
 
@@ -496,7 +480,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                               || kind == "command-signature" ||
                               (kind == "device" && index is 10 or 38 or 41 or 86 or 108 or 39 or 11 or 62 or 14 or 16
                                   or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 27 or 28 or 29 or 61 or 70 or 71
-                                  or 76 or 127 or 133);
+                                  or 76 or 127 or CreateResourceAtAddressSlot);
                 var status = !bound
                     ? "missing"
                     : CommandOperationsStatus(kind, index) ?? BarrierStatus(kind, index)
@@ -516,10 +500,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var seen = new HashSet<(string, int)>();
 
-            foreach (var line in File.ReadLines(_evidencePath))
+            foreach (var fields in
+                     File.ReadLines(_evidencePath)
+                         .Select(static line => line.Split('\t')))
             {
-                var fields = line.Split('\t');
-
                 if (fields.Length < 4
                     || !int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out var slot)
                     || !seen.Add((fields[1], slot)))
@@ -527,12 +511,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                     continue;
                 }
 
-                var current = tables.FirstOrDefault(item => item.Name == fields[1]);
+                var current =
+                    tables.FirstOrDefault(item => item.Name == fields[1]);
+
                 var status =
                     current.Table != 0 && slot >= 0 && slot < current.Count
                     && ((nint*)current.Table)[slot] != MissingAddress(slot)
                         ? CommandStateStatus(fields[1], slot)
-                          ?? OptionalDeviceStatus(fields[1], slot) ?? "now registered (unverified)"
+                          ?? OptionalDeviceStatus(fields[1], slot)
+                          ?? "now registered (unverified)"
                         : "still missing/unknown";
 
                 writer.WriteLine($"[abi] Previous blocker: {fields[1]} 0x{slot * 8:X} {fields[3]}: {status}.");

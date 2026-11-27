@@ -29,11 +29,16 @@ internal static class BcPackBc1Decoder
         }
 
         dictionary ??= BcPackBc1Dictionary.Empty;
+
         ReadOnlySpan<byte> widths = [8, 8, 5, 6, 5, 5, 6, 5, 8, 8, 8, 8];
+
         var blockCount = destination.Length / BlockBytes;
+
         Span<BcPackEntropyLane> lanes = stackalloc BcPackEntropyLane[LaneCount];
         Span<byte> symbols = stackalloc byte[LaneCount];
+
         var reader = new BcPackEntropyReader(source, lanes, widths, blockCount);
+
         for (var block = 0; block < blockCount; block++)
         {
             if (!reader.TryReadUnit(symbols) || !TryReconstructBlock(symbols, destination, block, dictionary))
@@ -57,9 +62,11 @@ internal static class BcPackBc1Decoder
         var output = destination.Slice(block * BlockBytes, BlockBytes);
         var first = ApplyResiduals((ushort)predictor, symbols[2..5]);
         var second = ApplyResiduals((ushort)(predictor >> 16), symbols[5..8]);
+
         BinaryPrimitives.WriteUInt16LittleEndian(output, first);
         BinaryPrimitives.WriteUInt16LittleEndian(output[2..], second);
         BinaryPrimitives.WriteUInt32LittleEndian(output[EndpointBytes..], selectors);
+
         return true;
     }
 
@@ -67,18 +74,21 @@ internal static class BcPackBc1Decoder
         BcPackBc1Dictionary dictionary, out uint predictor)
     {
         predictor = 0;
+
         if (symbol == 0)
         {
             return true;
         }
 
         var distance = (symbol & 1) == 0 ? symbol >> 1 : byte.MaxValue - (symbol >> 1);
+
         if (distance > block)
         {
             return dictionary.TryGetEndpointPair(distance - block, out predictor);
         }
 
         predictor = BinaryPrimitives.ReadUInt32LittleEndian(destination[((block - distance) * BlockBytes)..]);
+
         return true;
     }
 
@@ -86,6 +96,7 @@ internal static class BcPackBc1Decoder
         out uint selectors)
     {
         selectors = 0;
+
         if (symbols[1] != 0 ||
             !dictionary.TryGetQuadrantCode(symbols[8], out var topLeft) ||
             !dictionary.TryGetQuadrantCode(symbols[9], out var topRight) ||
@@ -96,6 +107,7 @@ internal static class BcPackBc1Decoder
         }
 
         selectors = InterleaveRows(topLeft, topRight) | ((uint)InterleaveRows(bottomLeft, bottomRight) << 16);
+
         return true;
     }
 
@@ -109,6 +121,7 @@ internal static class BcPackBc1Decoder
         var red = ((endpoint >> 11) + DecodeResidual(symbols[0])) & 31;
         var green = (((endpoint >> 5) & 63) + DecodeResidual(symbols[1])) & 63;
         var blue = ((endpoint & 31) + DecodeResidual(symbols[2])) & 31;
+
         return (ushort)((red << 11) | (green << 5) | blue);
     }
 

@@ -1,8 +1,15 @@
+/*
+* @file        Program.cs
+* @description Routes IRX commands and reports startup or diagnostic failures.
+* @author      Damon William
+* @date        2026-11-27
+*/
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.ComponentModel;
 using IraRationis.Cli.Commands;
 using IraRationis.Cli.Diagnostics.Instructions;
+using IraRationis.Cli.Diagnostics.Memory;
 using IraRationis.Cli.Diagnostics.Network;
 using IraRationis.Cli.Interop;
 using IraRationis.Graphics.Device;
@@ -10,7 +17,6 @@ using IraRationis.Graphics.Diagnostics;
 using IraRationis.Graphics.Presentation;
 using IraRationis.Loader.Imports.Models;
 using IraRationis.Loader.Instructions;
-using IraRationis.Memory.Diagnostics;
 
 namespace IraRationis.Cli;
 

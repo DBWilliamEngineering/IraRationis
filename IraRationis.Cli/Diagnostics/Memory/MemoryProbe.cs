@@ -1,33 +1,32 @@
+/*
+* @file        MemoryProbe.cs
+* @description Measures the CPU and GPU costs of standalone D3D12 memory modes.
+* @author      Damon William
+* @date        2026-11-27
+*/
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using IraRationis.Memory.Diagnostics.Models;
 using IraRationis.Memory.VirtualMemory;
 using IraRationis.Memory.VirtualMemory.Models;
 
-namespace IraRationis.Memory.Diagnostics;
+namespace IraRationis.Cli.Diagnostics.Memory;
 
-public static unsafe partial class MemoryProbe
+internal static unsafe class MemoryProbe
 {
     private const ulong GuestBase = 0x100000000;
     private const int PageWords = (int)(VirtualPageTable.PageSize / sizeof(uint));
     private const int RandomReads = 4096;
-    private const int Unsupported = unchecked((int)0x887A0004);
-
-    [LibraryImport("irx-native", EntryPoint = "irx_memory_create")]
-    private static partial int Create(uint adapter, uint mode, ulong bytes, out nint session, out nuint cpu,
-        out ulong gpu);
-
-    [LibraryImport("irx-native", EntryPoint = "irx_memory_run")]
-    private static partial int Run(nint session, uint seed, out MemoryProbeSample sample);
-
-    [LibraryImport("irx-native", EntryPoint = "irx_memory_destroy")]
-    private static partial void Destroy(nint session);
-
-    [LibraryImport("irx-native", EntryPoint = "irx_memory_adapter")]
-    private static partial int Adapter(uint index, char* description, uint capacity, out ulong dedicatedBytes);
+    private const int BytesPerMiB = 1024 * 1024;
+    private const int MaximumSizeMiB = 256;
+    private const int DefaultIterations = 5;
+    private const int MaximumIterations = 100;
+    private const uint FirstIterationSeed = 17;
+    private const uint ReadSequenceSeed = 0x12345678;
+    private const uint ReadSequenceMultiplier = 1664525;
+    private const uint ReadSequenceIncrement = 1013904223;
 
     public static int Execute(string[] args, TextWriter writer)
     {
@@ -45,8 +44,8 @@ public static unsafe partial class MemoryProbe
             throw new PlatformNotSupportedException("The D3D12 memory probe requires Windows x64.");
         }
 
-        var sizes = new[] { 16, 64, 256 };
-        var iterations = 5;
+        var sizes = new[] { 16, 64, MaximumSizeMiB };
+        var iterations = DefaultIterations;
         var adapter = 0U;
 
         for (var index = 0; index < args.Length; index++)
@@ -61,12 +60,12 @@ public static unsafe partial class MemoryProbe
 
             switch (option)
             {
-                case "--mib" when value is >= 1 and <= 256:
+                case "--mib" when value is >= 1 and <= MaximumSizeMiB:
                     sizes = [value];
 
                     break;
 
-                case "--iterations" when value is >= 1 and <= 100:
+                case "--iterations" when value is >= 1 and <= MaximumIterations:
                     iterations = value;
 
                     break;
@@ -83,24 +82,20 @@ public static unsafe partial class MemoryProbe
 
         SelfTest();
 
-        var name = new char[128];
-
-        int status;
-
-        ulong vram;
-
-        fixed (char* description = name)
+        string name;
+        ulong dedicatedMemoryBytes;
+        try
         {
-            status = Adapter(adapter, description, 128, out vram);
+            D3D12MemoryProbeSession.ReadAdapter(adapter, out name, out dedicatedMemoryBytes);
         }
-
-        if (status < 0)
+        catch (COMException exception)
         {
-            throw new InvalidOperationException($"Adapter {adapter} discovery failed: 0x{status:X8}.");
+            throw new InvalidOperationException($"Adapter {adapter} discovery failed: 0x{exception.HResult:X8}.",
+                exception);
         }
 
         writer.WriteLine(
-            $"Adapter {adapter}: {new string(name.AsSpan(0, Array.IndexOf(name, '\0')))}; dedicated memory {vram / (1024 * 1024)} MiB");
+            $"Adapter {adapter}: {name}; dedicated memory {dedicatedMemoryBytes / BytesPerMiB} MiB");
 
         writer.WriteLine(
             "Each mode uses identical full-buffer writes and GPU checksum dispatches; one warmup is excluded.");
@@ -113,14 +108,13 @@ public static unsafe partial class MemoryProbe
 
         var failed = false;
 
-        foreach (var size in from size
-                     in sizes
-                 from mode
-                     in Enum.GetValues<MemoryResidency>()
-                 where !Measure(mode, size, iterations, adapter, writer)
-                 select size)
+        var modes = Enum.GetValues<MemoryResidency>();
+        foreach (var size in sizes)
         {
-            failed = true;
+            foreach (var mode in modes)
+            {
+                failed |= !Measure(mode, size, iterations, adapter, writer);
+            }
         }
 
         return failed ? 1 : 0;
@@ -128,30 +122,37 @@ public static unsafe partial class MemoryProbe
 
     private static bool Measure(MemoryResidency mode, int mib, int iterations, uint adapter, TextWriter writer)
     {
-        var bytes = (ulong)mib * 1024 * 1024;
-        var status = Create(adapter, (uint)mode, bytes, out var session, out var cpu, out var gpu);
+        var bytes = (ulong)mib * BytesPerMiB;
+        using var session = new D3D12MemoryProbeSession(mode, bytes);
 
-        if (status < 0)
+        try
+        {
+            session.Initialize(adapter);
+        }
+        catch (COMException exception)
         {
             var optional = mode == MemoryResidency.ExistingSystemHeap
-                           || (mode == MemoryResidency.GpuUpload && status == Unsupported);
+                           || (mode == MemoryResidency.GpuUpload &&
+                               exception.HResult == D3D12MemoryProbeSession.Unsupported);
 
-            writer.WriteLine($"# {mode} {mib} MiB: {(optional ? "SKIPPED" : "FAILED")} HRESULT 0x{status:X8}");
+            writer.WriteLine($"# {mode} {mib} MiB: {(optional ? "SKIPPED" : "FAILED")} HRESULT 0x{exception.HResult:X8}");
 
             return optional;
         }
 
+        var cpu = session.CpuAddress;
+        var gpu = session.GpuAddress;
         var table = new VirtualPageTable();
+
+        table.Map(GuestBase, cpu, gpu, bytes, mode);
 
         try
         {
-            table.Map(GuestBase, cpu, gpu, bytes, mode);
-
             writer.WriteLine($"# {mode}: guest=0x{GuestBase:X}, CPU=0x{cpu:X}, GPU=0x{gpu:X}");
 
             for (var iteration = 0; iteration <= iterations; iteration++)
             {
-                var seed = (uint)(iteration + 17);
+                var seed = (uint)iteration + FirstIterationSeed;
                 var cycleStart = Stopwatch.GetTimestamp();
 
                 for (var offset = 0UL; offset < bytes; offset += VirtualPageTable.PageSize)
@@ -170,16 +171,8 @@ public static unsafe partial class MemoryProbe
 
                 var writeMs = Stopwatch.GetElapsedTime(cycleStart).TotalMilliseconds;
 
-                status = Run(session, seed, out var sample);
-
+                var sample = session.Run(seed);
                 var cycleMs = Stopwatch.GetElapsedTime(cycleStart).TotalMilliseconds;
-
-                if (status < 0)
-                {
-                    writer.WriteLine($"# {mode} dispatch FAILED: 0x{status:X8}");
-
-                    return false;
-                }
 
                 if (sample.Mismatches != 0)
                 {
@@ -200,13 +193,17 @@ public static unsafe partial class MemoryProbe
                     $"{mode},{mib},{iteration},{writeMs:F4},{sample.StagingMs:F4},{sample.CopyMs:F4},{sample.ComputeMs:F4},{sample.SubmitMs:F4},{cycleMs:F4},{randomNs:F2},{sample.Mismatches}"));
             }
 
-            table.Unmap(GuestBase, bytes);
-
             return true;
+        }
+        catch (COMException exception)
+        {
+            writer.WriteLine($"# {mode} dispatch FAILED: 0x{exception.HResult:X8}");
+
+            return false;
         }
         finally
         {
-            Destroy(session);
+            table.Unmap(GuestBase, bytes);
         }
     }
 
@@ -214,14 +211,14 @@ public static unsafe partial class MemoryProbe
     {
         var pointer = (uint*)cpu;
         var count = (uint)(bytes / sizeof(uint));
-        var state = 0x12345678U;
+        var state = ReadSequenceSeed;
         var sum = 0UL;
         var expected = 0UL;
         var start = Stopwatch.GetTimestamp();
 
         for (var elementIndex = 0; elementIndex < RandomReads; elementIndex++)
         {
-            state = unchecked(state * 1664525 + 1013904223);
+            state = unchecked(state * ReadSequenceMultiplier + ReadSequenceIncrement);
 
             var index = state % count;
 
@@ -230,11 +227,11 @@ public static unsafe partial class MemoryProbe
 
         var elapsed = Stopwatch.GetElapsedTime(start).TotalNanoseconds / RandomReads;
 
-        state = 0x12345678U;
+        state = ReadSequenceSeed;
 
         for (var elementIndex = 0; elementIndex < RandomReads; elementIndex++)
         {
-            state = unchecked(state * 1664525 + 1013904223);
+            state = unchecked(state * ReadSequenceMultiplier + ReadSequenceIncrement);
 
             var index = state % count;
 

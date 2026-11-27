@@ -85,7 +85,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReserveGpuWritableBacking(ResourceObject* resource, ulong bytes)
     {
         // The implemented writers require an RTV/DSV or a 1D/3D UAV. This exact 2D texture is sampled only.
-        //TODO: Damon William -> Reserve this shape before adding any command that can write it on the GPU.
+        //TODO: Damon William William -> Reserve this shape before adding any command that can write it on the GPU.
         if ((resource->Description.Flags & 7U) == 0 || IsColorLutCpuTextureShape(resource->Description))
         {
             return;

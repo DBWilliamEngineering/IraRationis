@@ -9,5 +9,6 @@ public enum IndexedUiVariant
     AlphaMask,
     DualAlphaMask,
     BatchedMask,
-    TransformedTexture
+    TransformedTexture,
+    BatchedDualTexture
 }

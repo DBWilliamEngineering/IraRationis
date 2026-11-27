@@ -10,7 +10,7 @@ namespace IraRationis.Runtime.Tests.RuntimeServices;
 
 internal sealed unsafe class LocalUserServiceFixture : IDisposable
 {
-    internal static readonly LocalUserProfile Profile = new(0xFEDCBA9876543210UL, 0x9123456789ABCDEFUL, "Damon William");
+    internal static readonly LocalUserProfile Profile = new(0xFEDCBA9876543210UL, 0x9123456789ABCDEFUL, "Damon William William");
 
     internal LocalUserServiceFixture()
     {

@@ -94,7 +94,7 @@ Contracts are intended to identify regressions independently of commercial title
 
 Authored types have one top-level declaration per file and live with the component that owns their contract. Input models, descriptor identities, and audio ABI structures therefore have local `Models` namespaces rather than a general shared-type library. Independent behavior classes make their owner dependencies explicit; extraction alone does not remove coupling. The partial graphics facade keeps one public type identity while its files are organized by graphics responsibility.
 
-Maintainability is evaluated through understandable ownership and control flow, with cyclomatic and Halstead complexity used as review signals. Moving files does not itself simplify branches or prove a better maintainability score. Names should explain intent, comments should preserve non-obvious contracts and performance costs, and `//TODO: Damon William -> ...` notes should identify actionable decisions. SOLID, DRY, and YAGNI guide abstractions; a design pattern is useful when it solves an actual responsibility or lifetime problem.
+Maintainability is evaluated through understandable ownership and control flow, with cyclomatic and Halstead complexity used as review signals. Moving files does not itself simplify branches or prove a better maintainability score. Names should explain intent, comments should preserve non-obvious contracts and performance costs, and `//TODO: Damon William William -> ...` notes should identify actionable decisions. SOLID, DRY, and YAGNI guide abstractions; a design pattern is useful when it solves an actual responsibility or lifetime problem.
 
 ### Performance and memory contracts
 

@@ -34,5 +34,9 @@ internal enum GraphicsStage
     KernelPublication,
     AllocateRectangleUpload,
     DetileTexture,
+    SegmentFenceWait,
+    UploadFenceWait,
+    EmptyPreparationFenceWait,
+    StateOnlyMemoryFenceWait,
     Count
 }

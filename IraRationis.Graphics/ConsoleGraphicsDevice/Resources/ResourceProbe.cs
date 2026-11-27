@@ -44,7 +44,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var create =
                 (delegate* unmanaged[Stdcall]<nint, ulong, ResourceDescription*, uint, nint, Guid*, nint*, int>)Slot(
-                    device, 133);
+                    device, CreateResourceAtAddressSlot);
 
             CheckResource(create(device, (ulong)memory, &desc, 0, 0, &id, &view), "create at address");
 

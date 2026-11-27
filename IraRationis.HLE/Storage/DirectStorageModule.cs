@@ -30,20 +30,24 @@ public static unsafe class DirectStorageModule
     private const ulong PageDestination = 1UL << 21;
     private const ulong MemorySource = 1UL << 22;
     private const ulong AutoSubmitDisabled = 1;
+    private const long DefaultStagingBudgetBytes = 32L << 20;
+    private const int InitialFailuresToLog = 4;
+    private const string StrictLengthsVariable = "IRX_STORAGE_STRICT_LENGTH";
+    private const string TraceVariable = "IRX_STORAGE_TRACE";
     private static readonly Guid FactoryId = new("62959d11-d45f-4884-a0a3-f7862ea243ae");
     private static readonly nint FactoryTable = CreateFactoryTable();
     private static readonly nint FileTable = CreateFileTable();
     private static readonly nint StatusTable = CreateStatusTable();
     private static readonly nint QueueTable = CreateQueueTable();
     private static readonly nint Factory = NewObject(FactoryTable, new object());
-    private static long _stagingBytes = 32L << 20;
+    private static long _stagingBytes = DefaultStagingBudgetBytes;
     private static readonly object StagingGate = new();
     private static readonly long[] RequestFailures = new long[Enum.GetValues<StorageRequestFailure>().Length];
     private static long _staged;
     internal static long _nextStorageQueueId;
     internal static readonly bool StrictStorageLengths =
-        Environment.GetEnvironmentVariable("IRX_STORAGE_STRICT_LENGTH") != "0";
-    internal static readonly bool EnableStorageTrace = Environment.GetEnvironmentVariable("IRX_STORAGE_TRACE") == "1";
+        Environment.GetEnvironmentVariable(StrictLengthsVariable) != "0";
+    internal static readonly bool EnableStorageTrace = Environment.GetEnvironmentVariable(TraceVariable) == "1";
 
     public static HleModule Create()
     {
@@ -395,7 +399,8 @@ public static unsafe class DirectStorageModule
         PhysicalPageWriteFailure pageFailure = PhysicalPageWriteFailure.None)
     {
         var count = Interlocked.Increment(ref RequestFailures[(int)failure]);
-        if (EnableStorageTrace || count <= 4 || (count & (count - 1)) == 0)
+
+        if (EnableStorageTrace || count <= InitialFailuresToLog || (count & (count - 1)) == 0)
         {
             Console.Error.WriteLine(
                 $"[dstorage] Request failed: 0x{result:X8}, options=0x{request.Options:X}, source={request.SourceSize}, " +
@@ -415,6 +420,7 @@ public static unsafe class DirectStorageModule
         }
 
         var bcPackMode = request.Options & BcPackModeMask;
+
         if (bcPackMode != 0 && bcPackMode != BcPackBc1)
         {
             return RejectRequest(request, NotImplemented, StorageRequestFailure.UnsupportedBcPackMode);
@@ -462,6 +468,7 @@ public static unsafe class DirectStorageModule
         try
         {
             sourceBuffer = ArrayPool<byte>.Shared.Rent(sourceSize);
+
             var source = new ArraySegment<byte>(sourceBuffer, 0, sourceSize);
             var result = Read(request, file, source.AsSpan());
 
@@ -473,6 +480,7 @@ public static unsafe class DirectStorageModule
             if (!compressed)
             {
                 result = PublishPhysicalPages(request, source.AsSpan());
+
                 if (result < 0)
                 {
                     return result;
@@ -484,11 +492,13 @@ public static unsafe class DirectStorageModule
             }
 
             outputBuffer = physical || bcPack ? ArrayPool<byte>.Shared.Rent(destinationSize) : null;
+
             var output = outputBuffer is null
                 ? new Span<byte>((void*)request.Destination, destinationSize)
                 : outputBuffer.AsSpan(0, destinationSize);
 
             result = DecodePayload(request, source, output, inflate, bcPack, out var written);
+
             if (result < 0)
             {
                 return result;
@@ -497,6 +507,7 @@ public static unsafe class DirectStorageModule
             if (physical)
             {
                 result = PublishPhysicalPages(request, output[..written]);
+
                 if (result < 0)
                 {
                     return result;
@@ -531,6 +542,7 @@ public static unsafe class DirectStorageModule
         bool bcPack, out int bytesWritten)
     {
         bytesWritten = 0;
+
         if (!bcPack)
         {
             return DirectStoragePayload.TryInflate(source, output, StrictStorageLengths, out bytesWritten)
@@ -545,9 +557,11 @@ public static unsafe class DirectStorageModule
 
         var intermediateSize = (int)request.IntermediateSize;
         var intermediate = ArrayPool<byte>.Shared.Rent(intermediateSize);
+
         try
         {
             var payload = intermediate.AsSpan(0, intermediateSize);
+
             return DirectStoragePayload.TryInflate(source, payload, strict: true, out _)
                 ? DecodeBcPack(request, payload, output, out bytesWritten)
                 : RejectRequest(request, InvalidData, StorageRequestFailure.InvalidZlibPayload);
@@ -562,12 +576,14 @@ public static unsafe class DirectStorageModule
         out int bytesWritten)
     {
         bytesWritten = 0;
+
         if (!BcPackBc1Decoder.TryDecode(payload, output, BcPackDictionaryFile.Dictionary))
         {
             return RejectRequest(request, InvalidData, StorageRequestFailure.BcPackDecodeRejected);
         }
 
         bytesWritten = output.Length;
+
         return 0;
     }
 

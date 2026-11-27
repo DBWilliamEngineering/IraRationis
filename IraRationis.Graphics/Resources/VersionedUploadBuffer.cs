@@ -11,7 +11,7 @@ namespace IraRationis.Graphics.Resources;
 /// </summary>
 internal sealed class VersionedUploadBuffer
 {
-    //TODO: Damon William -> Integrate raw guest writes and physical aliases before using versions to skip general title uploads.
+    //TODO: Damon William William -> Integrate raw guest writes and physical aliases before using versions to skip general title uploads.
     private const int MaximumBytes = 16 * 1024 * 1024;
     private readonly byte[] _data;
 
@@ -26,7 +26,6 @@ internal sealed class VersionedUploadBuffer
     internal VersionedUploadBuffer(int length)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(length, 1);
-
         ArgumentOutOfRangeException.ThrowIfGreaterThan(length, MaximumBytes);
 
         _data = new byte[length];
@@ -135,7 +134,6 @@ internal sealed class VersionedUploadBuffer
         _completedVersion = snapshot.Version;
 
         _pending = null;
-
         _submitted = false;
     }
 
@@ -151,7 +149,6 @@ internal sealed class VersionedUploadBuffer
         }
 
         _dirtyStart = Math.Min(_dirtyStart, start);
-
         _dirtyEnd = Math.Max(_dirtyEnd, end);
     }
 

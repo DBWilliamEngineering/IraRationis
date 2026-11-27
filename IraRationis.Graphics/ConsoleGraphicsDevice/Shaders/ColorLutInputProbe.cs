@@ -1,4 +1,13 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+ * @file        ColorLutInputProbe.cs
+ * @description Verifies GPU upload and readback of a borrowed private color LUT texture.
+ * @author      Damon William
+ * @date        2026-11-27
+ *
+ * @details     The probe compares exact RGBA32_FLOAT texel bytes after a host copy.
+ *
+ * See the repository license and attribution notices.
+ */
 
 using System.Runtime.InteropServices;
 using IraRationis.Graphics.Device.Models;

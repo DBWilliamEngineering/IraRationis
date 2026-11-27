@@ -6,7 +6,7 @@ namespace IraRationis.Graphics.Synchronization;
 
 internal sealed unsafe class HostCompletionFenceFenceTimeline : IDisposable
 {
-    public readonly EventWaitHandle Completion = new(false, EventResetMode.AutoReset);
+    public readonly AutoResetEvent Completion = new(false);
     public readonly nint Device;
     public readonly nint Fence;
     public ulong Value;

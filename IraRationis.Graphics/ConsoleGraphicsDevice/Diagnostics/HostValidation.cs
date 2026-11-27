@@ -74,7 +74,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void RecordHostGpuCommand(nint self, string operation)
     {
-        if (!TraceHostRecording && !SkipEmptyDrawSegments)
+        if (!TraceHostRecording && !SkipEmptyDrawSegments && !ReuseStateOnlyMemorySegments)
         {
             return;
         }
@@ -82,11 +82,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         var state = StateFor(self);
         state.HasHostGpuWork = true;
 
-        if (TraceHostRecording)
+        if (!TraceHostRecording)
         {
-            state.LastHostCommand = operation;
-            state.HostCommandCount++;
+            return;
         }
+
+        state.LastHostCommand = operation;
+        state.HostCommandCount++;
     }
 
     private static void ReportHostCloseFailure(nint self, int resultCode, string boundary)

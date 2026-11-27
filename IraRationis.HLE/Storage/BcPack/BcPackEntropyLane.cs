@@ -51,6 +51,7 @@ internal struct BcPackEntropyLane(int baseWidth)
         {
             _pendingByte = value;
             _recordBytes--;
+
             return true;
         }
 
@@ -60,18 +61,24 @@ internal struct BcPackEntropyLane(int baseWidth)
                 _symbolWidth = baseWidth - (value >> 6);
                 _model = value & ModelMask;
                 _longRecord = (value & LongRecordFlag) != 0;
+
                 return (value & FlushFlag) != 0 && _symbolWidth is >= 1 and <= 8;
+
             case 1:
                 _recordBytes = value + (_longRecord ? 257 : 1);
+
                 return true;
+
             case 2 when _longRecord:
                 _recordBytes += value << 8;
+
                 return true;
         }
 
         _state = (_state << 8) | value;
         _stateBytesRead++;
         _recordBytes--;
+
         if (_stateBytesRead == sizeof(uint) || _recordBytes == 0)
         {
             _readingHeader = false;
@@ -91,6 +98,7 @@ internal struct BcPackEntropyLane(int baseWidth)
         if (_initialStateReady)
         {
             _initialStateReady = false;
+
             return true;
         }
 
@@ -99,6 +107,7 @@ internal struct BcPackEntropyLane(int baseWidth)
             if (_pendingByte >= 0)
             {
                 MergePendingByte();
+
                 return true;
             }
 
@@ -148,6 +157,7 @@ internal struct BcPackEntropyLane(int baseWidth)
     internal byte TakeSymbol()
     {
         HasSymbol = false;
+
         return _symbol;
     }
 
@@ -189,6 +199,7 @@ internal struct BcPackEntropyLane(int baseWidth)
         _state = 0;
         _stateBytesRead = 0;
         _headerOffset = 0;
+
         return true;
     }
 }

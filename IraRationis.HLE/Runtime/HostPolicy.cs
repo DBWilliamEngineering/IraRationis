@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-/**
+/*
  * @file        HostPolicy.cs
  * @description Resolves allowed Windows imports for the guest.
  * @author      Damon William
@@ -31,7 +31,7 @@ public sealed unsafe partial class HostPolicy
         "ole32.dll", "advapi32.dll", "iphlpapi.dll", "dbghelp.dll", "xaudio2_9.dll", "mfplat.dll", "mfreadwrite.dll"
     ];
 
-    private readonly HashSet<string> _exactModuleNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _exactModuleNames = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly string[] _moduleFamilyPrefixes;
 
     public HostPolicy() : this(DefaultModuleRules)
@@ -43,6 +43,7 @@ public sealed unsafe partial class HostPolicy
         ArgumentNullException.ThrowIfNull(allow);
 
         var families = new List<string>();
+
         foreach (var rule in allow)
         {
             if (rule.EndsWith('*'))
@@ -55,7 +56,7 @@ public sealed unsafe partial class HostPolicy
             }
         }
 
-        _moduleFamilyPrefixes = families.ToArray();
+        _moduleFamilyPrefixes = [.. families];
     }
 
     public bool Allows(string dll)
@@ -85,6 +86,7 @@ public sealed unsafe partial class HostPolicy
         }
 
         var module = GetOrLoadModule(dll);
+
         if (module == 0)
         {
             return null;
@@ -93,6 +95,7 @@ public sealed unsafe partial class HostPolicy
         var address = symbol.Name is { } name
             ? GetProcAddressByName(module, name)
             : GetProcAddressByOrdinal(module, (byte*)symbol.HintOrOrdinal);
+
         return address == 0 ? null : (nuint)address;
     }
 
@@ -111,6 +114,7 @@ public sealed unsafe partial class HostPolicy
             }
 
             module = LoadLibraryExW(dll, 0, LoadLibrarySearchSystem32);
+
             if (module != 0)
             {
                 LoadedModules[dll] = module;

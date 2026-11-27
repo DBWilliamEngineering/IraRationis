@@ -18,14 +18,28 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private static int _firstBlockedDrawCaptured;
+    private static int _firstBlockedMeshDispatchCaptured;
 
-    // This is a failure-path diagnostic, not a shader replacement or a host draw.
     // Command lists are externally synchronized; the recorded state retains its
     // pipeline, root signatures and materialized target resources during capture.
     private static void CaptureBlockedDraw(nint self, bool indexed, uint count, uint instances, uint first,
         int baseVertex, uint firstInstance)
     {
-        if (Interlocked.CompareExchange(ref _firstBlockedDrawCaptured, 1, 0) != 0)
+        var draw = new VertexFetchDrawRange(indexed, count, instances, first, baseVertex, firstInstance);
+
+        CaptureBlockedGraphics(self, ref _firstBlockedDrawCaptured, draw);
+    }
+
+    private static void CaptureBlockedMeshDispatch(nint self, uint groupCountX, uint groupCountY, uint groupCountZ)
+    {
+        CaptureBlockedGraphics(self, ref _firstBlockedMeshDispatchCaptured, null,
+            (groupCountX, groupCountY, groupCountZ));
+    }
+
+    private static void CaptureBlockedGraphics(nint self, ref int alreadyCaptured, VertexFetchDrawRange? draw,
+        (uint X, uint Y, uint Z) meshGroups = default)
+    {
+        if (Interlocked.CompareExchange(ref alreadyCaptured, 1, 0) != 0)
         {
             return;
         }
@@ -36,10 +50,18 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var state = StateFor(self);
 
-            report.WriteLine("[graphics] IRX-GFX-DRAW-R9: first blocked draw (not executed).");
-
-            report.WriteLine($"draw indexed={indexed} count={count} instances={instances} first={first} " +
-                             $"baseVertex={baseVertex} firstInstance={firstInstance}");
+            if (draw is { } range)
+            {
+                report.WriteLine("[graphics] IRX-GFX-DRAW-R9: first blocked draw (not executed).");
+                report.WriteLine($"draw indexed={range.Indexed} count={range.Count} instances={range.Instances} " +
+                                 $"first={range.First} baseVertex={range.BaseVertex} firstInstance={range.FirstInstance}");
+            }
+            else
+            {
+                report.WriteLine("[graphics] First blocked DispatchMesh (not executed).");
+                report.WriteLine($"DispatchMesh groupCountX={meshGroups.X} groupCountY={meshGroups.Y} " +
+                                 $"groupCountZ={meshGroups.Z}");
+            }
 
             report.WriteLine($"list=0x{(nuint)self:X} type={*(uint*)(self + 0x10)} hostAllocated={Host(self) != 0}");
 
@@ -64,8 +86,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
             }
 
-            WriteDrawEvidence(report, state, directory, new VertexFetchDrawRange(indexed, count, instances, first,
-                baseVertex, firstInstance));
+            WriteDrawEvidence(report, state, directory, draw, includeVertexFetchProbe: draw.HasValue);
 
             var evidence = report.ToString();
 
@@ -92,7 +113,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static void WriteDrawEvidence(TextWriter report, RecordedCommandState state, string? directory,
-        VertexFetchDrawRange? draw = null)
+        VertexFetchDrawRange? draw = null, bool includeVertexFetchProbe = true)
     {
         report.WriteLine($"pipeline=0x{(nuint)state.Pipeline:X} topology={state.Topology} " +
                          $"viewports={state.Viewports?.Length ?? 0} scissors={state.Scissors?.Length ?? 0} " +
@@ -146,7 +167,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // metadata and the root it retains remain alive after this lock ends.
         if (pipeline == null)
         {
-            report.WriteLine("graphics PSO unavailable: no retained graphics pipeline at draw.");
+            report.WriteLine("graphics PSO unavailable: no retained graphics pipeline on the command list.");
 
             return;
         }
@@ -194,6 +215,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 report.WriteLine($"R14 input: {element.Name}{element.Index}, format={element.Format}, " +
                                  $"slot={element.Slot}, offset={element.Offset}, class={element.Class}, step={element.Step}.");
             }
+        }
+
+        if (!includeVertexFetchProbe)
+        {
+            return;
         }
 
         switch (state.Topology)
@@ -360,7 +386,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 if (root != null)
                 {
-                    WriteResourceLayout(report, root, program);
+                    WriteResourceLayout(report, root, program, includeDescriptorBytes: directory != null);
                 }
 
                 if (directory != null && program.StageMetadata.Length <= 16384)
@@ -462,17 +488,21 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var bytes = record.Bytes.AsSpan();
 
-        if (record.Kind == 16 && bytes.Length == 8)
+        switch (record.Kind)
         {
-            report.WriteLine($"  DSV pipeline format={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}.");
-        }
-        else if (record.Kind == 21 && bytes.Length == 64)
-        {
-            report.WriteLine($"  depthEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}; " +
-                             $"depthWriteMask={BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..])}; " +
-                             $"depthFunc={BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..])}; " +
-                             $"stencilEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..])}; " +
-                             $"depthBoundsEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..])}.");
+            case 16 when bytes.Length == 8:
+                report.WriteLine($"  DSV pipeline format={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}.");
+
+                break;
+
+            case 21 when bytes.Length == 64:
+                report.WriteLine($"  depthEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}; " +
+                                 $"depthWriteMask={BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..])}; " +
+                                 $"depthFunc={BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..])}; " +
+                                 $"stencilEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..])}; " +
+                                 $"depthBoundsEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..])}.");
+
+                break;
         }
     }
 
@@ -493,6 +523,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         report.GetStringBuilder().Clear();
+
         // Minimal valid, empty DXBC container. It must not be treated as executable.
         var bytes = new byte[32];
 
@@ -517,8 +548,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(4), 8);
         BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(12), 40);
         BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(24), 3);
+
         signature[32] = 7;
         signature[33] = 7;
+
         "POSITION"u8.CopyTo(signature.AsSpan(40));
 
         WriteExtendedSignatureEvidence(report, new ShaderPart("ISG1", 0, signature));
@@ -529,7 +562,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         report.GetStringBuilder().Clear();
+
         BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(12), uint.MaxValue);
+
         WriteExtendedSignatureEvidence(report, new ShaderPart("ISG1", 0, signature));
 
         if (!report.ToString().Contains("invalid semantic offset", StringComparison.Ordinal))
@@ -541,9 +576,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         Console.WriteLine("[graphics-probe] R9 blocked-draw metadata and shader classification passed (CPU only).");
 
         VerifyVertexFetchExtent();
-
         VerifySourcePlanning();
-
         VerifyVertexInputLayout();
     }
 }

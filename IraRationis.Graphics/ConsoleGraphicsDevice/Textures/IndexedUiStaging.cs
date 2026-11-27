@@ -9,7 +9,6 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
-    private const int IndexedUiPixelConstantBytes = 16;
     private const int IndexedUiStackSnapshotLimit = 1024;
     private static int _compactIndexedUiUploads;
 
@@ -128,18 +127,21 @@ public static partial class ConsoleGraphicsDevice
     private static void ReadIndexedUiVertexData(IndexedUiUpload upload, ReadOnlySpan<byte> indices, Span<byte> vertices,
         int offset, Span<byte> constants)
     {
+        var pixelConstantBytes = IndexedUiCompiler.PixelConstantBytes(upload.Variant);
+        var batchBytes = IndexedUiCompiler.BatchConstantBytes(upload.Variant);
+
         if (!TryReadGuestMemory(upload.Vertex + (ulong)offset, vertices) ||
             !TryReadGuestMemory(upload.VertexConstants.Address, constants[..upload.VertexConstantBytes]) ||
-            (upload.Dither && !TryReadGuestMemory(upload.PixelConstants.Address,
-                constants.Slice(upload.PixelConstantOffset, IndexedUiPixelConstantBytes))))
+            (pixelConstantBytes != 0 && !TryReadGuestMemory(upload.PixelConstants.Address,
+                constants.Slice(upload.PixelConstantOffset, pixelConstantBytes))))
         {
             Environment.FailFast("[graphics] indexed-ui vertex or constant snapshot refused.");
         }
 
-        if (upload.Variant == IndexedUiVariant.BatchedMask &&
-            !AreIndexedUiBatchesPresent(upload.Plan, indices, vertices, offset, upload.VertexConstantBytes))
+        if (batchBytes != 0 &&
+            !AreIndexedUiBatchesPresent(upload.Plan, indices, vertices, offset, upload.VertexConstantBytes, batchBytes))
         {
-            Environment.FailFast("[graphics] Indexed UI batched mask vertex selected constants outside its CBV.");
+            Environment.FailFast($"[graphics] Indexed UI {upload.Variant} vertex selected constants outside its CBV.");
         }
 
         if (IndexedUiSourceTraceEnabled)

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
+using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
@@ -298,6 +299,25 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         report.WriteLine(
             $"[graphics] R16.1 descriptor[{index}]: resource=0x{(nuint)metadata.Resource:X}; generation={metadata.ResourceGeneration}; counter=0x{(nuint)metadata.Counter:X}.");
+
+        if (metadata.Resource != 0)
+        {
+            if (IsResource(metadata.Resource) &&
+                TryReadMappingRecord((ulong)(nuint)metadata.Resource, out ResourceObject snapshot) &&
+                snapshot.Header.Table == _resourceTable && snapshot.Generation == metadata.ResourceGeneration)
+            {
+                var description = snapshot.Description;
+                report.WriteLine($"[graphics] R16.1 descriptor[{index}] resource: format={description.Format}; " +
+                                 $"dimension={description.Dimension}; extent={description.Width}x{description.Height}x{description.DepthOrArraySize}; " +
+                                 $"mips={description.MipLevels}; samples={description.SampleCount}; " +
+                                 $"layout=0x{description.Layout:X}; flags=0x{description.Flags:X}.");
+            }
+            else
+            {
+                report.WriteLine($"[graphics] R16.1 descriptor[{index}]: resource snapshot unavailable or stale.");
+            }
+        }
+
         WriteComputeDescriptorBytes(report, index, "view", metadata.Description);
         WriteComputeDescriptorBytes(report, index, "extra", metadata.Extra);
     }

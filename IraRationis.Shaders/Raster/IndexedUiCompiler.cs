@@ -27,6 +27,11 @@ public static class IndexedUiCompiler
     public const string TransformedTexturePixelHash =
         "1695C915FFBDAE8B818D5910CC8EDB84254A40485688E232AA4A6B81561D1194";
 
+    public const string BatchedDualTextureVertexHash =
+        "7042561BD0DE95122A0BDFB639B45B9AAE16CA202BFF4F80E34F1184CF782260";
+    public const string BatchedDualTexturePixelHash =
+        "51C2EDA1B7FC7B321AC3DA58C53B39154642FC00A4CC80AE85983FB32014DA6F";
+
     private const string Varyings = """
                                     struct Varyings
                                     {
@@ -328,6 +333,98 @@ public static class IndexedUiCompiler
         }
         """;
 
+    private const string BatchedDualTextureVaryings = """
+        struct Varyings
+        {
+            float4 color : COLOR0;
+            float4 batchAndOpacity : COLOR1;
+            float4 addend : TEXCOORD0;
+            float4 multiplier : TEXCOORD1;
+            float4 position : SV_Position;
+        };
+        """;
+
+    public const string BatchedDualTextureVertexSource = BatchedDualTextureVaryings + """
+        struct BatchParameters
+        {
+            float4 addend;
+            float4 multiplier;
+            float4 clipX;
+            float4 clipY;
+        };
+
+        cbuffer VertexParameters : register(b0)
+        {
+            BatchParameters batches[256];
+        };
+
+        float TransformAxis(float4 parameters, float2 position)
+        {
+            return mad(parameters.x, position.x, mad(parameters.y, position.y, parameters.w));
+        }
+
+        Varyings main(float4 color : COLOR0, float4 batchAndOpacity : COLOR1, float2 position : POSITION0)
+        {
+            uint batchIndex = (uint)round(batchAndOpacity.b * 255.0f);
+            BatchParameters batch = batches[batchIndex];
+            precise float2 clip = float2(TransformAxis(batch.clipX, position), TransformAxis(batch.clipY, position));
+
+            Varyings output;
+            output.color = color;
+            output.batchAndOpacity = batchAndOpacity;
+            output.addend = batch.addend;
+            output.multiplier = batch.multiplier;
+            output.position = float4(clip, 0.0f, 1.0f);
+
+            return output;
+        }
+        """;
+
+    public const string BatchedDualTexturePixelSource = BatchedDualTextureVaryings + """
+        Texture2D<float4> selectionTexture : register(t0);
+        Texture2D<float4> coverageTexture : register(t1);
+        cbuffer PixelParameters : register(b1)
+        {
+            float coverageThreshold;
+            float coverageOpacity;
+            float selectionId;
+            float reserved;
+            float2 screenExtent;
+            float2 textureExtent;
+        };
+        """ + HalfExport + """
+        float LegacyMultiply(float first, float second)
+        {
+            return first == 0.0f || second == 0.0f ? 0.0f : first * second;
+        }
+
+        float4 main(Varyings input) : SV_Target0
+        {
+            float4 color = saturate(mad(input.multiplier, input.color, input.addend));
+            precise float opacity = LegacyMultiply(color.a, input.batchAndOpacity.a);
+            precise float2 inverseExtent = rcp(screenExtent);
+            precise float2 screenUv = float2(LegacyMultiply(input.position.x, inverseExtent.x),
+                LegacyMultiply(input.position.y, inverseExtent.y));
+            precise float2 texel = float2(LegacyMultiply(screenUv.x, textureExtent.x),
+                LegacyMultiply(screenUv.y, textureExtent.y));
+            int3 sampleAddress = int3((int2)texel, 0);
+            uint2 selectionBytes = (uint2)(selectionTexture.Load(sampleAddress).ba * 255.0f);
+            uint packedId = selectionBytes.x | (selectionBytes.y << 8);
+
+            [branch] if (packedId == (uint)selectionId)
+            {
+                float coverage = coverageTexture.Load(sampleAddress).r;
+
+                if (coverageThreshold < coverage)
+                {
+                    opacity = LegacyMultiply(coverageOpacity, opacity);
+                }
+            }
+
+            return float4(HalfRtz(color.r), HalfRtz(color.g), HalfRtz(color.b), HalfRtz(opacity));
+        }
+        """;
+
     public static bool TryClassify(string vertex, string pixel, out IndexedUiVariant variant)
     {
         if (vertex == VertexHash && pixel == PixelHash)
@@ -365,6 +462,13 @@ public static class IndexedUiCompiler
             return true;
         }
 
+        if (vertex == BatchedDualTextureVertexHash && pixel == BatchedDualTexturePixelHash)
+        {
+            variant = IndexedUiVariant.BatchedDualTexture;
+
+            return true;
+        }
+
         variant = IndexedUiVariant.AlphaMask;
 
         return vertex == AlphaVertexHash && pixel == AlphaPixelHash;
@@ -375,7 +479,7 @@ public static class IndexedUiCompiler
         return variant switch
         {
             IndexedUiVariant.AlphaMask or IndexedUiVariant.DualAlphaMask => 20,
-            IndexedUiVariant.BatchedMask => 16,
+            IndexedUiVariant.BatchedMask or IndexedUiVariant.BatchedDualTexture => 16,
             _ => 12
         };
     }
@@ -385,6 +489,7 @@ public static class IndexedUiCompiler
         return variant switch
         {
             IndexedUiVariant.AlphaMask or IndexedUiVariant.TransformedTexture => 64,
+            IndexedUiVariant.BatchedDualTexture => 64,
             IndexedUiVariant.BatchedMask => BatchedMaskConstantBytes,
             _ => 96
         };
@@ -392,6 +497,24 @@ public static class IndexedUiCompiler
 
     public static int TextureCount(IndexedUiVariant variant)
     {
-        return variant is IndexedUiVariant.Dithered or IndexedUiVariant.DualAlphaMask ? 2 : 1;
+        return variant is IndexedUiVariant.Dithered or IndexedUiVariant.DualAlphaMask or
+            IndexedUiVariant.BatchedDualTexture ? 2 : 1;
+    }
+
+    public static int BatchConstantBytes(IndexedUiVariant variant)
+    {
+        return variant is IndexedUiVariant.BatchedMask or IndexedUiVariant.BatchedDualTexture
+            ? VertexConstantBytes(variant)
+            : 0;
+    }
+
+    public static int PixelConstantBytes(IndexedUiVariant variant)
+    {
+        return variant switch
+        {
+            IndexedUiVariant.Dithered => 16,
+            IndexedUiVariant.BatchedDualTexture => 32,
+            _ => 0
+        };
     }
 }

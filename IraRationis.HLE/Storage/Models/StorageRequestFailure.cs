@@ -1,4 +1,4 @@
-/**
+/*
  * @file        StorageRequestFailure.cs
  * @description Identifies the stage that rejected a DirectStorage request.
  * @author      Damon William

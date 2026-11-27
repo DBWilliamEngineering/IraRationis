@@ -314,6 +314,7 @@ internal static class Program
         Require(host.Allows("KERNEL32.DLL") && !host.Allows("xmem.dll"), "Host policy");
 
         var custom = new HostPolicy(["exact.dll", "api-ms-win-core-test-*"]);
+
         Require(custom.Allows("EXACT.DLL") &&
                 custom.Allows("API-MS-WIN-CORE-TEST-L1-1-0.DLL") &&
                 !custom.Allows("exact.dll.extra") && !custom.Allows("kernel32.dll"),
@@ -323,12 +324,14 @@ internal static class Program
         {
             var processId = new ImportSymbol("GetCurrentProcessId", 0);
             var address = host.Resolve("kernel32.dll", processId);
+
             Require(address is > 0 && host.Resolve("KERNEL32.DLL", processId) == address,
                 "Host named export resolution and case-insensitive module reuse");
             Require(host.Resolve("kernel32.dll", new ImportSymbol("getcurrentprocessid", 0)) is null,
                 "Host export names remain case-sensitive");
 
             var wildcard = new HostPolicy(["*"]);
+
             Require(wildcard.Resolve("..\\kernel32.dll", processId) is null &&
                     wildcard.Resolve("kernel32.dll\0extra", processId) is null &&
                     wildcard.Resolve("kernel32.dll", new ImportSymbol("GetCurrentProcessId\0extra", 0)) is null,

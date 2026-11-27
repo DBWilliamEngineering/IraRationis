@@ -91,7 +91,7 @@ internal sealed unsafe partial class LocalUserService
             }
 
             // Initial Add completion is not a SignedInAgain event. This local profile is immutable.
-            //TODO: Damon William -> Add queued notifications and unregister draining before introducing profile changes or sign-out.
+            //TODO: Damon William William -> Add queued notifications and unregister draining before introducing profile changes or sign-out.
             instance._trace.Write("UserChangeRegistered", $"token={*token}; queue=0x{queue:X}; mutableProfile=False");
 
             return RuntimeServiceResult.Success;

@@ -1,4 +1,4 @@
-/**
+/*
  * @file        DirectStorageBcPackTests.cs
  * @description Verifies BC1 decoding and publication with authored byte fixtures.
  * @author      Damon William
@@ -60,16 +60,20 @@ internal static class DirectStorageBcPackTests
 
         var history = new uint?[255];
         var quadrants = new byte?[256];
+
         history[0] = 0;
+
         Require(BcPackBc1Dictionary.TryCreate(history, quadrants, out var dictionary) &&
                 BcPackBc1Decoder.TryDecode(dictionaryReference, block, dictionary) && block.SequenceEqual(expected),
             "BC1 uses the supplied first preset entry");
 
         quadrants[4] = 0;
+
         Require(!BcPackBc1Dictionary.TryCreate(history, quadrants, out _),
             "An additional quadrant cannot duplicate the exact uniform selector");
 
         var entropyState = 0x0100_0001U;
+
         Require(BcPackEntropyModel.Decode(ref entropyState, model: 12, width: 5) == 0 &&
                 entropyState == 53_290U * 256,
             "Nonuniform entropy model uses the exact integer frequency");
@@ -82,6 +86,7 @@ internal static class DirectStorageBcPackTests
     private static unsafe void VerifyStoragePublication(byte[] packed, ReadOnlySpan<byte> expected)
     {
         Span<byte> destination = stackalloc byte[expected.Length];
+
         fixed (byte* source = packed)
         fixed (byte* output = destination)
         {
@@ -100,6 +105,7 @@ internal static class DirectStorageBcPackTests
 
             destination.Fill(0xA5);
             request.SourceSize--;
+
             Require(DirectStorageModule.Execute(request, 0, out written) < 0 &&
                     written == 0 && destination.IndexOfAnyExcept((byte)0xA5) == -1,
                 "Failed BC1 request leaves the caller's destination untouched");

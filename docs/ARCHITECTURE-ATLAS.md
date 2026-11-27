@@ -4,7 +4,7 @@
 > *Nullius in verba · Non impone opinionem*  
 > Managed-first native compatibility research for Windows x64.
 
-**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon William supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and storage-contract results on November 26. These results do not establish new game, GPU, performance, or CI acceptance. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
+**Updated:** November 26, 2026, US Central time. Source links and ownership notes follow the current component layout. The original evidence baseline is [`d18868543526c75005b12bad3fd1666037814340`](https://github.com/DBWilliamEngineering/IraRationis/commit/d18868543526c75005b12bad3fd1666037814340) (R52); historical observations and fixture targets retain their revision labels. Damon William William supplied a successful local build and passing runtime component, startup-evidence, versioned-upload, descriptor-binding CPU, and storage-contract results on November 26. These results do not establish new game, GPU, performance, or CI acceptance. This atlas is not a compatibility rating, controlled benchmark, full upstream diff, or proof of independent authorship for every component.
 
 ## Contents
 
@@ -76,7 +76,7 @@ flowchart TD
 |---|---|---|
 | Managed graphics ABI | [Graphics ABI](../IraRationis.Graphics/ConsoleGraphicsDevice/Abi.cs), [GraphicsDeviceModule.cs](../IraRationis.HLE/Graphics/GraphicsDeviceModule.cs) | Documented managed-first direction; mixed ancestry, exact source lineage not audited |
 | Compile-time ABI fallbacks | [MissingGraphicsSlotGenerator.cs](../IraRationis.Generators/MissingGraphicsSlotGenerator.cs) | IRX-documented architectural extension; generated fallback is not semantic coverage |
-| Virtual Unified Memory | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Memory/Diagnostics/MemoryProbe.cs) | IRX-documented isolated research; not global native memory interception |
+| Virtual Unified Memory | [VirtualPageTable.cs](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe.cs](../IraRationis.Cli/Diagnostics/Memory/MemoryProbe.cs) | Isolated page-table research and a standalone managed D3D12 benchmark |
 | Media pipeline | [IraRationis.Media](../IraRationis.Media), [GPU media](../IraRationis.Graphics/Media/Nv12Presenter.cs), [Shared-device context](../IraRationis.Graphics/Media/MediaGpuContext.cs) | Host media architecture and explicit native fixture; not commercial guest movie ABI |
 | Deferred preparation | [DeferredPreparationQueue.cs](../IraRationis.Core/Scheduling/DeferredPreparationQueue.cs) | Historical R48 notes describe independent C# implementation inspired by public design notes; not wired into guest dispatcher |
 | Fence retirement | [FenceRetirementQueue.cs](../IraRationis.Core/Scheduling/FenceRetirementQueue.cs) | Bounded lifetime foundation; not general guest resource management |
@@ -340,7 +340,7 @@ flowchart TD
     A["Future residency and coherence policy"] -.-> M
 ```
 
-Sources: [VirtualPageTable](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs), [MemoryProbe](../IraRationis.Memory/Diagnostics/MemoryProbe.cs). Isolated research; no hardware page-table interception or arbitrary pointer-write tracking.
+The isolated research uses [VirtualPageTable](../IraRationis.Memory/VirtualMemory/VirtualPageTable.cs) for address translation. The [memory benchmark](../IraRationis.Cli/Diagnostics/Memory/MemoryProbe.cs) creates its own D3D12 device and measures synthetic memory access.
 
 ### Production physical-view indexing
 
