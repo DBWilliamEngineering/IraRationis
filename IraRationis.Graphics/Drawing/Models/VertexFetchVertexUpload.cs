@@ -17,6 +17,8 @@ internal sealed class VertexFetchVertexUpload(
     public readonly nint Host = host;
     public readonly VertexFetchShaderPair Pair = pair;
     public bool AlphaOnlyTarget;
+    public bool TracksRecyclableSlice { get; init; }
     public int Phase;
     public nint Target;
+    public nint DepthTarget { get; init; }
 }

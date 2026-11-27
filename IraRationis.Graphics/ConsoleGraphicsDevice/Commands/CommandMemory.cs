@@ -400,7 +400,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         using var stageTiming = BeginTiming(GraphicsStage.SegmentedSubmit);
 
-        if (CommandStates.TryGetValue(list, out var state) && state.MemoryBoundaries.Count != 0)
+        _ = CommandStates.TryGetValue(list, out var state);
+        var clearWrites = state?.ClearWrites;
+        var nextClearWrite = 0;
+        var segmentIndex = 0;
+
+        if (state is not null && state.MemoryBoundaries.Count != 0)
         {
             using var completion = new HostCompletionFence();
             using var ordered = EnableOrderedTextureUploads && !EnableColorFlow && !EnableInputColorTrace &&
@@ -433,6 +438,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     completion.Wait(queue);
                 }
 
+                MarkSubmittedClearWrites(queue, clearWrites, segmentIndex++, ref nextClearWrite);
                 ordered?.CompleteAfterFence();
 
                 if (boundary.Write is { } write)
@@ -520,7 +526,19 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, HostExecuteCommandListsSlot))
             (queue, 1, &hostList);
+        MarkSubmittedClearWrites(queue, clearWrites, segmentIndex, ref nextClearWrite);
         // Earlier segments are retained until reset; the final segment uses the guest fence lifecycle.
+    }
+
+    private static void MarkSubmittedClearWrites(nint queue, List<(int SegmentIndex, nint Resource)>? clearWrites,
+        int segmentIndex, ref int nextClearWrite)
+    {
+        while (clearWrites != null && nextClearWrite < clearWrites.Count &&
+               clearWrites[nextClearWrite].SegmentIndex == segmentIndex)
+        {
+            MarkGpuWrite(clearWrites[nextClearWrite].Resource, queue);
+            nextClearWrite++;
+        }
     }
 
     private static void PublishCommandWrite(nint queue, MemoryWrite write)

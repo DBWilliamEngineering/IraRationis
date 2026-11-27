@@ -20,6 +20,8 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private const int VertexFetchUploadCapacity = 65536;
+    private const int VertexFetchUploadPreparedPhase = 1;
+    private const int VertexFetchUploadCompletedPhase = 2;
     private const int MaximumCommandHostViews = 16384;
     // Experimental CPU-authoritative source path, not a general VUM implementation.
     // Guest synchronization must protect the source address and its contents until execution.
@@ -129,7 +131,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             if (translated.DepthBoundsEnabled && state.DepthBounds is { } bounds &&
-                (bounds.Min != 0.0f || bounds.Max != 1.0f))
+                !DepthTargetPolicy.IsEffectivelyDefaultBounds(bounds.Min, bounds.Max))
             {
                 return RejectVertexFetchDraw("nondefault dynamic depth bounds are not yet replayed");
             }
@@ -152,11 +154,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             nint depth = 0;
+            nint guestDepth = 0;
             nuint dsv = 0;
 
             if (state.Depth is { } depthHandle)
             {
-                if (!TryResolveClear(self, depthHandle, 21, out depth, out dsv, out var depthFormat))
+                if (!TryResolveClear(self, depthHandle, 21, out depth, out dsv, out var depthFormat, out guestDepth))
                 {
                     return RejectVertexFetchDraw($"DSV resolution failed: handle=0x{depthHandle:X}");
                 }
@@ -172,32 +175,52 @@ public static unsafe partial class ConsoleGraphicsDevice
             // Unused guest IA vertex and index views have no effect on this draw.
 
             // Capacity is fixed for this diagnostic slice; no guest payload is read during recording.
-            var resultCode =
-                CreateHostResource(HostBufferDescription(VertexFetchUploadCapacity), 2, GenericRead, &upload);
-
-            if (resultCode < 0 || upload == 0)
+            var tracksRecyclableSlice = RectangleUploadPool is not null;
+            nint drawUpload;
+            ulong gpuAddress;
+            if (tracksRecyclableSlice)
             {
-                return RejectVertexFetchDraw($"host upload creation failed: 0x{resultCode:X8}");
+                if (!TryReserveDrawUpload(state, VertexFetchUploadCapacity, allowSharedPage: false, out var slice))
+                {
+                    return false;
+                }
+
+                drawUpload = slice.Host;
+                gpuAddress = slice.GpuAddress;
+            }
+            else
+            {
+                var resultCode =
+                    CreateHostResource(HostBufferDescription(VertexFetchUploadCapacity), 2, GenericRead, &upload);
+
+                if (resultCode < 0 || upload == 0)
+                {
+                    return RejectVertexFetchDraw($"host upload creation failed: 0x{resultCode:X8}");
+                }
+
+                drawUpload = upload;
+                gpuAddress = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
+
+                if (gpuAddress == 0 || (gpuAddress & 3UL) != 0)
+                {
+                    return RejectVertexFetchDraw("host upload GPU virtual address is invalid");
+                }
             }
 
-            var gpuAddress = ((ID3D12Resource*)upload)->GetGPUVirtualAddress();
-
-            if (gpuAddress == 0 || (gpuAddress & 3UL) != 0)
-            {
-                return RejectVertexFetchDraw("host upload GPU virtual address is invalid");
-            }
-
-            var deferred = new VertexFetchVertexUpload(translated.Pair, source.Address, first, vertices, upload)
+            var deferred = new VertexFetchVertexUpload(translated.Pair, source.Address, first, vertices, drawUpload)
             {
                 AlphaOnlyTarget = colorFormat == HostTextureViewFormats.A8Unorm,
-                Target = guestTarget
+                TracksRecyclableSlice = tracksRecyclableSlice,
+                Target = guestTarget,
+                DepthTarget = translated.WritesDepth ? guestDepth : 0
             };
 
-            state.HostViews.Add(upload);
-
-            upload = 0;
-
-            state.UploadBytes += VertexFetchUploadCapacity;
+            if (!tracksRecyclableSlice)
+            {
+                state.HostViews.Add(upload);
+                upload = 0;
+                state.UploadBytes += VertexFetchUploadCapacity;
+            }
 
             // No recoverable fallback after a segment has been sealed: doing so would leave a
             // partly recorded draw in the list. The existing segment helper fail-fasts on failure.
@@ -359,7 +382,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var result = new VertexFetchPipeline(pair, (nint)root, nativePipeline, colorFormat, depthBound,
-                depthBoundsEnabled);
+                DepthTargetPolicy.WritesDepth(hostState), depthBoundsEnabled);
 
             state.HostViews.Add((nint)root);
 
@@ -423,6 +446,32 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R13 deferred draw boundary recording failed.");
         }
 
+        var recyclableUpload = new VertexFetchVertexUpload(pair, upload.Address, upload.First, upload.Count, upload.Host)
+        {
+            TracksRecyclableSlice = true
+        };
+        var retirement = new VertexFetchDrawBoundary(recyclableUpload, true);
+
+        if (WasCompletedVertexFetchSlice(retirement))
+        {
+            throw new InvalidOperationException("Unsubmitted vertex-fetch draw allowed upload reuse.");
+        }
+
+        recyclableUpload.Phase = VertexFetchUploadPreparedPhase;
+
+        if (WasCompletedVertexFetchSlice(retirement))
+        {
+            throw new InvalidOperationException("In-flight vertex-fetch draw allowed upload reuse.");
+        }
+
+        recyclableUpload.Phase = VertexFetchUploadCompletedPhase;
+
+        if (!WasCompletedVertexFetchSlice(retirement) ||
+            WasCompletedVertexFetchSlice(retirement with { Complete = false }))
+        {
+            throw new InvalidOperationException("Vertex-fetch upload retirement check failed.");
+        }
+
         Console.WriteLine("[graphics-probe] R13 draw preparation/completion boundary ordering passed (CPU only).");
     }
 
@@ -434,12 +483,18 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (boundary.Complete)
         {
-            if (Interlocked.CompareExchange(ref upload.Phase, 2, 1) != 1)
+            if (Interlocked.CompareExchange(ref upload.Phase, VertexFetchUploadCompletedPhase,
+                    VertexFetchUploadPreparedPhase) != VertexFetchUploadPreparedPhase)
             {
                 Environment.FailFast("[graphics] R13 draw completion arrived before source preparation.");
             }
 
             MarkGpuWrite(upload.Target, queue);
+
+            if (upload.DepthTarget != 0)
+            {
+                MarkGpuWrite(upload.DepthTarget, queue);
+            }
 
             Interlocked.Increment(ref _draws);
 
@@ -460,7 +515,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         // Each recorded diagnostic draw is single-use. A normal reset creates a new allocation.
         // Reject resubmission instead of mutating storage that another execution could reference.
-        if (Interlocked.CompareExchange(ref upload.Phase, 1, 0) != 0)
+        if (Interlocked.CompareExchange(ref upload.Phase, VertexFetchUploadPreparedPhase, 0) != 0)
         {
             Environment.FailFast("[graphics] R13 experimental draw cannot be resubmitted without list reset.");
         }

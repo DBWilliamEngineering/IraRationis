@@ -992,10 +992,15 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var host = Host(self);
         var hasMemory = false;
+        var hasClearWrites = false;
 
         for (var index = 0; index < length; index++)
         {
-            hasMemory |= HasCommandMemory(lists[index]);
+            if (CommandStates.TryGetValue(lists[index], out var state))
+            {
+                hasMemory |= state.MemoryBoundaries.Count != 0;
+                hasClearWrites |= state.ClearWrites is { Count: > 0 };
+            }
         }
 
         if (hasMemory)
@@ -1011,6 +1016,21 @@ public static unsafe partial class ConsoleGraphicsDevice
         fixed (nint* values = hosts)
         {
             ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(host, 10))(host, count, values);
+        }
+
+        if (!hasClearWrites)
+        {
+            return;
+        }
+
+        for (var index = 0; index < length; index++)
+        {
+            if (CommandStates.TryGetValue(lists[index], out var state))
+            {
+                var nextClearWrite = 0;
+
+                MarkSubmittedClearWrites(host, state.ClearWrites, 0, ref nextClearWrite);
+            }
         }
     }
 

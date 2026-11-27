@@ -413,7 +413,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var result = new RectanglePipeline((nint)root, pipeline, elements, pair.IndexedArray, dualMask,
-                pair.IndexedVertexConstantBytes);
+                pair.IndexedVertexConstantBytes, depthBound && DepthTargetPolicy.WritesDepth(hostMetadata));
 
             state.HostViews.Add((nint)root);
 
@@ -571,10 +571,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         nint depth = 0;
+        nint depthTarget = 0;
         nuint dsv = 0;
 
         if (depthHandle is { } boundDepth &&
-            (!TryResolveClear(self, boundDepth, 21, out depth, out dsv, out var depthFormat) ||
+            (!TryResolveClear(self, boundDepth, 21, out depth, out dsv, out var depthFormat, out depthTarget) ||
              depthFormat != 20 || color == depth))
         {
             return RejectRectangleDraw("unsupported depth target view");
@@ -598,6 +599,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var deferred = new RectangleUpload(constants, vertexRange.Address, stride, upload)
         {
             Target = target,
+            DepthTarget = translated.WritesDepth ? depthTarget : 0,
             AlphaOnlyTarget = colorFormat == HostTextureViewFormats.A8Unorm,
             Indexed = plan,
             IndexedColor = indexedColor,
@@ -717,6 +719,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             MarkGpuWrite(upload.Target, queue);
+
+            if (upload.DepthTarget != 0)
+            {
+                MarkGpuWrite(upload.DepthTarget, queue);
+            }
 
             Interlocked.Increment(ref _draws);
 

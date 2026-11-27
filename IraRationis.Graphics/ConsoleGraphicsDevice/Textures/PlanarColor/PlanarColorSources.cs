@@ -163,7 +163,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             if (!HasEarlierPlanarColorHost(textures, textureIndex))
             {
-                TransitionHostResource(list, textures[textureIndex].Host, before, after);
+                var binding = textures[textureIndex];
+                TransitionHostResource(list, binding.Host, before, after,
+                    binding.DepthPlaneSubresource ?? uint.MaxValue);
             }
         }
     }

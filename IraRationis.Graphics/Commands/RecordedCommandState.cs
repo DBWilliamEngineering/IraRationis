@@ -38,6 +38,12 @@ internal sealed class RecordedCommandState
     public uint? Topology;
     public ulong UploadBytes;
     public D3D12_VIEWPORT[]? Viewports;
+    internal List<(int SegmentIndex, nint Resource)>? ClearWrites { get; private set; }
+
+    internal void RecordClearWrite(nint resource)
+    {
+        (ClearWrites ??= []).Add((MemoryBoundaries.Count, resource));
+    }
 
     public void RetainObject(nint value)
     {

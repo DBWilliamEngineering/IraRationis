@@ -14,6 +14,9 @@ namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private const uint IndexedUiProbeComponentMapping = 5768;
+    private const float IndexedUiProbeCoverageThreshold = 0.5f;
+    private const float IndexedUiProbeCoverageAboveThreshold = 0.75f;
+    private const float IndexedUiProbeCoverageBelowThreshold = 0.25f;
 
     internal static void VerifyIndexedUiGpu(nint queue)
     {
@@ -106,6 +109,11 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             RequireHostObject(pipeline, $"{indexedUiProbeProgram.Name} pipeline");
             RunIndexedUiGpuDraw(Host(queue), (nint)root, pipeline, variant, colorFormat);
+
+            if (variant == IndexedUiVariant.BatchedDualTexture)
+            {
+                RunIndexedUiGpuDraw(Host(queue), (nint)root, pipeline, variant, colorFormat, depthCoverage: true);
+            }
         }
         finally
         {
@@ -146,7 +154,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static void RunIndexedUiGpuDraw(nint queue, nint root, nint pipeline, IndexedUiVariant variant,
-        uint colorFormat)
+        uint colorFormat, bool depthCoverage = false)
     {
         const int width = 8;
         const int height = 4;
@@ -163,8 +171,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         var usesSampler = IndexedUiUsesSampler(variant);
         var textureWidth = dualTexture ? dualTextureTexels : 2;
         var textureFormat = dualMask ? HostTextureViewFormats.A8Unorm : (uint)DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-        var secondaryTextureFormat =
-            dualMask ? HostTextureViewFormats.A8Unorm : (uint)DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+        var coverageTextureFormat = depthCoverage
+            ? HostTextureViewFormats.DepthPlaneViewFormat
+            : (uint)DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+        var secondaryTextureFormat = dualMask ? HostTextureViewFormats.A8Unorm : coverageTextureFormat;
+        var secondaryView = CreateIndexedUiProbeTextureView(secondaryTextureFormat);
         var stride = (int)IndexedUiCompiler.VertexStride(variant);
         var indexOffset = vertexOffset + 8 * stride;
 
@@ -202,8 +213,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             var batchFloats = IndexedUiCompiler.BatchConstantBytes(variant) / sizeof(float);
             WriteIndexedUiDualTextureProbeBatch(constants.Slice(batchFloats, batchFloats), -0.5f, true);
             WriteIndexedUiDualTextureProbeBatch(constants.Slice(2 * batchFloats, batchFloats), 0.5f, false);
-            WriteIndexedUiDualTextureProbeInputs(upload, pixelConstantOffset, textureOffset, secondaryTextureOffset,
-                width, height, dualTextureTexels);
+            WriteIndexedUiDualTextureProbeInputs(upload, pixelConstantOffset, textureOffset, width, height,
+                dualTextureTexels);
+
+            if (!depthCoverage)
+            {
+                ReadOnlySpan<float> coverage = [IndexedUiProbeCoverageAboveThreshold, IndexedUiProbeCoverageThreshold,
+                    IndexedUiProbeCoverageAboveThreshold, IndexedUiProbeCoverageBelowThreshold];
+                MemoryMarshal.AsBytes(coverage).CopyTo(upload.AsSpan(secondaryTextureOffset));
+            }
         }
         else
         {
@@ -265,7 +283,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             upload[textureOffset + 7] = 192;
         }
 
-        nint texture = 0, secondaryTexture = 0, output = 0, readback = 0, rtvHeap = 0, samplerHeap = 0;
+        nint texture = 0, secondaryTexture = 0, output = 0, readback = 0, rtvHeap = 0, samplerHeap = 0, dsvHeap = 0;
 
         try
         {
@@ -285,12 +303,31 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 var secondaryDescription = alphaOnly
                     ? RasterTexture(width, height, 0)
-                    : RasterTexture(textureWidth, 1, 0);
+                    : RasterTexture(textureWidth, 1, depthCoverage
+                        ? (uint)D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL
+                        : 0);
 
-                secondaryDescription.Format = secondaryTextureFormat;
+                secondaryDescription.Format = depthCoverage
+                    ? HostTextureViewFormats.DepthStencilTypeless
+                    : secondaryTextureFormat;
                 secondaryDescription.DepthOrArraySize = alphaOnly
                     ? (ushort)2
                     : (ushort)1;
+
+                if (depthCoverage)
+                {
+                    var descriptorBytes = new ReadOnlySpan<byte>(&secondaryView,
+                        sizeof(D3D12_SHADER_RESOURCE_VIEW_DESC)).ToArray();
+                    if (!HostTextureViewFormats.TryGetDepthPlaneShaderView(secondaryDescription, descriptorBytes,
+                            out var viewFormat) || viewFormat != secondaryTextureFormat)
+                    {
+                        throw new InvalidOperationException("Indexed UI depth-plane shader view was rejected.");
+                    }
+
+                    dsvHeap = CreateShaderViewHeap((nint)_host,
+                        (uint)D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+                    RequireHostObject(dsvHeap, "indexed UI depth view heap");
+                }
 
                 CheckHostResult(CreateHostResource(secondaryDescription, 1, 0, &secondaryTexture),
                     "indexed UI secondary texture");
@@ -376,7 +413,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     if (dualTexture)
                     {
-                        WriteIndexedUiProbeTextureView(secondaryTexture, secondaryTextureFormat, secondaryHandle);
+                        _host->CreateShaderResourceView((ID3D12Resource*)secondaryTexture, &secondaryView,
+                            secondaryHandle);
                     }
                     else
                     {
@@ -384,19 +422,26 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
                 }
 
-                TransitionHostResource(utility.List, secondaryTexture, 0, CopyDestination);
+                if (depthCoverage)
+                {
+                    ClearIndexedUiProbeDepth(utility.List, secondaryTexture, dsvHeap);
+                }
+                else
+                {
+                    TransitionHostResource(utility.List, secondaryTexture, 0, CopyDestination);
+                    RecordHostTextureTransfer(utility.List, secondaryTexture, utility.Upload, (ulong)upload.Length,
+                        new HostTextureTransferFootprint(0, secondaryTextureFormat,
+                            alphaOnly ? width : (uint)textureWidth,
+                            alphaOnly ? height : 1U, rowPitch, secondaryTextureOffset), true);
 
-                RecordHostTextureTransfer(utility.List, secondaryTexture, utility.Upload, (ulong)upload.Length,
-                    new HostTextureTransferFootprint(0, secondaryTextureFormat,
-                        alphaOnly ? width : (uint)textureWidth,
-                        alphaOnly ? height : 1U, rowPitch, secondaryTextureOffset), true);
-
-                TransitionHostResource(utility.List, secondaryTexture, CopyDestination, 0x80);
+                    TransitionHostResource(utility.List, secondaryTexture, CopyDestination, 0x80);
+                }
             }
 
             if (dualTexture)
             {
-                WriteIndexedUiProbeTextureView(texture, textureFormat, textureHandle);
+                var view = CreateIndexedUiProbeTextureView(textureFormat);
+                _host->CreateShaderResourceView((ID3D12Resource*)texture, &view, textureHandle);
             }
             else
             {
@@ -508,8 +553,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 VerifyIndexedUiProbePixel(pixels.AsSpan((width + matchingBelowThreshold) * bytesPerTexel,
                     bytesPerTexel), [255, 64, 128, 128]);
 
-                Console.WriteLine(
-                    "[graphics-probe] Batched dual-texture indexed UI GPU readback passed (packed selection, coverage threshold, two batches).");
+                Console.WriteLine(depthCoverage
+                    ? "[graphics-probe] Batched dual-texture indexed UI depth-plane GPU readback passed (packed selection, depth threshold, two batches)."
+                    : "[graphics-probe] Batched dual-texture indexed UI GPU readback passed (packed selection, coverage threshold, two batches).");
             }
             else
             {
@@ -524,6 +570,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         finally
         {
+            ReleaseHostObject(dsvHeap);
             ReleaseHostObject(samplerHeap);
             ReleaseHostObject(rtvHeap);
             ReleaseHostObject(readback);
@@ -533,8 +580,36 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void WriteIndexedUiProbeTextureView(nint resource, uint format,
-        D3D12_CPU_DESCRIPTOR_HANDLE handle)
+    private static void ClearIndexedUiProbeDepth(nint list, nint resource, nint viewHeap)
+    {
+        const uint depthWrite = (uint)D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
+        const uint pixelShaderResource = (uint)D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        const D3D12_CLEAR_FLAGS clearDepth = D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
+        const int thresholdTexel = 1;
+        const int belowThresholdTexel = 3;
+
+        var dsv = ((ID3D12DescriptorHeap*)viewHeap)->GetCPUDescriptorHandleForHeapStart();
+        var view = new D3D12_DEPTH_STENCIL_VIEW_DESC
+        {
+            Format = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT,
+            ViewDimension = D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D
+        };
+
+        _host->CreateDepthStencilView((ID3D12Resource*)resource, &view, dsv);
+
+        var commands = (ID3D12GraphicsCommandList*)list;
+        var atThreshold = new RECT { left = thresholdTexel, right = thresholdTexel + 1, bottom = 1 };
+        var belowThreshold = new RECT { left = belowThresholdTexel, right = belowThresholdTexel + 1, bottom = 1 };
+
+        TransitionHostResource(list, resource, 0, depthWrite, subresource: HostTextureViewFormats.DepthPlaneSubresource);
+        commands->ClearDepthStencilView(dsv, clearDepth, IndexedUiProbeCoverageAboveThreshold, 0, 0, null);
+        commands->ClearDepthStencilView(dsv, clearDepth, IndexedUiProbeCoverageThreshold, 0, 1, &atThreshold);
+        commands->ClearDepthStencilView(dsv, clearDepth, IndexedUiProbeCoverageBelowThreshold, 0, 1, &belowThreshold);
+        TransitionHostResource(list, resource, depthWrite, pixelShaderResource,
+            subresource: HostTextureViewFormats.DepthPlaneSubresource);
+    }
+
+    private static D3D12_SHADER_RESOURCE_VIEW_DESC CreateIndexedUiProbeTextureView(uint format)
     {
         var view = new D3D12_SHADER_RESOURCE_VIEW_DESC
         {
@@ -544,13 +619,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
         view.Anonymous.Texture2D.MipLevels = 1;
 
-        _host->CreateShaderResourceView((ID3D12Resource*)resource, &view, handle);
+        return view;
     }
 
     private static void WriteIndexedUiDualTextureProbeInputs(Span<byte> upload, int pixelOffset, int selectionOffset,
-        int coverageOffset, int width, int height, int textureWidth)
+        int width, int height, int textureWidth)
     {
-        const float threshold = 0.5f;
         const float coveredOpacity = 0.25f;
         const byte selectionLowByte = 64;
         const byte selectionHighByte = 128;
@@ -559,8 +633,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         const int alphaChannel = 3;
         const int nonmatchingSelectionTexel = 2;
 
-        ReadOnlySpan<float> pixel = [threshold, coveredOpacity, selectionLowByte | (selectionHighByte << selectionByteShift),
-            0, width, height, textureWidth, 1];
+        ReadOnlySpan<float> pixel = [IndexedUiProbeCoverageThreshold, coveredOpacity,
+            selectionLowByte | (selectionHighByte << selectionByteShift), 0, width, height, textureWidth, 1];
         MemoryMarshal.AsBytes(pixel).CopyTo(upload[pixelOffset..]);
 
         var selection = upload.Slice(selectionOffset, textureWidth * sizeof(uint));
@@ -570,9 +644,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             selectionTexel[blueChannel] = selectionLowByte;
             selectionTexel[alphaChannel] = texel == nonmatchingSelectionTexel ? (byte)0 : selectionHighByte;
         }
-
-        ReadOnlySpan<float> coverage = [0.75f, threshold, 0.75f, 0.25f];
-        MemoryMarshal.AsBytes(coverage).CopyTo(upload[coverageOffset..]);
     }
 
     private static void WriteIndexedUiDualTextureProbeBatch(Span<float> batch, float clipX, bool multiplyColor)

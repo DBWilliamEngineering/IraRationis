@@ -35,8 +35,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             new();
     private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<ulong, nint>> TexturePlacedResources =
         new();
-    private static readonly Lock ResourceWriteGate = new();
-    private static readonly Dictionary<long, nint> ResourceWriterQueues = new();
     private static readonly Lock GpuWritableBackingGate = new();
     private static readonly List<(ulong Start, ulong End)> GpuWritableBackings = new();
     private static bool _gpuWritableBackingHistoryIncomplete;
@@ -58,15 +56,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return;
         }
 
-        var generation = ((ResourceObject*)resource)->Generation;
-
-        lock (ResourceWriteGate)
-        {
-            if (ResourceWriterQueues.Count < 65536 || ResourceWriterQueues.ContainsKey(generation))
-            {
-                ResourceWriterQueues[generation] = queue;
-            }
-        }
+        Volatile.Write(ref ((ResourceObject*)resource)->HostWriterQueue, queue);
     }
 
     private static nint GetResourceWriterQueue(nint resource)
@@ -76,10 +66,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return 0;
         }
 
-        lock (ResourceWriteGate)
-        {
-            return ResourceWriterQueues.GetValueOrDefault(((ResourceObject*)resource)->Generation);
-        }
+        return Volatile.Read(ref ((ResourceObject*)resource)->HostWriterQueue);
     }
 
     private static void ReserveGpuWritableBacking(ResourceObject* resource, ulong bytes)

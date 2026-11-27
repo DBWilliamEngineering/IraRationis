@@ -2,6 +2,7 @@
 
 using System.Buffers.Binary;
 using IraRationis.Graphics.Resources.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.Resources;
 
@@ -12,6 +13,50 @@ internal static class HostTextureViewFormats
     internal const uint Rgba8Unorm = 28;
     internal const uint Rgba8Srgb = 29;
     internal const uint A8Unorm = 65;
+    internal const uint DepthStencilTypeless = (uint)DXGI_FORMAT.DXGI_FORMAT_R32G8X24_TYPELESS;
+    internal const uint DepthPlaneViewFormat = (uint)DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    internal const uint DepthPlaneSubresource = 0;
+
+    internal static bool TryGetDepthPlaneShaderView(in ResourceDescription storage, byte[]? descriptor,
+        out uint viewFormat)
+    {
+        const int shaderViewBytes = 40;
+        const int formatOffset = 0;
+        const int viewDimensionOffset = 4;
+        const int componentMappingOffset = 8;
+        const int mostDetailedMipOffset = 16;
+        const int mipLevelsOffset = 20;
+        const int planeSliceOffset = 24;
+        const int minimumLodClampOffset = 28;
+        const int maximumTextureExtent = 16_384;
+        const uint allowDepthStencil = (uint)D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        const uint denyShaderResource = (uint)D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
+
+        viewFormat = 0;
+
+        if (storage.Format != DepthStencilTypeless ||
+            storage.Dimension != (uint)D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+            storage.DepthOrArraySize != 1 || storage.MipLevels != 1 || storage.SampleCount != 1 ||
+            storage.Width is 0 or > maximumTextureExtent || storage.Height is 0 or > maximumTextureExtent ||
+            storage.Layout != (uint)D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN ||
+            (storage.Flags & (allowDepthStencil | denyShaderResource)) != allowDepthStencil ||
+            descriptor is not { Length: shaderViewBytes })
+        {
+            return false;
+        }
+
+        var bytes = descriptor.AsSpan();
+        viewFormat = BinaryPrimitives.ReadUInt32LittleEndian(bytes[formatOffset..]);
+
+        return viewFormat == DepthPlaneViewFormat &&
+               BinaryPrimitives.ReadUInt32LittleEndian(bytes[viewDimensionOffset..]) ==
+               (uint)D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D &&
+               IsComponentMapping(BinaryPrimitives.ReadUInt32LittleEndian(bytes[componentMappingOffset..])) &&
+               BinaryPrimitives.ReadUInt32LittleEndian(bytes[mostDetailedMipOffset..]) == 0 &&
+               BinaryPrimitives.ReadUInt32LittleEndian(bytes[mipLevelsOffset..]) is 1 or uint.MaxValue &&
+               BinaryPrimitives.ReadUInt32LittleEndian(bytes[planeSliceOffset..]) == DepthPlaneSubresource &&
+               BinaryPrimitives.ReadUInt32LittleEndian(bytes[minimumLodClampOffset..]) == 0;
+    }
 
     internal static uint BackingFormat(in ResourceDescription guest)
     {

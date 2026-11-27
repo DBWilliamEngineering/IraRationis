@@ -675,6 +675,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyVertexFetchExtent()
     {
         HostShaderBytecodeCache.Verify();
+        VerifyVertexFetchDepthBounds();
 
         var pair = new VertexFetchShaderPair(string.Empty, string.Empty, 3, 0, new VertexFetchField(0, 3),
             new VertexFetchField(12, 4));
@@ -778,6 +779,37 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Console.WriteLine(
             "[graphics-probe] Indexed UI host shader compilation and root serialization passed (no GPU draw).");
+    }
+
+    private static void VerifyVertexFetchDepthBounds()
+    {
+        const float roundedMinimum = 5.0e-8f;
+        var roundedMaximum = MathF.BitDecrement(1.0f);
+
+        if (!DepthTargetPolicy.IsEffectivelyDefaultBounds(0.0f, 1.0f) ||
+            !DepthTargetPolicy.IsEffectivelyDefaultBounds(roundedMinimum, roundedMaximum))
+        {
+            throw new InvalidOperationException("Vertex fetch rejected default or rounded default depth bounds.");
+        }
+
+        ReadOnlySpan<(float Minimum, float Maximum)> invalidBounds =
+        [
+            (1.0e-5f, 1.0f),
+            (0.0f, MathF.BitDecrement(roundedMaximum)),
+            (-roundedMinimum, 1.0f),
+            (0.0f, MathF.BitIncrement(1.0f)),
+            (float.NaN, 1.0f),
+            (0.0f, float.NaN),
+            (0.0f, float.PositiveInfinity)
+        ];
+
+        foreach (var (minimum, maximum) in invalidBounds)
+        {
+            if (DepthTargetPolicy.IsEffectivelyDefaultBounds(minimum, maximum))
+            {
+                throw new InvalidOperationException("Vertex fetch accepted unsupported depth bounds.");
+            }
+        }
     }
 
     [LibraryImport("d3d12.dll", EntryPoint = "D3D12SerializeVersionedRootSignature")]

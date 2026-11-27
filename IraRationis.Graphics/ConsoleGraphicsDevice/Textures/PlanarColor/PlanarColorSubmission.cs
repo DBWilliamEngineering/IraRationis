@@ -210,6 +210,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                     $"[graphics] planar-color texture {textureIndex} was written on another queue; coherence is not established.");
             }
 
+            if (binding.DepthPlaneSubresource.HasValue)
+            {
+                if (writer == 0)
+                {
+                    Environment.FailFast(
+                        $"[graphics] depth plane descriptor={binding.Source.Token} requires an earlier GPU write on its queue.");
+                }
+
+                continue;
+            }
+
             if (textureIndex == 3)
             {
                 if (lookupEnabled && writer == 0)

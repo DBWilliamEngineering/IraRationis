@@ -10,4 +10,5 @@ internal sealed record VertexFetchPipeline(
     nint Pipeline,
     uint ColorFormat,
     bool DepthBound,
+    bool WritesDepth,
     bool DepthBoundsEnabled);

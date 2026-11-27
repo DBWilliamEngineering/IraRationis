@@ -33,23 +33,23 @@ IRX has progressed through local account selection, the animated title introduct
 
 ## Current status
 
-### Vindex milestone: past brightness settings
+### Vindex milestone: post-settings rendering
 
-On November 27, 2026 (US Central time), the maintainer proceeded past the subtitle and brightness screens during native guest execution. The movie audio had improved in this run but still had gaps and choppiness. Main-menu execution and gameplay remain unverified.
+The November 27 local run reached the post-settings rendering path. Intro audio still had gaps. The main menu and gameplay remain pending.
 
-The local Native AOT run on an NVIDIA GeForce RTX 4090 reported GPU completion for the dual-mask rectangle and passed byte readback of the authored tiled BC3 upload fixture. The next blocked draw is a non-indexed triangle list whose vertex shader fetches from a root SRV and whose pixel shader targets an A8_UNORM render target with no depth buffer bound.
+The 16:32 Native AOT run on an RTX 4090 stopped on a 618-index UI draw. Its second texture is a depth-plane view. The C# binding change and its authored GPU readback are ready for local validation.
 
 | Latest runtime evidence | Observed |
 | --- | ---: |
-| Elapsed time at last startup observation | 74.001 seconds |
+| Elapsed time at last startup observation | 88.008 seconds |
 | Bound images / missing imports | 5 / 0 |
-| Successful presentations / attempts | 1,426 / 1,426 |
-| Draw calls observed | 21,440 |
-| Compute dispatches observed | 1,357 |
-| Last sampled presentation rate | 16.78/s |
+| Successful presentations / attempts | 1,081 / 1,081 |
+| Draw calls observed | 13,000 |
+| Compute dispatches observed | 1,051 |
+| Matched intro movie cadence | 13.86 FPS |
 | Main menu | Not yet reached |
 
-Intro windows with comparable draw and fence counts averaged about 20.8 presentations per second, up from 10.9 in the preceding capture. Scene and timing differences prevent attributing this change to one optimization. The counters measure observed calls and presents. Visual progression and audio quality are maintainer observations. Commercial title captures stay local.
+The intro delivered 113 kB/s of PCM against its nominal 192 kB/s during the matched movie window. The counters measure observed calls and presents. Visual progression and audio quality are maintainer observations. Commercial title captures stay local.
 
 ### Startup progression
 
@@ -59,7 +59,7 @@ flowchart LR
     B --> C[Intro logo animation]
     C --> D[Continue A prompt]
     D --> E[Selections and brightness]
-    E --> F[Alpha-only triangle draw blocked]
+    E --> F[Indexed UI depth texture blocked]
     F -. next .-> G[Main menu]
     G -. future .-> H[Gameplay]
     C --> I[Movie audio: unresolved]
@@ -83,14 +83,14 @@ flowchart LR
 | Memory and performance | Guarded publication, ordered uploads, cached layout and descriptor data, and CLZERO batching address measured subsystem costs. Late settings still use dozens of completion waits per present. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
 | Runtime services | Host initialization, local-user completion, gamertag reads and persistent storage access observed. Unsupported online/provider requests remain explicit failures. See [service contracts](docs/runtime-services.md). |
 | Diagnostics and validation | The November 27 local Release build (zero warnings/errors), Native AOT publication, component contracts, graphics probes, and native fixtures passed. GitHub Actions validation is separate. |
-| Post-intro transition | Brightness settings passed. The next alpha-only draw is the current compatibility boundary. |
+| Post-intro transition | Brightness settings passed. The captured indexed UI depth-plane binding is the current validation target. |
 | Gameplay and sustained FPS | Not demonstrated. No overall completion percentage or competitive performance claim is made. |
 
 ### Next development work
 
 | Development front | Objective |
 | --- | --- |
-| **Main menu** | Support the captured depthless alpha-only triangle and subsequent required draws. Validate resource bindings, fixed-function state and GPU output, then establish stable menu rendering and input. |
+| **Main menu** | Validate the captured depth-plane binding and subsequent required draws. Establish stable menu rendering and input with verified resource bindings, fixed-function state, and GPU output. |
 | **Movie audio** | Trace actual Bink PCM producer/consumer timing, buffer occupancy, underruns and endpoint delivery. Correct the identified defect without regressing working narration and UI audio. |
 | **Performance** | Profile comparable scenes, isolate CPU emulation, resource staging, submission and guest worker costs, and reduce the critical path toward sustained requested presentation cadence without weakening synchronization. |
 

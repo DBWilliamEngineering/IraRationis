@@ -37,9 +37,17 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool TryReserveRectangleUpload(RecordedCommandState state, int bytes, out RecordedUploadSlice slice)
     {
+        return TryReserveDrawUpload(state, bytes, allowSharedPage: true, out slice);
+    }
+
+    private static bool TryReserveDrawUpload(RecordedCommandState state, int bytes, bool allowSharedPage,
+        out RecordedUploadSlice slice)
+    {
         slice = default;
 
-        var pageBytes = GetRectangleUploadPageSize(bytes, UseRectangleUploadPages, UseLargeRectangleUploadPages);
+        var pageBytes = allowSharedPage
+            ? GetRectangleUploadPageSize(bytes, UseRectangleUploadPages, UseLargeRectangleUploadPages)
+            : 0;
         var largePage = pageBytes == LargeRectangleUploadPageBytes;
         var currentPage = largePage ? state.LargeRectangleUploadPage : state.RectangleUploadPage;
 
@@ -89,7 +97,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (buffer.Host == 0)
         {
-            return RejectRectangleDraw(error ?? "host upload allocation failed");
+            return allowSharedPage
+                ? RejectRectangleDraw(error ?? "host upload allocation failed")
+                : RejectVertexFetchDraw(error ?? "host upload allocation failed");
         }
 
         slice = new RecordedUploadSlice(buffer.Host, buffer.GpuAddress, 0);
@@ -182,7 +192,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool CanRecycleRectangleUploads(RecordedCommandState state, bool reset, int completedSlices)
     {
-        // Completion runs after the rectangle segment fence. The following segment has new bindings.
+        // Each tracked draw slice completes after its segment fence, before the next segment's bindings.
         return reset && state.RectangleUploadBuffers is { Count: > 0 } &&
                completedSlices == state.RectangleUploadSliceCount;
     }
@@ -190,6 +200,12 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool WasCompletedRectangleSlice(RectangleDrawBoundary rectangle)
     {
         return rectangle.Complete && Volatile.Read(ref rectangle.Upload.Phase) == 2;
+    }
+
+    private static bool WasCompletedVertexFetchSlice(VertexFetchDrawBoundary draw)
+    {
+        return draw.Complete && draw.Upload.TracksRecyclableSlice &&
+               Volatile.Read(ref draw.Upload.Phase) == VertexFetchUploadCompletedPhase;
     }
 
     private static nint CreateRectangleUploadResource(int bytes, out ulong gpuAddress, out string? error)

@@ -15,6 +15,7 @@ internal sealed class RectangleUpload(ulong table, ulong vertex, uint stride, Re
     public int Capacity;
     public int ConstantBytes = GraphicsDevice.RectangleConstantBytes;
     public int ConstantOffset;
+    public nint DepthTarget;
     public DualMaskRectangleBindings? DualMask;
     public IndexedUploadPlan? Indexed;
     public bool IndexedArray;

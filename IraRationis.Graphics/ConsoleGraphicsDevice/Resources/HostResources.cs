@@ -212,12 +212,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    internal static void TransitionHostResource(nint list, nint resource, uint before, uint after)
+    internal static void TransitionHostResource(nint list, nint resource, uint before, uint after,
+        uint subresource = uint.MaxValue)
     {
         var barrier = new HostTransition
         {
             Resource = resource,
-            Subresource = uint.MaxValue,
+            Subresource = subresource,
             Before = before,
             After = after
         };

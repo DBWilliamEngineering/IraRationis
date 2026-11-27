@@ -119,7 +119,9 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
             OpenAdapter(index, ref adapter, out var description);
 
             ReadOnlySpan<char> characters = description.Description;
+
             var end = characters.IndexOf('\0');
+
             name = new string(end < 0 ? characters : characters[..end]);
             dedicatedBytes = description.DedicatedVideoMemory;
         }
@@ -151,6 +153,7 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
         CreateSource();
 
         var checksumBytes = bytes / GroupBytes * sizeof(uint);
+
         Allocate(ref _output, D3D12_HEAP_TYPE_DEFAULT, checksumBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         Allocate(ref _readback, D3D12_HEAP_TYPE_READBACK, checksumBytes, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -165,20 +168,25 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
         var stagingMs = mode == MemoryResidency.MirroredLocal ? StageMirroredSource() : 0;
 
         Sse.StoreFence();
+
         Check(_allocator.Get()->Reset());
 
         var commands = _commands.Get();
         var queries = _queries.Get();
+
         const D3D12_QUERY_TYPE timestamp = D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP;
+
         Check(commands->Reset(_allocator.Get(), _pipeline.Get()));
         commands->EndQuery(queries, timestamp, BeforeCopyTimestamp);
 
         if (mode == MemoryResidency.MirroredLocal)
         {
             var source = _source.Get();
+
             Transition(commands, source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                 D3D12_RESOURCE_STATE_COPY_DEST);
             commands->CopyBufferRegion(source, 0, _staging.Get(), 0, bytes);
+
             Transition(commands, source, D3D12_RESOURCE_STATE_COPY_DEST,
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
@@ -186,24 +194,34 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
         var output = _output.Get();
         var groups = (uint)(bytes / GroupBytes);
         var checksumBytes = (ulong)groups * sizeof(uint);
+
         commands->EndQuery(queries, timestamp, BeforeComputeTimestamp);
         commands->SetComputeRootSignature(_root.Get());
         commands->SetComputeRootShaderResourceView(InputRootIndex, GpuAddress);
         commands->SetComputeRootUnorderedAccessView(OutputRootIndex, output->GetGPUVirtualAddress());
         commands->Dispatch(groups, 1, 1);
         commands->EndQuery(queries, timestamp, AfterComputeTimestamp);
+
         Transition(commands, output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
         commands->CopyBufferRegion(_readback.Get(), 0, output, 0, checksumBytes);
+
         Transition(commands, output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
         commands->ResolveQueryData(queries, timestamp, BeforeCopyTimestamp, TimestampCount, _timestamps.Get(), 0);
+
         Check(commands->Close());
 
         var submitMs = SubmitAndWait();
+
         Check(_device.Get()->GetDeviceRemovedReason());
+
         ReadTimings(out var copyMs, out var computeMs);
+
         var mismatches = CountMismatches(seed, groups, checksumBytes);
 
-        return new MemoryProbeSample(stagingMs, copyMs, computeMs, submitMs, mismatches);
+        return
+            new MemoryProbeSample(stagingMs, copyMs, computeMs, submitMs, mismatches);
     }
 
     public void Dispose()
@@ -237,6 +255,7 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
         if (_ram != null)
         {
             _ = Win32.VirtualFree(_ram, 0, MEM.MEM_RELEASE);
+
             _ram = null;
         }
 
@@ -259,6 +278,7 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
             }
 
             DXGI_ADAPTER_DESC1 info;
+
             Check(adapter.Get()->GetDesc1(&info));
 
             if ((info.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
@@ -276,26 +296,36 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
 
     private void CreateSource()
     {
-        if (mode == MemoryResidency.GpuUpload)
+        switch (mode)
         {
-            D3D12_FEATURE_DATA_D3D12_OPTIONS16 options = default;
-            var result = _device.Get()->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS16, &options,
-                (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS16));
-
-            if (result.Value < 0 || !options.GPUUploadHeapSupported)
+            case MemoryResidency.GpuUpload:
             {
-                throw new COMException("The device does not support GPU upload heaps.", Unsupported);
+                D3D12_FEATURE_DATA_D3D12_OPTIONS16 options = default;
+
+                var result = _device.Get()->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS16, &options,
+                    (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS16));
+
+                if (result.Value < 0 || !options.GPUUploadHeapSupported)
+                {
+                    throw new COMException("The device does not support GPU upload heaps.", Unsupported);
+                }
+
+                break;
             }
-        }
-
-        if (mode is MemoryResidency.MirroredLocal or MemoryResidency.ExistingSystemHeap)
-        {
-            _ram = Win32.VirtualAlloc(null, (nuint)bytes, MEM.MEM_RESERVE | MEM.MEM_COMMIT, PAGE.PAGE_READWRITE);
-            _cpuAddress = _ram;
-
-            if (_ram == null)
+            case MemoryResidency.MirroredLocal or MemoryResidency.ExistingSystemHeap:
             {
-                throw new COMException("Unable to allocate benchmark system memory.", OutOfMemory);
+                _ram =
+                    Win32.VirtualAlloc(null,
+                        (nuint)bytes, MEM.MEM_RESERVE | MEM.MEM_COMMIT, PAGE.PAGE_READWRITE);
+
+                _cpuAddress = _ram;
+
+                if (_ram == null)
+                {
+                    throw new COMException("Unable to allocate benchmark system memory.", OutOfMemory);
+                }
+
+                break;
             }
         }
 
@@ -310,7 +340,8 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
                 Allocate(ref _source, D3D12_HEAP_TYPE_DEFAULT, bytes, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 break;
 
-            default:
+            case MemoryResidency.SystemUpload:
+            case MemoryResidency.GpuUpload:
                 var heap = mode == MemoryResidency.GpuUpload ? D3D12_HEAP_TYPE_GPU_UPLOAD : D3D12_HEAP_TYPE_UPLOAD;
                 Allocate(ref _source, heap, bytes, D3D12_RESOURCE_STATE_GENERIC_READ);
 
@@ -319,6 +350,9 @@ internal sealed unsafe class D3D12MemoryProbeSession(MemoryResidency mode, ulong
                 Check(_source.Get()->Map(0, &noRead, &mapped));
                 _cpuAddress = mapped;
                 break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported benchmark memory residency.");
         }
     }
 

@@ -233,7 +233,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ClearTarget(nint self, ulong handle, float* color, uint count, RECT* rects)
     {
         if (color == null || count > 4096 || (count != 0 && rects == null)
-            || !TryResolveClear(self, handle, 20, out var resource, out var view, out _))
+            || !TryResolveClear(self, handle, 20, out var resource, out var view, out _, out var guestResource))
         {
             IncompleteOperation(self, "ClearRenderTargetView", "a supported host RTV and clear description");
 
@@ -250,6 +250,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = view }, color, count, rects);
 
         TransitionHostResource(list, resource, 4, 0);
+
+        StateFor(self).RecordClearWrite(guestResource);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -258,7 +260,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         if (flags is 0 or > 3 || !float.IsFinite(depth) || depth < 0 || depth > 1 || count > 4096 ||
             (count != 0 && rects == null)
-            || !TryResolveClear(self, handle, 21, out var resource, out var view, out var viewFormat))
+            || !TryResolveClear(self, handle, 21, out var resource, out var view, out var viewFormat,
+                out var guestResource))
         {
             IncompleteOperation(self, "ClearDepthStencilView", "a supported host DSV and clear description");
 
@@ -282,6 +285,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = view }, (D3D12_CLEAR_FLAGS)flags, depth, stencil, count, rects);
 
         TransitionHostResource(list, resource, 0x10, 0);
+
+        if ((flags & (uint)D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH) != 0)
+        {
+            StateFor(self).RecordClearWrite(guestResource);
+        }
     }
 
     private static bool BufferAddress(nint value, ulong offset, ulong bytes, out ulong address)
@@ -727,12 +735,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        foreach (var slot in new[] { 142, 146, 148 })
+        foreach (var slot in new[] { 142, 146, 148 }
+                     .Where(static slot =>
+                         ((nint*)_listNew)[slot] == MissingAddress(slot)))
         {
-            if (((nint*)_listNew)[slot] == MissingAddress(slot))
-            {
-                throw new InvalidOperationException($"Known new list slot 0x{slot * 8:X} is not registered.");
-            }
+            throw new InvalidOperationException($"Known new list slot 0x{slot * 8:X} is not registered.");
         }
     }
 

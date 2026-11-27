@@ -796,6 +796,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         TextureSource? additionalTexture = null;
+        uint? secondaryDepthPlane = null;
         ConstantDescriptor pc = default;
 
         if (pixelConstantBytes != 0 && !TryReadConstantDescriptor(table + IndexedUiPixelConstantTableOffset,
@@ -819,7 +820,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                     $"{variant} secondary texture descriptor unresolved at table byte {IndexedUiTextureDescriptorBytes}");
             }
 
-            if (!TryGetTextureView(additionalTexture, out var secondaryFormat))
+            var secondaryStorage = ((ResourceObject*)additionalTexture.Resource)->Description;
+            if (variant == IndexedUiVariant.BatchedDualTexture &&
+                HostTextureViewFormats.TryGetDepthPlaneShaderView(secondaryStorage, additionalTexture.Description,
+                    out var secondaryFormat))
+            {
+                secondaryDepthPlane = HostTextureViewFormats.DepthPlaneSubresource;
+            }
+            else if (!TryGetTextureView(additionalTexture, out secondaryFormat))
             {
                 return RejectIndexedUi(DescribeIndexedUiTextureView("secondary", additionalTexture, secondaryFormat));
             }
@@ -918,7 +926,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 :
                 [
                     new PlanarColorTextureBinding(colorTexture, textureHost),
-                    new PlanarColorTextureBinding(additionalTexture, additionalHost)
+                    new PlanarColorTextureBinding(additionalTexture, additionalHost, secondaryDepthPlane)
                 ];
         }
         else
@@ -1113,6 +1121,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             else if (upload.Variant == IndexedUiVariant.BatchedMask)
             {
                 TraceGraphicsSuccess("[graphics] Indexed UI batched mask GPU completed (visual content unverified).");
+            }
+            else if (upload.Variant == IndexedUiVariant.BatchedDualTexture &&
+                     upload.Textures is [_, { DepthPlaneSubresource: not null }])
+            {
+                TraceGraphicsSuccess("[graphics] Indexed UI batched dual texture with depth plane GPU completed.");
             }
             else if (upload.Variant == IndexedUiVariant.TransformedTexture)
             {

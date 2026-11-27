@@ -2,4 +2,4 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal sealed record PlanarColorTextureBinding(TextureSource Source, nint Host);
+internal sealed record PlanarColorTextureBinding(TextureSource Source, nint Host, uint? DepthPlaneSubresource = null);

@@ -8,4 +8,5 @@ internal sealed record RectanglePipeline(
     VertexInputElement[] Elements,
     bool IndexedArray = false,
     bool DualMask = false,
-    int IndexedVertexConstantBytes = 64);
+    int IndexedVertexConstantBytes = 64,
+    bool WritesDepth = false);

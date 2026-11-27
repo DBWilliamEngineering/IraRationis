@@ -21,4 +21,5 @@ internal struct ResourceObject
     public ulong AllocationAttributes;
     public nint HostResource;
     public ulong HostCharge;
+    public nint HostWriterQueue;
 }

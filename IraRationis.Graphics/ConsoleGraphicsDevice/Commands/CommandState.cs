@@ -47,13 +47,15 @@ public static unsafe partial class ConsoleGraphicsDevice
             return;
         }
 
-        var completedRectangleSlices = 0;
-        var checkRectangleSlices = recycleRectangleUploads && state.RectangleUploadBuffers is { Count: > 0 };
+        var completedDrawSlices = 0;
+        var checkDrawSlices = recycleRectangleUploads && state.RectangleUploadBuffers is { Count: > 0 };
         foreach (var boundary in state.MemoryBoundaries)
         {
-            if (checkRectangleSlices && boundary.Rectangle is { } rectangle && WasCompletedRectangleSlice(rectangle))
+            if (checkDrawSlices &&
+                ((boundary.Rectangle is { } rectangle && WasCompletedRectangleSlice(rectangle)) ||
+                 (boundary.Draw is { } draw && WasCompletedVertexFetchSlice(draw))))
             {
-                completedRectangleSlices++;
+                completedDrawSlices++;
             }
 
             if (boundary.Host != 0)
@@ -62,7 +64,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        var rectangleUploads = CanRecycleRectangleUploads(state, recycleRectangleUploads, completedRectangleSlices)
+        var rectangleUploads = CanRecycleRectangleUploads(state, recycleRectangleUploads, completedDrawSlices)
             ? state.RectangleUploadBuffers
             : null;
         var uploadPool = rectangleUploads is null ? null : RectangleUploadPool;
