@@ -104,6 +104,15 @@ internal static class Program
             !AudioMixerScheduling.MatchesMovie(image, image + 0x442FA80, image + 0x442FA80),
             "Movie scheduling requires the exact title wrapper and worker");
 
+        const ulong preferredImage = 0x140000000;
+        var endpointThunk = image + (nuint)(0x1443ADC30 - preferredImage);
+        var endpointEntry = image + (nuint)(0x1443ADC40 - preferredImage);
+        Require(AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, endpointThunk) &&
+            AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, endpointEntry) &&
+            !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA1, endpointEntry) &&
+            !AudioMixerScheduling.MatchesEndpointWorker(image, image + 0x2215EA0, image + 0x443ADC40),
+            "Spatial output worker address rebasing and unrelated thread rejection");
+
         const string movieLibraryHash = "CB71456919AADA87FDDAFC44A27B8733AA827DE4DA58516E9381323EF70DA331";
         Require(MovieAudioImportTrace.MatchesProfile(AudioMixerScheduling.ObservedBuild, movieLibraryHash) &&
             !MovieAudioImportTrace.MatchesProfile(string.Empty, movieLibraryHash) &&

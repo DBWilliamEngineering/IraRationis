@@ -116,7 +116,7 @@ internal sealed unsafe class RuntimeMediaSample : IDisposable
         using var context = new MediaGpuContext(Console.Out, true);
 
         // Two independent playback lifetimes prove that device and PSO reuse are real.
-        // Each window, swapchain, frame ring and fence is disposed before the next begins.
+        // Each window, SwapChain, frame ring and fence is disposed before the next begins.
         for (var pass = 1; pass <= 2; pass++)
         {
             var result = GpuMediaPlaybackSession.Play(clip,

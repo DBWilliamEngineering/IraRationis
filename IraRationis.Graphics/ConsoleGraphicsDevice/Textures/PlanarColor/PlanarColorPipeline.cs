@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Drawing;
 using IraRationis.Graphics.Drawing.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Raster;
@@ -159,7 +160,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static nint CreatePlanarColorPipeline(void* root, byte[] vertexShader, byte[] pixelShader,
-        GraphicsPipelineMetadata metadata, VertexInputElement[] elements, TextWriter report)
+        GraphicsPipelineMetadata metadata, VertexInputElement[] elements, TextWriter report,
+        uint colorFormat = HostTextureViewFormats.Rgba8Unorm)
     {
         var native = stackalloc NativeVertexInputElement[3];
 
@@ -190,7 +192,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             return CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report,
                 geometryShader: null, inputElements: native, inputCount: (uint)elements.Length,
-                allowDepthless: true);
+                allowDepthless: true, colorFormat: colorFormat);
         }
     }
 }

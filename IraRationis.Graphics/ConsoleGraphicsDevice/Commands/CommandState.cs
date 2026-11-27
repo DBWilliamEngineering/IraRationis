@@ -40,22 +40,39 @@ public static unsafe partial class ConsoleGraphicsDevice
         return CommandStates.GetOrAdd(self, static _ => new RecordedCommandState());
     }
 
-    private static void ReleaseCommandState(nint self)
+    private static void ReleaseCommandState(nint self, bool recycleRectangleUploads = false)
     {
         if (!CommandStates.TryRemove(self, out var state))
         {
             return;
         }
 
-        foreach (var boundary in state.MemoryBoundaries
-                     .Where(boundary => boundary.Host != 0))
+        var completedRectangleSlices = 0;
+        var checkRectangleSlices = recycleRectangleUploads && state.RectangleUploadBuffers is { Count: > 0 };
+        foreach (var boundary in state.MemoryBoundaries)
         {
-            _ = HostRelease(boundary.Host);
+            if (checkRectangleSlices && boundary.Rectangle is { } rectangle && WasCompletedRectangleSlice(rectangle))
+            {
+                completedRectangleSlices++;
+            }
+
+            if (boundary.Host != 0)
+            {
+                _ = HostRelease(boundary.Host);
+            }
         }
 
-        foreach (var heap in state.HostViews)
+        var rectangleUploads = CanRecycleRectangleUploads(state, recycleRectangleUploads, completedRectangleSlices)
+            ? state.RectangleUploadBuffers
+            : null;
+        var uploadPool = rectangleUploads is null ? null : RectangleUploadPool;
+        foreach (var hostReference in state.HostViews)
         {
-            _ = HostRelease(heap);
+            if (uploadPool is null || rectangleUploads is null || !rectangleUploads.TryGetValue(hostReference, out var buffer) ||
+                !uploadPool.TryReturn(buffer))
+            {
+                _ = HostRelease(hostReference);
+            }
         }
 
         foreach (var upload in state.Uploads)

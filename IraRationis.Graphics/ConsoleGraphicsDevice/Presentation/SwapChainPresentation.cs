@@ -229,7 +229,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     _swapChainPresenter = presenter;
 
                     Console.Error.WriteLine(
-                        $"[graphics] IRX-GFX-PRESENT-R19: SWAPCHAIN READY hwnd=0x{window:X}, {width}x{height}, format={description.Format}, buffers={SwapChainBufferCount}, flipDiscard=True.");
+                        $"[graphics] IRX-GFX-PRESENT-R19: SwapChain READY hwnd=0x{window:X}, {width}x{height}, format={description.Format}, buffers={SwapChainBufferCount}, flipDiscard=True.");
                 }
 
                 // Bounded color-flow checks are enabled during development.

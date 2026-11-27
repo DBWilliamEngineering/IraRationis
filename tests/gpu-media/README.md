@@ -2,7 +2,7 @@
 
 `ConsoleGraphicsDevice.ConvertNv12FrameOnGpu` is a synchronous diagnostic owning a separate D3D12 device and direct queue. It uploads independent Y and UV rows into a two-plane NV12 texture, creates plane SRVs, converts to packed BGRA with an authored compute shader, copies into readback memory, and waits for completion. The tests compare every channel against the CPU reference.
 
-The method checks strides, bounds, native layouts, copy footprints, and output extents. It does not modify guest resources or publish to a swapchain. Resources are not released while submitted work may remain in flight; losing completion proof terminates the diagnostic process under the existing fail-fast rule.
+The method checks strides, bounds, native layouts, copy footprints, and output extents. It does not modify guest resources or publish to a SwapChain. Resources are not released while submitted work may remain in flight; losing completion proof terminates the diagnostic process under the existing fail-fast rule.
 
 This per-conversion diagnostic is separate from the reusable presenter used by `media-probe --gpu` and `--stream-gpu`. Passing it establishes fixture conversion correctness, not game integration or general rendering throughput.
 

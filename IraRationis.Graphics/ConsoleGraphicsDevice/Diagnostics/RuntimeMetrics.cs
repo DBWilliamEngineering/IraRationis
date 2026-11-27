@@ -151,6 +151,19 @@ public static partial class ConsoleGraphicsDevice
                 Console.Error.WriteLine(SuccessLogSampling.FormatSummary());
             }
 
+            var rectangleUploads = Interlocked.Read(ref _rectangleUploadSlices);
+
+            if (rectangleUploads != 0)
+            {
+                Console.Error.WriteLine($"[performance] Rectangle uploads: paged={UseRectangleUploadPages}; " +
+                    $"slices={rectangleUploads}; resources={Interlocked.Read(ref _rectangleUploadAllocations)}; " +
+                    $"resourceBytes={Interlocked.Read(ref _rectangleUploadAllocatedBytes)}; " +
+                    $"largePaged={UseLargeRectangleUploadPages}; largePages={Interlocked.Read(ref _largeRectangleUploadPages)}; " +
+                    $"largeReuses={Interlocked.Read(ref _largeRectangleUploadReuses)}; " +
+                    $"largeFallbacks={Interlocked.Read(ref _largeRectangleUploadFallbacks)}; " +
+                    $"recycling={RectangleUploadPool is not null}; recycledBuffers={Interlocked.Read(ref _recycledRectangleUploadBuffers)}.");
+            }
+
             _previousGuestWaits = guestWaits;
 
             _previousGuestWaitTicks = guestTicks;

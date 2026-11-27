@@ -327,7 +327,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var host = Host(self);
 
-        return id == null
+        return (id == null)
             ? InvalidArgument
             : ((delegate* unmanaged[Stdcall]<nint, Guid*, uint*, void*, int>)Slot(host, 3))(host, id, size, data);
     }
@@ -343,7 +343,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var host = Host(self);
 
-        return id == null
+        return (id == null)
             ? InvalidArgument
             : ((delegate* unmanaged[Stdcall]<nint, Guid*, uint, void*, int>)Slot(host, 4))(host, id, size, data);
     }
@@ -756,7 +756,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = Host(self);
 
-        return ((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(host, 9))(host, value, handle);
+        return
+            ((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)Slot(host, 9))(host, value, handle);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -788,7 +789,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var host = Host(self);
 
-        return ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(host, slot))(host, Host(fence), value);
+        return
+            ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Slot(host, slot))(host, Host(fence), value);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -808,7 +810,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var host = Host(self);
 
-        return output == null
+        return (output == null)
             ? InvalidArgument
             : ((delegate* unmanaged[Stdcall]<nint, ulong*, int>)Slot(host, 16))(host, output);
     }
@@ -929,7 +931,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         *(int*)(self + ListClosed) = 0;
 
-        ReleaseCommandState(self);
+        ReleaseCommandState(self, recycleRectangleUploads: true);
 
         if (pipeline != 0)
         {
@@ -1135,14 +1137,12 @@ public static unsafe partial class ConsoleGraphicsDevice
         table[10] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)&Execute;
 
         table[14 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)&Signal;
-
         table[15 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)&Wait;
-
         table[16 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong*, int>)&Frequency;
-
         table[26 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsQueueDescription*, void>)&DescribeQueue;
 
-        table[33 + shift] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, ulong, uint, void>)&ExecuteX;
+        table[33 + shift] =
+            (nint)(delegate* unmanaged[Stdcall]<nint, uint, nint*, ulong, uint, void>)&ExecuteX;
 
         return table;
     }

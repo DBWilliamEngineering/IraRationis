@@ -96,6 +96,7 @@ public static partial class ConsoleGraphicsDevice
 
         Interlocked.Add(ref counter.CpuTicks, ticks - sample.CpuTicks);
         Interlocked.Add(ref counter.WallTicks, now - sample.WallTimestamp);
+        Volatile.Write(ref counter.LastSampleThreadId, sample.ThreadId);
         Interlocked.Increment(ref counter.Completed);
     }
 
@@ -122,9 +123,10 @@ public static partial class ConsoleGraphicsDevice
             var failed = Interlocked.Read(ref counter.Failed);
             var cpu = Interlocked.Read(ref counter.CpuTicks) / (double)TimeSpan.TicksPerMillisecond;
             var wall = Interlocked.Read(ref counter.WallTicks) * 1000.0 / Stopwatch.Frequency;
+            var threadId = Volatile.Read(ref counter.LastSampleThreadId);
 
             report.Append(FormattableString.Invariant(
-                $" {(GraphicsStage)index}[calls={calls},samples={completed},failed={failed},cpuMs={cpu:F3},wallMs={wall:F3}];"));
+                $" {(GraphicsStage)index}[calls={calls},samples={completed},failed={failed},cpuMs={cpu:F3},wallMs={wall:F3},lastSampleTid=0x{threadId:X}];"));
         }
 
         LogPerformance(report.ToString());

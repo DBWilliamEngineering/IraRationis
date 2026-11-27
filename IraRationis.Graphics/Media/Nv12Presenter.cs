@@ -152,7 +152,10 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var nativeDevice = (ID3D12Device*)_device;
         var fenceId = GraphicsDevice.FenceId;
         var fence = nint.Zero;
-        var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
+
+        var createFence =
+            (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
+
         var fenceResult = createFence(_device, 0, 0, &fenceId, &fence);
 
         _fence = fence;
@@ -185,8 +188,11 @@ public sealed unsafe class Nv12Presenter : IDisposable
         nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&description, 0, 2, 0, layouts, rows, rowBytes,
             &total);
 
-        var yEnd = GraphicsDevice.ValidateTextureFootprint(layouts[0], rows[0], rowBytes[0], _width, _height);
-        var uvEnd = GraphicsDevice.ValidateTextureFootprint(layouts[1], rows[1], rowBytes[1], _width, _height / 2);
+        var yEnd =
+            GraphicsDevice.ValidateTextureFootprint(layouts[0], rows[0], rowBytes[0], _width, _height);
+        var uvEnd =
+            GraphicsDevice.ValidateTextureFootprint(layouts[1], rows[1], rowBytes[1], _width, _height / 2);
+
         var upload = Math.Max(total, Math.Max(yEnd, uvEnd));
 
         if (layouts[0].Offset != 0 || layouts[1].Offset < yEnd || upload > 64UL * 1024 * 1024)
@@ -204,6 +210,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var color = description;
 
         color.Format = 87; // B8G8R8A8_UNORM
+
         var colorLayout = default(D3D12_PLACED_SUBRESOURCE_FOOTPRINT);
         var colorRows = 0U;
         var colorRowBytes = 0UL;
@@ -212,7 +219,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&color, 0, 1, 0,
             &colorLayout, &colorRows, &colorRowBytes, &colorTotal);
 
-        var colorEnd = GraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4), _height);
+        var colorEnd =
+            GraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4), _height);
 
         _colorLayout = colorLayout;
 
@@ -241,7 +249,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
             _report.WriteLine("[media] IRX-R44: presenter uses shared host device, queue and pipeline cache.");
         }
 
-        CreateSwapchain(window);
+        CreateSwapChain(window);
 
         for (var index = 0; index < BufferCount; index++)
         {
@@ -290,7 +298,10 @@ public sealed unsafe class Nv12Presenter : IDisposable
     {
         var allocator = nint.Zero;
         var allocatorId = GraphicsDevice.AllocatorId;
-        var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
+
+        var createAllocator =
+            (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
+
         var resultCode = createAllocator(_device, 3, &allocatorId, &allocator);
 
         frame.CopyAllocator = allocator;
@@ -371,7 +382,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         }
     }
 
-    private void CreateSwapchain(nint window)
+    private void CreateSwapChain(nint window)
     {
         var factory = nint.Zero;
         var baseChain = nint.Zero;
@@ -397,13 +408,14 @@ public sealed unsafe class Nv12Presenter : IDisposable
                 SwapEffect = 4,
                 AlphaMode = 3
             };
+
             var create =
                 (delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)GraphicsDevice.Slot(
                     factory, 15);
 
-            GraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain), "R43 swapchain");
+            GraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain), "R43 SwapChain");
 
-            GraphicsDevice.RequireHostObject(baseChain, "swapchain");
+            GraphicsDevice.RequireHostObject(baseChain, "SwapChain");
 
             var id = GraphicsDevice.SwapChainId;
             var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)GraphicsDevice.Slot(baseChain, 0);
@@ -443,7 +455,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         frame.UploadMapped = true;
 
-        frame.UploadAddress = (nint)mapped;
+        frame.UploadAddress = (nint)mapped!;
 
         if (mapped == null)
         {
@@ -560,7 +572,6 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         Wait(frame.FenceValue);
 
-        var lumaRows = _height;
         var chromaRows = _height / 2;
 
         var luma = nv12[..yBytes];
@@ -570,7 +581,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         // only active pixels, never reading write-combined upload memory.
         var upload = new Span<byte>((void*)frame.UploadAddress, _uploadBytes);
 
-        GraphicsDevice.CopyVideoRows(luma, _width, upload, _planes[0], _width, lumaRows);
+        GraphicsDevice.CopyVideoRows(luma, _width, upload, _planes[0], _width, _height);
 
         GraphicsDevice.CopyVideoRows(chroma, _width, upload, _planes[1], _width, chromaRows);
 
@@ -750,23 +761,18 @@ public sealed unsafe class Nv12Presenter : IDisposable
         foreach (var frame in _frames)
         {
             GraphicsDevice.ReleaseHostObject(frame.CopyList);
-
             GraphicsDevice.ReleaseHostObject(frame.CopyAllocator);
-
             GraphicsDevice.ReleaseHostObject(frame.List);
-
             GraphicsDevice.ReleaseHostObject(frame.Allocator);
-
             GraphicsDevice.ReleaseHostObject(frame.Heap);
-
             GraphicsDevice.ReleaseHostObject(frame.Buffer);
-
             GraphicsDevice.ReleaseHostObject(frame.Output);
 
             if (frame.UploadMapped)
             {
                 var range = new HostRange { End = (nuint)_uploadBytes };
-                var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)GraphicsDevice.Slot(frame.Upload, 9);
+                var unmap =
+                    (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)GraphicsDevice.Slot(frame.Upload, 9);
 
                 unmap(frame.Upload, 0, &range);
 
@@ -776,24 +782,16 @@ public sealed unsafe class Nv12Presenter : IDisposable
             }
 
             GraphicsDevice.ReleaseHostObject(frame.Upload);
-
             GraphicsDevice.ReleaseHostObject(frame.Texture);
         }
 
         GraphicsDevice.ReleaseHostObject(_chain);
-
         GraphicsDevice.ReleaseHostObject(_pipeline);
-
         GraphicsDevice.ReleaseHostObject(_root);
-
         GraphicsDevice.ReleaseHostObject(_copyFence);
-
         GraphicsDevice.ReleaseHostObject(_copyQueue);
-
         GraphicsDevice.ReleaseHostObject(_fence);
-
         GraphicsDevice.ReleaseHostObject(_queue);
-
         GraphicsDevice.ReleaseHostObject(_device);
     }
 }

@@ -72,7 +72,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var renderTargetView, out var colorFormat,
-                reportFailure: true))
+                out var target, reportFailure: true))
         {
             return RejectPlanarColorDraw("could not resolve a compatible native render target view");
         }
@@ -87,13 +87,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (textures.Any(binding => binding.Host == color))
         {
             return RejectPlanarColorDraw("a sampled texture aliases the host render target");
-        }
-
-        var target = FindOwnedResource(state, color);
-
-        if (target == 0)
-        {
-            return RejectPlanarColorDraw("render target was not retained");
         }
 
         var targetDescription = ((ResourceObject*)target)->Description;

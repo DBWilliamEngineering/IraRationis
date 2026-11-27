@@ -63,13 +63,10 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return false;
             }
 
-            var target = new Span<byte>(mapped, (int)plan.Bytes);
-
-            target.Clear();
-
             written.End = (nuint)plan.Bytes;
 
-            return DetileTextureTexture(plan, source, target);
+            // The copy footprint reads just the active texels or compressed blocks in each row.
+            return DetileTextureTexture(plan, source, new Span<byte>(mapped, (int)plan.Bytes));
         }
         finally
         {

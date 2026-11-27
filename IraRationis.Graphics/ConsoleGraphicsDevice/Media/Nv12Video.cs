@@ -42,7 +42,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     /// <summary>
     ///     Converts independently supplied, limited-range BT.709 NV12 using a real two-plane
     ///     D3D12 texture and a compute shader. This synchronous host diagnostic owns a separate
-    ///     device and queue; it does not publish guest resource state or use a swapchain.
+    ///     device and queue; it does not publish guest resource state or use a SwapChain.
     /// </summary>
     public static void ConvertNv12FrameOnGpu(ReadOnlySpan<byte> luma, int lumaStride,
         ReadOnlySpan<byte> chroma, int chromaStride, int width, int height, Span<byte> bgra,

@@ -296,7 +296,20 @@ $run = 'artifacts/validation/title-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 
 Select the same profile and settings. Record the intro's wall time, when audio drops, whether the settings screen advances, and whether menu navigation responds. Keep the full `runtime.log` and any new `draw-captures` or `compute-captures` directories. Preserve the matching binary and symbols in `host`.
 
-If decode-to-voice delivery is still intermittent, compare movie scheduling with the exact same host. This promotes only the confirmed title movie worker.
+The launcher saves the host executable hash, selected options, and inherited measurement switches in `invocation.json`. It defaults to a 10-second interval for detailed thread and resource queries. Set `-ProfileDetailMilliseconds 0` to omit those detail queries while retaining regular presentation and fence summaries. Keep the interval matched between runs when comparing other changes.
+
+`-TraceMovieAudio` measures Bink callback delivery without wrapping the title's Sleep import. To measure the recognized mixer's short waits, reuse the same published host and request the audit explicitly. A run with `-EnableMixerWaitAudit` forwards each wait to the original Sleep. A run with `-PreciseMixerWait` enables the same audit and uses a high-resolution timer for eligible 1–2 ms waits around active movie audio. Original Sleep remains the fallback.
+
+```powershell
+.\scripts\Invoke-R77.ps1 -OutputDirectory "$run-audited-wait" `
+    -PublishedHostDirectory (Join-Path $run 'host') -TraceMovieAudio -EnableMixerWaitAudit
+.\scripts\Invoke-R77.ps1 -OutputDirectory "$run-precise-wait" `
+    -PublishedHostDirectory (Join-Path $run 'host') -TraceMovieAudio -PreciseMixerWait
+```
+
+Use the normal `-TraceMovieAudio` run and the audited wait run to measure observer overhead. Use the two audited runs to measure the timer change. Compare `mixerPreciseWaits`, `mixerPreciseFallbacks`, accepted PCM per second during active playback, coherent queue samples, and notes on the audible result. `-DisableMixerWaitAudit` remains available for older commands that explicitly request Bink-only tracing.
+
+For a movie-worker scheduling comparison, use the exact same host. This optional mode promotes only the confirmed title movie worker.
 
 ```powershell
 .\scripts\Invoke-R77.ps1 -OutputDirectory "$run-movie-scheduling" `
@@ -305,7 +318,21 @@ If decode-to-voice delivery is still intermittent, compare movie scheduling with
 
 `[movie-audio]` reports the guest sound callback's readiness results, PCM bytes accepted at unlock, and delivery gaps. It samples refused calls for suspension, disabled state, and the last observed queue occupancy after the callback. Mixer activity can change occupancy between the refusal and observation. Confirm mixer consumption and endpoint padding separately if the producer stays active through audible gaps. The trace checks both original binary hashes before installing the callback observer.
 
+Use `-TraceMovieAudio -TraceMovieEndpoint` in the local launcher to add the Windows spatial audio event trace for the verified title. A direct host launch uses `IRX_MOVIE_AUDIO_TRACE=1` and `IRX_MOVIE_ENDPOINT_TRACE=1`. Read `spatialOutput`, the deltas of `endpointSignals`, `endpointTimeouts`, and `endpointWaitFailures`, and the observed `mixedLane0QueuedBytes`. An active route with frequent event signals and repeatedly low mixed output while Bink remains queued points toward producer-to-mixer progress. Large signal gaps or wait failures warrant examining endpoint wakeups and scheduling. Queue snapshots can race the mixer, and an event signal does not establish playback at the speakers. If the spatial route is inactive, the log provides no event data for an ordinary output device or fallback backend. Keep the separate mixer Sleep audit off for this run.
+
+With the endpoint trace enabled, `-EnableEndpointScheduling` compares the existing mixer policy applied to the verified spatial output worker. The launcher records this choice. Look for the worker match and MMCSS result before interpreting event rates. A direct host launch can enable it with `IRX_AUDIO_ENDPOINT_SCHEDULING=1`. For a matched control, reuse the same host and omit just the scheduling option. Compare audible gaps, endpoint signal cadence, accepted PCM per second, and host presents within the same active phase.
+
 For a graphics log sampling comparison, reuse the same host and keep the movie scheduling setting constant. Use `-DisableGraphicsLogSampling` with a fresh output directory. Compare the same scene and use the same cold or warm shader cache condition. `IRX_VERBOSE_GRAPHICS=1` emits full success logs. Compare `IRX-R50-LOG` seen/emitted counts, presentation cadence, and matching upload and submission scopes separately. Those wall-time scopes overlap.
+
+For an indexed staging comparison, use the default compact path first. Its `Indexed color compact upload` marker separates copied bytes from GPU reservation bytes. Set `IRX_COMPACT_INDEX_UPLOAD=0` for a comparison with the previous CPU staging path. Treat allocation metrics as cumulative and frame-time comparisons as valid only across comparable scenes.
+
+The indexed UI path also reports `Indexed UI compact upload` for qualifying draws. The same control applies to both paths. To investigate missing glyphs, use `-TraceIndexedUiSources` or `IRX_INDEXED_UI_SOURCE_TRACE=1`. Look for `Indexed UI source` near the warning screen's present count. This records bounded texture/view metadata and source authority after live descriptor validation. Compare it with the screenshot and matching draw markers.
+
+To measure native upload allocation overhead, compare `AllocateRectangleUpload` in the R25 timing summary across the same phase. Enable experimental pooling with `IRX_RECTANGLE_UPLOAD_LARGE_PAGES=1` and the normal rectangle page setting. This shares 4 MiB upload resources across eligible 256 KiB–2 MiB slices owned by one command-list recording. Compare deltas for slices, resources, and resource bytes in `Rectangle uploads`. Check `largeReuses` against `largePages` and `largeFallbacks` to see whether the policy packed multiple slices. Pooling can reserve unused space when lists record few eligible draws. Also compare working set and pacing to check whether the reduced resource creation paid off.
+
+Use `-RecycleRectangleUploads` to test a separate pool across recordings. It returns eligible resources after successful command-list reset and proven fenced completion of all associated rectangle slices. Keep the large-page option fixed. Compare `recycledBuffers`, actual native allocations, allocation milliseconds per present, and pacing in the same UI phase. The idle pool is capped at 48 resources or 64 MiB. Direct host launches can enable it with `IRX_RECTANGLE_UPLOAD_RECYCLE=1`.
+
+Compare `DetileTexture` and `UploadTexture` across matched movie and UI windows. `DetileTexture` measures CPU conversion from the console layout into the host upload footprint and is included in `UploadTexture`. Every copy still uses the validated source layout, correct mip or array slice, and existing queue ordering. Aggregate fence wall time per present and the native allocation stage are separate measurements.
 
 ### Measuring the 4K gameplay target
 

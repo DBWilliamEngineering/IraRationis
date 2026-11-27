@@ -2,14 +2,6 @@
 
 namespace IraRationis.Shaders.Raster;
 
-/// <summary>Bounded lowering of the captured indexed UI shader contract.</summary>
-public enum IndexedUiVariant
-{
-    Dithered,
-    Plain,
-    AlphaMask
-}
-
 public static class IndexedUiCompiler
 {
     public const string VertexHash = "1CC31822133D45A29549294825B8E3AA09EE1735D794E808F91C4A7A03985E85";
@@ -21,6 +13,14 @@ public static class IndexedUiCompiler
 
     public const string AlphaVertexHash = "3894C7D633149F71CC98B6F25AFF33CBA31958AB2D3B1D6FC0C34244944AAEFA";
     public const string AlphaPixelHash = "605A48C19028F3C4440C22FDAF2C5084F563096EE8C88E1B7BF0C691AB586975";
+
+    public const string DualAlphaVertexHash = "975E190ECE3AA6D27BE7046CDE3655711251999FC419CDC652A719988E0A4D12";
+    public const string DualAlphaPixelHash = "6B179DE1441A847940AD14DDA3C1DC01AAE98ADAFBD5234DC820DD21D2530271";
+
+    public const string BatchedMaskVertexHash = "7074535E90B5965F1FD08541A283AD8E29AE3EE7F3D54826071A3D5D96247471";
+    public const string BatchedMaskPixelHash = "CDF9A55BF40E138C3825D3807D0C4D97DFE93DA53D0127AF47EF40D694EFCA5A";
+    public const int BatchedMaskConstantBytes = 96;
+    public const int BatchedMaskMaximumBatches = 256;
 
     public static bool TryClassify(string vertex, string pixel, out IndexedUiVariant variant)
     {
@@ -34,18 +34,43 @@ public static class IndexedUiCompiler
             variant = IndexedUiVariant.Plain;
             return true;
         }
+        if (vertex == DualAlphaVertexHash && pixel == DualAlphaPixelHash)
+        {
+            variant = IndexedUiVariant.DualAlphaMask;
+            return true;
+        }
+        if (vertex == BatchedMaskVertexHash && pixel == BatchedMaskPixelHash)
+        {
+            variant = IndexedUiVariant.BatchedMask;
+            return true;
+        }
         variant = IndexedUiVariant.AlphaMask;
         return vertex == AlphaVertexHash && pixel == AlphaPixelHash;
     }
 
     public static uint VertexStride(IndexedUiVariant variant)
     {
-        return variant == IndexedUiVariant.AlphaMask ? 20U : 12U;
+        return variant switch
+        {
+            IndexedUiVariant.AlphaMask or IndexedUiVariant.DualAlphaMask => 20,
+            IndexedUiVariant.BatchedMask => 16,
+            _ => 12
+        };
     }
 
     public static int VertexConstantBytes(IndexedUiVariant variant)
     {
-        return variant == IndexedUiVariant.AlphaMask ? 64 : 96;
+        return variant switch
+        {
+            IndexedUiVariant.AlphaMask => 64,
+            IndexedUiVariant.BatchedMask => BatchedMaskConstantBytes,
+            _ => 96
+        };
+    }
+
+    public static int TextureCount(IndexedUiVariant variant)
+    {
+        return variant is IndexedUiVariant.Dithered or IndexedUiVariant.DualAlphaMask ? 2 : 1;
     }
 
     private const string Varyings = """
@@ -190,4 +215,128 @@ public static class IndexedUiCompiler
         }
         """;
 
+    private const string DualAlphaVaryings = """
+        struct Varyings
+        {
+            float2 clipUv : TEXCOORD0;
+            float2 sourceUv : TEXCOORD1;
+            float4 color : COLOR0;
+            float4 position : SV_Position;
+        };
+        """;
+
+    public const string DualAlphaVertexSource = DualAlphaVaryings + """
+        cbuffer VertexParameters : register(b0)
+        {
+            float4 addend;
+            float4 multiplier;
+            float4 clipX;
+            float4 clipY;
+            float4 textureX;
+            float4 textureY;
+        };
+
+        Varyings main(float4 color : COLOR0, float2 uv : TEXCOORD0, float2 position : POSITION0)
+        {
+            Varyings output;
+            precise float x = mad(clipX.x, position.x, mad(clipX.y, position.y, clipX.w));
+            precise float y = mad(clipY.x, position.x, mad(clipY.y, position.y, clipY.w));
+            output.position = float4(x, y, 0.0f, 1.0f);
+            output.color = mad(multiplier, color, addend);
+            output.sourceUv = uv;
+            output.clipUv = float2(mad(textureX.x, x, mad(textureX.y, y, textureX.w)),
+                                   mad(textureY.x, x, mad(textureY.y, y, textureY.w)));
+            return output;
+        }
+        """;
+
+    public const string DualAlphaPixelSource = DualAlphaVaryings + """
+        Texture2D<float4> sourceMask : register(t0);
+        Texture2D<float4> clipMask : register(t1);
+        SamplerState maskSampler : register(s0);
+        """ + HalfExport + """
+        float LegacyAlphaMultiply(float first, float second)
+        {
+            return first == 0.0f || second == 0.0f ? 0.0f : first * second;
+        }
+
+        float4 main(Varyings input) : SV_Target0
+        {
+            float sourceAlpha = sourceMask.Sample(maskSampler, input.sourceUv).a;
+            float clipAlpha = clipMask.Sample(maskSampler, input.clipUv).a;
+            precise float sourceOpacity = LegacyAlphaMultiply(sourceAlpha, input.color.a);
+            precise float opacity = LegacyAlphaMultiply(sourceOpacity, clipAlpha);
+            return float4(HalfRtz(input.color.r), HalfRtz(input.color.g), HalfRtz(input.color.b), HalfRtz(opacity));
+        }
+        """;
+
+    private const string BatchedMaskVaryings = """
+        struct Varyings
+        {
+            float4 color : COLOR0;
+            float opacity : COLOR1;
+            float4 addend : TEXCOORD0;
+            float4 multiplier : TEXCOORD1;
+            float2 maskUv : TEXCOORD2;
+            float4 position : SV_Position;
+        };
+        """;
+
+    // COLOR1.b is UNORM8. Truncating the six guest MADs (scale 1530.06,
+    // addends 0.1 through 5.1) gives six consecutive float4 rows for each byte value.
+    public const string BatchedMaskVertexSource = BatchedMaskVaryings + """
+        struct BatchParameters
+        {
+            float4 addend;
+            float4 multiplier;
+            float4 maskX;
+            float4 maskY;
+            float4 clipX;
+            float4 clipY;
+        };
+
+        cbuffer VertexParameters : register(b0)
+        {
+            BatchParameters batches[256];
+        };
+
+        float TransformAxis(float4 parameters, float2 position)
+        {
+            return mad(parameters.x, position.x, mad(parameters.y, position.y, parameters.w));
+        }
+
+        Varyings main(float4 color : COLOR0, float4 batchAndOpacity : COLOR1, float2 position : POSITION0)
+        {
+            uint batchIndex = (uint)round(batchAndOpacity.b * 255.0f);
+            BatchParameters batch = batches[batchIndex];
+            precise float2 clip = float2(TransformAxis(batch.clipX, position), TransformAxis(batch.clipY, position));
+            Varyings output;
+            output.color = color;
+            output.opacity = batchAndOpacity.a;
+            output.addend = batch.addend;
+            output.multiplier = batch.multiplier;
+            output.maskUv = float2(TransformAxis(batch.maskX, clip), TransformAxis(batch.maskY, clip));
+            output.position = float4(clip, 0.0f, 1.0f);
+            return output;
+        }
+        """;
+
+    public const string BatchedMaskPixelSource = BatchedMaskVaryings + """
+        Texture2D<float4> maskTexture : register(t0);
+        SamplerState maskSampler : register(s0);
+        """ + HalfExport + """
+        float LegacyMultiply(float first, float second)
+        {
+            return first == 0.0f || second == 0.0f ? 0.0f : first * second;
+        }
+
+        float4 main(Varyings input) : SV_Target0
+        {
+            float4 color = saturate(mad(input.multiplier, input.color, input.addend));
+            float mask = maskTexture.Sample(maskSampler, input.maskUv).a;
+            precise float vertexOpacity = LegacyMultiply(color.a, input.opacity);
+            precise float opacity = LegacyMultiply(vertexOpacity, mask);
+            return float4(HalfRtz(color.r), HalfRtz(color.g), HalfRtz(color.b), HalfRtz(opacity));
+        }
+        """;
 }

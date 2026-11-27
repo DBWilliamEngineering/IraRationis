@@ -41,19 +41,6 @@ public static unsafe partial class ConsoleGraphicsDevice
         return false;
     }
 
-    private static nint FindOwnedResource(RecordedCommandState state, nint host)
-    {
-        foreach (var value in state.Owned)
-        {
-            if (IsResource(value) && ((ResourceObject*)value)->HostResource == host)
-            {
-                return value;
-            }
-        }
-
-        return 0;
-    }
-
     private static void MarkGpuWrite(nint resource, nint queue)
     {
         if (!IsResource(resource) || queue == 0)
@@ -657,17 +644,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         state.RetainObject(texture.Resource);
 
         if (MaterializeHostResource(texture.Resource, out var textureHost) < 0 || textureHost == 0 ||
-            !TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat) ||
+            !TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat, out var target) ||
             colorFormat != 28 || color == textureHost)
         {
             return RejectTexturedDraw("unsupported texture/RTV or read-write alias");
-        }
-
-        var target = FindOwnedResource(state, color);
-
-        if (target == 0)
-        {
-            return RejectTexturedDraw("missing retained render target");
         }
 
         var resource = (ResourceObject*)texture.Resource;
@@ -1017,6 +997,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool DetileTextureTexture(HostTextureCopy plan, ReadOnlySpan<byte> source, Span<byte> destination)
     {
+        using var timing = BeginTiming(GraphicsStage.DetileTexture);
         var plane = plan.Layout.Planes[0];
 
         if ((ulong)source.Length < plan.Layout.Size || (ulong)destination.Length < plan.Bytes)
@@ -1066,24 +1047,51 @@ public static unsafe partial class ConsoleGraphicsDevice
                     continue;
                 }
 
-                var ty = coordinateY + mip.TailY;
+                var tiledY = coordinateY + mip.TailY;
                 var rowBase = plane.Offset + sliceOffset + mip.Offset +
-                    (ulong)(ty / plane.TileHeight) * (mip.Pitch / plane.TileWidth) * plane.Alignment;
-                var rowPattern = patterns[1][ty % plane.TileHeight] | patterns[2][0];
-
-                for (var coordinateX = 0U; coordinateX < mip.Width; coordinateX++)
+                    (ulong)(tiledY / plane.TileHeight) * (mip.Pitch / plane.TileWidth) * plane.Alignment;
+                var rowPattern = patterns[1][tiledY % plane.TileHeight] | patterns[2][0];
+                var targetRow = destination.Slice((int)row, (int)activeRowBytes);
+                var copied = plane.Bytes switch
                 {
-                    var from = rowBase + (xOffsets[coordinateX] | rowPattern);
+                    1 => CopyTiledTextureRow<byte>(source, targetRow, xOffsets, rowBase, rowPattern),
+                    2 => CopyTiledTextureRow<ushort>(source, targetRow, xOffsets, rowBase, rowPattern),
+                    4 => CopyTiledTextureRow<uint>(source, targetRow, xOffsets, rowBase, rowPattern),
+                    8 => CopyTiledTextureRow<ulong>(source, targetRow, xOffsets, rowBase, rowPattern),
+                    16 => CopyTiledTextureRow<UInt128>(source, targetRow, xOffsets, rowBase, rowPattern),
+                    _ => false
+                };
 
-                    if (from > (ulong)source.Length || plane.Bytes > (ulong)source.Length - from)
-                    {
-                        return false;
-                    }
-
-                    source.Slice((int)from, (int)plane.Bytes)
-                        .CopyTo(destination.Slice((int)(row + (ulong)coordinateX * plane.Bytes), (int)plane.Bytes));
+                if (!copied)
+                {
+                    return false;
                 }
             }
+        }
+
+        return true;
+    }
+
+    private static bool CopyTiledTextureRow<T>(ReadOnlySpan<byte> source, Span<byte> destination,
+        ReadOnlySpan<ulong> columnOffsets, ulong rowBase, uint rowPattern) where T : unmanaged
+    {
+        var blocks = MemoryMarshal.Cast<byte, T>(destination);
+        var lastSourceOffset = source.Length - Unsafe.SizeOf<T>();
+        if (lastSourceOffset < 0 || columnOffsets.Length != blocks.Length)
+        {
+            return false;
+        }
+
+        ref var sourceStart = ref MemoryMarshal.GetReference(source);
+        for (var column = 0; column < blocks.Length; column++)
+        {
+            var sourceOffset = rowBase + (columnOffsets[column] | rowPattern);
+            if (sourceOffset > (ulong)lastSourceOffset)
+            {
+                return false;
+            }
+
+            blocks[column] = Unsafe.ReadUnaligned<T>(ref Unsafe.Add(ref sourceStart, (int)sourceOffset));
         }
 
         return true;
@@ -1351,44 +1359,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         foreach (var layout in new uint[] { 0x101, 0x105, 0x10A })
         {
             description.Layout = layout;
-            if (!TryPlanTextureTexture(description, out var tiled) || tiled == null)
+
+            foreach (var format in new uint[] { 61, 56, 28, 71, 77 })
             {
-                throw new InvalidOperationException("R76 tiled staging plan failed.");
-            }
-            var tiledSource = new byte[(int)tiled.Layout.Size];
-            var tiledTarget = new byte[(int)tiled.Bytes];
-            new Random(76).NextBytes(tiledSource);
-            var tiledPlane = tiled.Layout.Planes[0];
-            var patterns = tiledPlane.Patterns();
-            if (!DetileTextureTexture(tiled, tiledSource, tiledTarget))
-            {
-                throw new InvalidOperationException("R76 tiled staging failed.");
-            }
-            for (var sub = 0; sub < tiled.Pitches.Length; sub++)
-            {
-                var m = tiledPlane.Mips[sub % tiledPlane.Mips.Length];
-                var slice = (ulong)(sub / tiledPlane.Mips.Length) * tiledPlane.SliceSize;
-                for (var y = 0U; y < m.Height; y++)
-                {
-                    for (var x = 0U; x < m.Width; x++)
-                    {
-                        var tx = x + m.TailX;
-                        var ty = y + m.TailY;
-                        var from = tiledPlane.Offset + slice + m.Offset +
-                            ((ulong)(ty / tiledPlane.TileHeight) * (m.Pitch / tiledPlane.TileWidth) + tx / tiledPlane.TileWidth) * tiledPlane.Alignment +
-                            (patterns[0][tx % tiledPlane.TileWidth] | patterns[1][ty % tiledPlane.TileHeight] | patterns[2][0]);
-                        var to = tiled.Offsets[sub] + (ulong)y * tiled.Pitches[sub] + (ulong)x * tiledPlane.Bytes;
-                        if (!tiledSource.AsSpan((int)from, (int)tiledPlane.Bytes).SequenceEqual(tiledTarget.AsSpan((int)to, (int)tiledPlane.Bytes)))
-                        {
-                            throw new InvalidOperationException("R76 tiled staging differs from original addressing formula.");
-                        }
-                    }
-                }
+                description.Format = format;
+                VerifyTiledTextureStaging(description);
             }
         }
-        Console.WriteLine("[graphics-probe] R76 bulk linear and tiled addressing parity passed (CPU only).");
+
+        Console.WriteLine("[graphics-probe] Linear and tiled staging parity passed for 1-, 2-, 4-, 8- and 16-byte blocks (CPU only).");
 
         description.DepthOrArraySize = 1;
+        description.Format = 28;
         description.Layout = 0x11B;
 
         if (TryPlanTextureTexture(description, out _))
@@ -1398,5 +1380,46 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Console.WriteLine(
             "[graphics-probe] R16 linear texture staging, bounds and unsupported-layout checks passed (CPU only).");
+    }
+
+    private static void VerifyTiledTextureStaging(ResourceDescription description)
+    {
+        if (!TryPlanTextureTexture(description, out var plan) || plan == null)
+        {
+            throw new InvalidOperationException($"Tiled staging plan refused format {description.Format}, layout 0x{description.Layout:X}.");
+        }
+
+        var source = new byte[(int)plan.Layout.Size];
+        var destination = new byte[(int)plan.Bytes];
+        new Random(76).NextBytes(source);
+        var plane = plan.Layout.Planes[0];
+        var patterns = plane.Patterns();
+        if (!DetileTextureTexture(plan, source, destination))
+        {
+            throw new InvalidOperationException("Tiled staging failed for an authored plan.");
+        }
+
+        for (var subresource = 0; subresource < plan.Pitches.Length; subresource++)
+        {
+            var mip = plane.Mips[subresource % plane.Mips.Length];
+            var slice = (ulong)(subresource / plane.Mips.Length) * plane.SliceSize;
+            for (var coordinateY = 0U; coordinateY < mip.Height; coordinateY++)
+            {
+                for (var coordinateX = 0U; coordinateX < mip.Width; coordinateX++)
+                {
+                    var tiledX = coordinateX + mip.TailX;
+                    var tiledY = coordinateY + mip.TailY;
+                    var tile = (ulong)(tiledY / plane.TileHeight) * (mip.Pitch / plane.TileWidth) + tiledX / plane.TileWidth;
+                    var withinTile = patterns[0][tiledX % plane.TileWidth] | patterns[1][tiledY % plane.TileHeight] | patterns[2][0];
+                    var from = plane.Offset + slice + mip.Offset + tile * plane.Alignment + withinTile;
+                    var to = plan.Offsets[subresource] + (ulong)coordinateY * plan.Pitches[subresource] + (ulong)coordinateX * plane.Bytes;
+
+                    if (!source.AsSpan((int)from, (int)plane.Bytes).SequenceEqual(destination.AsSpan((int)to, (int)plane.Bytes)))
+                    {
+                        throw new InvalidOperationException($"Tiled staging differs from scalar addressing for format {description.Format}.");
+                    }
+                }
+            }
+        }
     }
 }

@@ -113,15 +113,13 @@ public static unsafe partial class MemoryProbe
 
         var failed = false;
 
-        foreach (var size in sizes)
+        foreach (var size in from size
+                     in sizes from mode
+                     in Enum.GetValues<MemoryResidency>()
+                 where !Measure(mode, size, iterations, adapter, writer)
+                 select size)
         {
-            foreach (var mode in Enum.GetValues<MemoryResidency>())
-            {
-                if (!Measure(mode, size, iterations, adapter, writer))
-                {
-                    failed = true;
-                }
-            }
+            failed = true;
         }
 
         return failed ? 1 : 0;
@@ -154,7 +152,6 @@ public static unsafe partial class MemoryProbe
             {
                 var seed = (uint)(iteration + 17);
                 var cycleStart = Stopwatch.GetTimestamp();
-                var writeStart = cycleStart;
 
                 for (var offset = 0UL; offset < bytes; offset += VirtualPageTable.PageSize)
                 {
@@ -170,7 +167,7 @@ public static unsafe partial class MemoryProbe
 
                 Thread.MemoryBarrier();
 
-                var writeMs = Stopwatch.GetElapsedTime(writeStart).TotalMilliseconds;
+                var writeMs = Stopwatch.GetElapsedTime(cycleStart).TotalMilliseconds;
 
                 status = Run(session, seed, out var sample);
 
@@ -243,18 +240,16 @@ public static unsafe partial class MemoryProbe
             expected += seed + index / PageWords;
         }
 
-        if (sum != expected)
-        {
-            throw new InvalidOperationException("CPU readback did not match the expected synthetic pattern.");
-        }
-
-        return elapsed;
+        return (sum != expected)
+            ? throw new InvalidOperationException("CPU readback did not match the expected synthetic pattern.")
+            : elapsed;
     }
 
     private static void SelfTest()
     {
         var table = new VirtualPageTable();
-        var size = VirtualPageTable.PageSize;
+
+        const ulong size = VirtualPageTable.PageSize;
 
         table.Map(GuestBase, 0x200000, 0x300000, size * 2, MemoryResidency.GpuUpload);
 

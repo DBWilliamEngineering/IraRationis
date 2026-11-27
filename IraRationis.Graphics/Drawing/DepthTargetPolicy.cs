@@ -5,7 +5,7 @@ using IraRationis.Graphics.Shaders.Models;
 
 namespace IraRationis.Graphics.Drawing;
 
-internal static class RectangleDepthPolicy
+internal static class DepthTargetPolicy
 {
     internal static bool TryGetHostState(GraphicsPipelineMetadata guest, bool depthBound,
         out GraphicsPipelineMetadata host)

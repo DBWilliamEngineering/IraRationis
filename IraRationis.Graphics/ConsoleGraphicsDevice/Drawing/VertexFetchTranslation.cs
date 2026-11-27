@@ -6,7 +6,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
+using IraRationis.Graphics.Drawing;
 using IraRationis.Graphics.Drawing.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Shaders;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.Containers;
@@ -81,7 +83,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
             }
 
-            ValidateHostPipeline(pair, vertexShader, pixelShader, pipeline, report);
+            ValidateHostPipeline(pair, vertexShader, pixelShader, pipeline, state.Depth.HasValue, report);
 
             if (draw is { } range)
             {
@@ -223,12 +225,53 @@ public static unsafe partial class ConsoleGraphicsDevice
         return new ReadOnlySpan<byte>(pointer, checked((int)size)).ToArray();
     }
 
+    private static bool TryPrepareVertexFetchHostState(GraphicsPipelineMetadata guest, bool depthBound,
+        out GraphicsPipelineMetadata host, out uint colorFormat)
+    {
+        host = guest;
+        colorFormat = 0;
+
+        if (!guest.IsStream || !guest.CompleteStream || guest.InputLayout is { Length: > 0 })
+        {
+            return false;
+        }
+
+        var targets = guest.State.SingleOrDefault(static record => record.Kind == 15);
+        var depthFormat = guest.State.SingleOrDefault(static record => record.Kind == 16);
+
+        if (targets is not { Bytes.Length: 40 } || depthFormat is not { Bytes.Length: 8 } ||
+            BinaryPrimitives.ReadUInt32LittleEndian(targets.Bytes) != 15 ||
+            BinaryPrimitives.ReadUInt32LittleEndian(targets.Bytes.AsSpan(36)) != 1 ||
+            BinaryPrimitives.ReadUInt32LittleEndian(depthFormat.Bytes) != 16)
+        {
+            return false;
+        }
+
+        colorFormat = BinaryPrimitives.ReadUInt32LittleEndian(targets.Bytes.AsSpan(4));
+
+        if (depthBound)
+        {
+            return colorFormat == HostTextureViewFormats.Rgba8Unorm &&
+                   BinaryPrimitives.ReadUInt32LittleEndian(depthFormat.Bytes.AsSpan(4)) == 20;
+        }
+
+        return colorFormat is HostTextureViewFormats.Rgba8Unorm or HostTextureViewFormats.A8Unorm &&
+               DepthTargetPolicy.TryGetHostState(guest, false, out host);
+    }
+
     private static void ValidateHostPipeline(VertexFetchShaderPair pair, byte[]? vertexShader, byte[]? pixelShader,
-        GraphicsPipelineMetadata pipeline, TextWriter report)
+        GraphicsPipelineMetadata pipeline, bool depthBound, TextWriter report)
     {
         if (_host == null)
         {
             report.WriteLine("[graphics] R10 host root validation unavailable: no host device.");
+
+            return;
+        }
+
+        if (!TryPrepareVertexFetchHostState(pipeline, depthBound, out var hostState, out var colorFormat))
+        {
+            report.WriteLine("[graphics] Vertex-fetch validation refused the captured output-merger state.");
 
             return;
         }
@@ -253,21 +296,26 @@ public static unsafe partial class ConsoleGraphicsDevice
                                  $"created={native != null} (validation only).");
             }
 
-            if (native != null && vertexShader != null && pixelShader != null)
+            if (native == null || vertexShader == null || pixelShader == null)
             {
-                var candidate = CreatePipelineCandidate(native, vertexShader, pixelShader, pipeline, report);
+                return;
+            }
 
-                if (candidate != 0)
-                {
-                    try
-                    {
-                        VerifyVertexFetchTranslatedDraw(pair, (nint)native, candidate, report);
-                    }
-                    finally
-                    {
-                        _ = HostRelease(candidate);
-                    }
-                }
+            var candidate = CreatePipelineCandidate(native, vertexShader, pixelShader, hostState, report,
+                allowDepthless: !depthBound, colorFormat: colorFormat);
+
+            if (candidate == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                VerifyVertexFetchTranslatedDraw(pair, (nint)native, candidate, colorFormat, depthBound, report);
+            }
+            finally
+            {
+                _ = HostRelease(candidate);
             }
         }
         finally
@@ -285,6 +333,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // Rebuild the validated version 1.1 root contract with host structures.
         // Do not rely on the console container checksum or copy guest pointers.
         var parameters = stackalloc D3D12_ROOT_PARAMETER1[2];
+
         parameters[0] = new D3D12_ROOT_PARAMETER1
         {
             ParameterType = (D3D12_ROOT_PARAMETER_TYPE)(rectangle ? 2 : 3),
@@ -303,6 +352,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             RangeType = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
             NumDescriptors = 2
         };
+
         var maskSampler = new D3D12_STATIC_SAMPLER_DESC
         {
             Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT,
@@ -321,6 +371,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ParameterType = D3D12_ROOT_PARAMETER_TYPE.D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                 ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
             };
+
             parameters[1].Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE1
             {
                 NumDescriptorRanges = 1,
@@ -356,7 +407,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                 report.WriteLine(Encoding.UTF8.GetString(ReadShaderBlob(errors, 1024 * 1024)).TrimEnd('\0'));
             }
 
-            return resultCode >= 0 && blob != 0 ? ReadShaderBlob(blob, 1024 * 1024) : null;
+            return (resultCode >= 0 && blob != 0)
+                ? ReadShaderBlob(blob, 1024 * 1024)
+                : null;
         }
         finally
         {
@@ -377,7 +430,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     // returns an owned host PSO; the caller must release or transfer that reference.
     private static nint CreatePipelineCandidate(void* root, byte[] vertexShader, byte[] pixelShader,
         GraphicsPipelineMetadata pipeline, TextWriter report, byte[]? geometryShader = null, void* inputElements = null,
-        uint inputCount = 0, bool allowDepthless = false)
+        uint inputCount = 0, bool allowDepthless = false, uint colorFormat = HostTextureViewFormats.Rgba8Unorm)
     {
         var rectangle = geometryShader != null;
         var hasInput = inputElements != null && inputCount != 0;
@@ -390,7 +443,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         if (inputElements == null != (inputCount == 0) || (rectangle && !hasInput) ||
-            (!hasInput && pipeline.InputLayout is { Length: > 0 }))
+            (!hasInput && pipeline.InputLayout is { Length: > 0 }) ||
+            (colorFormat == HostTextureViewFormats.A8Unorm && (rectangle || !allowDepthless)))
         {
             report.WriteLine("[graphics] Host PSO input layout incompatible with selected shader path.");
 
@@ -417,7 +471,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (expected == 0 || record.Bytes.Length != expected ||
                 BinaryPrimitives.ReadUInt32LittleEndian(record.Bytes) != record.Kind ||
-                (seen & (1U << (int)record.Kind)) != 0 || !IsPipelineStateCompatible(record, rectangle, allowDepthless))
+                (seen & (1U << (int)record.Kind)) != 0 ||
+                !IsPipelineStateCompatible(record, rectangle, allowDepthless, colorFormat))
             {
                 report.WriteLine($"[graphics] R10 native PSO validation refused: unsupported state {record.Kind}.");
 
@@ -579,18 +634,19 @@ public static unsafe partial class ConsoleGraphicsDevice
                BinaryPrimitives.ReadUInt32LittleEndian(depth.Bytes.AsSpan(56)) == 0;
     }
 
-    private static bool IsPipelineStateCompatible(PipelineStateRecord record, bool rectangle = false,
-        bool allowDepthless = false)
+    private static bool IsPipelineStateCompatible(PipelineStateRecord record, bool rectangle,
+        bool allowDepthless, uint colorFormat)
     {
         var bytes = record.Bytes.AsSpan();
 
-        // Restrict format/topology/sample state to the first observed draw.
-        // Other enums in the standard state structures are host-validated;
-        // acceptance is not a claim of full console fixed-function parity.
+        // Validate the format selected for this shader candidate. D3D12 validates
+        // the remaining standard fixed-function state when it creates the PSO.
         return record.Kind switch
         {
             14 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == (rectangle ? 19U : 3U),
-            15 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 28 &&
+            15 => (colorFormat is HostTextureViewFormats.Rgba8Unorm or HostTextureViewFormats.A8Unorm) &&
+                  BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == colorFormat &&
+                  (colorFormat != HostTextureViewFormats.A8Unorm || !bytes[8..36].ContainsAnyExcept((byte)0)) &&
                   BinaryPrimitives.ReadUInt32LittleEndian(bytes[36..]) == 1,
             16 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 20 ||
                   ((rectangle || allowDepthless) && BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 0),
@@ -674,6 +730,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             Console.WriteLine("[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
 
             VerifyIndexedUiSampler();
+            VerifyIndexedUiDualAlpha();
+            VerifyIndexedUiBatchedMask();
 
             if (CompileHostShader(IndexedUiCompiler.VertexSource, "vs_5_1", Console.Out) == null ||
                 CompileHostShader(IndexedUiCompiler.PixelSource, "ps_5_1", Console.Out) == null || SerializeIndexedUiRoot() == null ||

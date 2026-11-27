@@ -184,7 +184,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         Console.Error.WriteLine(
-            $"[graphics] IRX-GFX-PRESENT-R19: swapchain={EnableSwapChain}, diagnosticPreview={EnableGuestPreviewWindow}, colorFlow={EnableColorFlow}.");
+            $"[graphics] IRX-GFX-PRESENT-R19: SwapChain={EnableSwapChain}, diagnosticPreview={EnableGuestPreviewWindow}, colorFlow={EnableColorFlow}.");
 
         Console.Error.WriteLine(
             $"[graphics] IRX-GFX-WINDOW-R19.1: enabled={EnableWindowed1080}; requestedClient={WindowClientWidth}x{WindowClientHeight}; set IRX_PRESENT_WINDOWED_1080=0 to preserve title window size.");

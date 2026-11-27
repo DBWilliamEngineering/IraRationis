@@ -31,3 +31,5 @@ __pycache__/
 /docs/development-handoff.md
 /docs/runtime-services.md
 /docs/maintainer-guide.md
+/scripts/Invoke-R77.ps1
+/scripts/

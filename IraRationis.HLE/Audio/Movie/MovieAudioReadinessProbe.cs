@@ -13,13 +13,14 @@ internal static class MovieAudioReadinessProbe
     private const int RingCapacityOffset = 0x0C;
     private const int RingQueueCountOffset = 0x34;
     private const int RingFirstQueueOffset = 0x38;
+    private const int QueueReadOffset = 0x00;
+    private const int QueueWriteOffset = 0x04;
     private const int QueueBytesOffset = 0x08;
 
     internal static MovieAudioReadinessObservation Capture(nint channel, uint blockBytes,
-        out uint queuedBytes, out uint capacityBytes)
+        out MovieAudioQueueSample sample)
     {
-        queuedBytes = 0;
-        capacityBytes = 0;
+        sample = default;
 
         Span<byte> track = stackalloc byte[TrackSuspendedOffset + sizeof(uint)];
 
@@ -69,8 +70,9 @@ internal static class MovieAudioReadinessProbe
             return MovieAudioReadinessObservation.Unavailable;
         }
 
-        queuedBytes = queued;
-        capacityBytes = capacity;
+        var readOffset = BinaryPrimitives.ReadUInt32LittleEndian(queue[QueueReadOffset..]);
+        var writeOffset = BinaryPrimitives.ReadUInt32LittleEndian(queue[QueueWriteOffset..]);
+        sample = new MovieAudioQueueSample(capacity, queued, readOffset, writeOffset);
 
         // The guest mixer can change occupancy after Ready returns.
         return capacity - queued < blockBytes

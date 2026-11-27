@@ -8,6 +8,7 @@ using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Drawing;
 using IraRationis.Graphics.Drawing.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.VertexFetch;
@@ -84,10 +85,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                              $"viewports={state.Viewports?.Length ?? 0}, scissors={state.Scissors?.Length ?? 0}");
         }
 
-        if (state.Targets.Length != 1 || state.Depth is not { } depthHandle || state.Vertices.Count != 0)
+        if (state.Targets.Length != 1)
         {
-            return RejectVertexFetchDraw($"unsupported target or vertex state: targets={state.Targets.Length}, " +
-                             $"depth={state.Depth.HasValue}, vertexViews={state.Vertices.Count}");
+            return RejectVertexFetchDraw($"expected a single render target, found {state.Targets.Length}");
         }
 
         if (state.Graphics.Tables.Count != 0 || state.Graphics.Constants.Count != 0 ||
@@ -113,10 +113,6 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         VertexFetchPipeline? translated;
 
-        nint color, depth;
-
-        nuint rtv, dsv;
-
         nint upload = 0;
 
         try
@@ -139,25 +135,35 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return RejectVertexFetchDraw("unsupported vertex header layout");
             }
 
-            if (!TryResolveClear(self, state.Targets[0], 20, out color, out rtv, out var colorFormat))
+            if (!TryResolveClear(self, state.Targets[0], 20, out var color, out var rtv, out var colorFormat,
+                    out var guestTarget, reportFailure: true))
             {
                 return RejectVertexFetchDraw($"RTV resolution failed: handle=0x{state.Targets[0]:X}");
             }
 
-            if (colorFormat != 28)
+            if (colorFormat != translated.ColorFormat)
             {
-                return RejectVertexFetchDraw($"unsupported RTV format: {colorFormat}; expected 28");
+                return RejectVertexFetchDraw($"RTV format {colorFormat} does not match PSO format {translated.ColorFormat}");
             }
 
-            if (!TryResolveClear(self, depthHandle, 21, out depth, out dsv, out var depthFormat))
+            nint depth = 0;
+            nuint dsv = 0;
+
+            if (state.Depth is { } depthHandle)
             {
-                return RejectVertexFetchDraw($"DSV resolution failed: handle=0x{depthHandle:X}");
+                if (!TryResolveClear(self, depthHandle, 21, out depth, out dsv, out var depthFormat))
+                {
+                    return RejectVertexFetchDraw($"DSV resolution failed: handle=0x{depthHandle:X}");
+                }
+
+                if (depthFormat != 20 || color == depth)
+                {
+                    return RejectVertexFetchDraw($"unsupported depth target: format={depthFormat}, aliasesColor={color == depth}");
+                }
             }
 
-            if (depthFormat != 20 || color == depth)
-            {
-                return RejectVertexFetchDraw($"unsupported depth target: format={depthFormat}, aliasesColor={color == depth}");
-            }
+            // The validated shader fetches from the root SRV using SV_VertexID.
+            // Unused guest IA vertex and index views have no effect on this draw.
 
             // Capacity is fixed for this diagnostic slice; no guest payload is read during recording.
             var resultCode = CreateHostResource(HostBufferDescription(VertexFetchUploadCapacity), 2, GenericRead, &upload);
@@ -176,7 +182,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var deferred = new VertexFetchVertexUpload(translated.Pair, source.Address, first, vertices, upload)
             {
-                Target = FindOwnedResource(state, color)
+                AlphaOnlyTarget = colorFormat == HostTextureViewFormats.A8Unorm,
+                Target = guestTarget
             };
 
             state.HostViews.Add(upload);
@@ -196,7 +203,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(list, color, 0, 4);
 
-            TransitionHostResource(list, depth, 0, 0x10);
+            if (depth != 0)
+            {
+                TransitionHostResource(list, depth, 0, 0x10);
+            }
 
             commands->SetPipelineState((ID3D12PipelineState*)translated.Pipeline);
 
@@ -204,7 +214,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             commands->SetGraphicsRootShaderResourceView(0, gpuAddress);
             // SealMemoryBoundary already replayed topology, viewports, scissors, blend and stencil.
-            commands->OMSetRenderTargets(1, &colorView, false, &depthView);
+            commands->OMSetRenderTargets(1, &colorView, false, depth == 0 ? null : &depthView);
 
             TraceHostCommand(self, "R13 DrawInstanced");
 
@@ -212,7 +222,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             commands->OMSetRenderTargets(0, null, false, null);
 
-            TransitionHostResource(list, depth, 0x10, 0);
+            if (depth != 0)
+            {
+                TransitionHostResource(list, depth, 0x10, 0);
+            }
 
             TransitionHostResource(list, color, 4, 0);
 
@@ -221,7 +234,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             SealMemoryBoundary(self, state, null, null, draw: new VertexFetchDrawBoundary(deferred, true));
 
             TraceGraphicsSuccess($"[graphics] IRX-GFX-DRAW-R13: RECORDED guest draw; " +
-                     $"source=0x{source.Address:X}, vertices={vertices}, boundaries={state.MemoryBoundaries.Count}; awaiting submission.");
+                     $"source=0x{source.Address:X}, vertices={vertices}, colorFormat={colorFormat}, " +
+                     $"depthBound={depth != 0}, boundaries={state.MemoryBoundaries.Count}; awaiting submission.");
 
             return true;
         }
@@ -249,13 +263,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var cache = VertexFetchPipelines.GetOrCreateValue(state);
+        var depthBound = state.Depth.HasValue;
 
         if (cache.TryGetValue(state.Pipeline, out var cached))
         {
             // Even on cache hits, require the current guest root to match the retained pipeline.
             lock (PipelineGate)
             {
-                return GraphicsPipelines.TryGetValue(state.Pipeline, out var metadata) &&
+                return cached.DepthBound == depthBound &&
+                       GraphicsPipelines.TryGetValue(state.Pipeline, out var metadata) &&
                        metadata.Root == state.Graphics.Signature
                     ? cached
                     : null;
@@ -270,14 +286,14 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         if (pipeline == null || pipeline.Root != state.Graphics.Signature || pipeline.Shaders.Count != 2 ||
-            !pipeline.IsStream || !pipeline.CompleteStream)
+            !TryPrepareVertexFetchHostState(pipeline, depthBound, out var hostState, out var colorFormat))
         {
             return null;
         }
 
         var vertex = pipeline.Shaders.FirstOrDefault(static shader => shader.Stage == 1);
         var pixel = pipeline.Shaders.FirstOrDefault(static shader => shader.Stage == 2);
-        var depth = pipeline.State.FirstOrDefault(static record => record.Kind == 21);
+        var depth = hostState.State.FirstOrDefault(static record => record.Kind == 21);
 
         if (vertex == null || pixel == null || depth == null || depth.Bytes.Length != 64)
         {
@@ -327,14 +343,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
             }
 
-            nativePipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, pipeline, report);
+            nativePipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, hostState, report,
+                allowDepthless: !depthBound, colorFormat: colorFormat);
 
             if (nativePipeline == 0)
             {
                 return null;
             }
 
-            var result = new VertexFetchPipeline(pair, (nint)root, nativePipeline, depthBoundsEnabled);
+            var result = new VertexFetchPipeline(pair, (nint)root, nativePipeline, colorFormat, depthBound,
+                depthBoundsEnabled);
 
             state.HostViews.Add((nint)root);
 
@@ -414,8 +432,15 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             Interlocked.Increment(ref _draws);
 
-            TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R13: GPU COMPLETED guest draw " +
-                     "(CPU-authoritative source assumption; presentation not verified).");
+            if (upload.AlphaOnlyTarget)
+            {
+                TraceGraphicsSuccess("[graphics] Depthless A8 guest triangle GPU completed.");
+            }
+            else
+            {
+                TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R13: GPU COMPLETED guest draw " +
+                    "(CPU-authoritative source assumption; presentation not verified).");
+            }
 
             TraceColor(queue, upload.Target, "R13-output");
 

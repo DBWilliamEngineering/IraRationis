@@ -9,4 +9,5 @@ internal sealed class CpuCounter
     public long Failed;
     public long CpuTicks;
     public long WallTicks;
+    public uint LastSampleThreadId;
 }

@@ -547,7 +547,7 @@ flowchart LR
     U --> T["GPU NV12 texture"]
     T --> C["Host compute conversion"]
     C --> B["Pitched BGRA output buffer"]
-    B --> S["Swapchain back buffer"]
+    B --> S["SwapChain back buffer"]
     S --> D["Present"]
 ```
 

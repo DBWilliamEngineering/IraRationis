@@ -45,11 +45,19 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool TryResolveClear(nint self, ulong handle, uint kind, out nint host, out nuint cpuHandle,
         out uint viewFormat, bool reportFailure = false)
     {
+        return TryResolveClear(self, handle, kind, out host, out cpuHandle, out viewFormat, out _, reportFailure);
+    }
+
+    private static bool TryResolveClear(nint self, ulong handle, uint kind, out nint host, out nuint cpuHandle,
+        out uint viewFormat, out nint guestResource, bool reportFailure = false)
+    {
         host = 0;
 
         cpuHandle = 0;
 
         viewFormat = 0;
+
+        guestResource = 0;
 
         var state = StateFor(self);
 
@@ -83,6 +91,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             host = cached.HostResource;
             cpuHandle = cached.CpuHandle;
             viewFormat = cached.Format;
+            guestResource = cached.Resource;
 
             return true;
         }
@@ -201,6 +210,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.TargetViews.Add(key, new RecordedTargetView(metadata.Resource, metadata.ResourceGeneration, host,
                 cpuHandle, viewFormat));
         }
+
+        guestResource = metadata.Resource;
 
         return true;
     }

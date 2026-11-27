@@ -29,7 +29,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
     }
 
-    internal static byte[] ReadRasterPixels(nint readback, int width, int height, int pitch)
+    internal static byte[] ReadRasterPixels(nint readback, int width, int height, int pitch, int bytesPerPixel = 4)
     {
         var read = new HostRange { End = (nuint)(pitch * height) };
         var noWrite = default(HostRange);
@@ -46,12 +46,13 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("R67 null readback mapping.");
             }
 
-            var pixels = new byte[checked(width * height * 4)];
+            var rowBytes = checked(width * bytesPerPixel);
+            var pixels = new byte[checked(rowBytes * height)];
 
             for (var row = 0; row < height; row++)
             {
-                new ReadOnlySpan<byte>((byte*)mapped + row * pitch, width * 4)
-                    .CopyTo(pixels.AsSpan(row * width * 4));
+                new ReadOnlySpan<byte>((byte*)mapped + row * pitch, rowBytes)
+                    .CopyTo(pixels.AsSpan(row * rowBytes));
             }
 
             return pixels;

@@ -254,6 +254,9 @@ public static unsafe class DeviceProbe
 
                 GraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
 
+                GraphicsDevice.VerifyDepthlessVertexFetchGpu();
+                GraphicsDevice.VerifyIndexedUiGpu(queue);
+
                 GraphicsDevice.VerifyDescriptorTables(queue);
 
                 Check(reset(allocator), "Allocator reset after completion");

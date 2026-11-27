@@ -32,5 +32,7 @@ internal enum GraphicsStage
     FencePublication,
     GuardedPublication,
     KernelPublication,
+    AllocateRectangleUpload,
+    DetileTexture,
     Count
 }

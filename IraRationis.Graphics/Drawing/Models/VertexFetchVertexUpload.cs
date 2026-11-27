@@ -11,6 +11,7 @@ internal sealed unsafe class VertexFetchVertexUpload(VertexFetchShaderPair pair,
     public readonly uint First = first;
     public readonly nint Host = host;
     public readonly VertexFetchShaderPair Pair = pair;
+    public bool AlphaOnlyTarget;
     public int Phase;
     public nint Target;
 }

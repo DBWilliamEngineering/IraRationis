@@ -11,6 +11,7 @@ internal static class HostTextureViewFormats
     internal const uint Rgba8Typeless = 27;
     internal const uint Rgba8Unorm = 28;
     internal const uint Rgba8Srgb = 29;
+    internal const uint A8Unorm = 65;
 
     internal static uint BackingFormat(in ResourceDescription guest)
     {
@@ -124,7 +125,7 @@ internal static class HostTextureViewFormats
 
         return (depth
             ? viewFormat is 40 or 45 or 55 or 20
-            : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or 87 or 91) &&
+            : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or A8Unorm or 87 or 91) &&
             IsCompatible(guest, viewFormat);
     }
 }

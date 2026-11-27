@@ -24,8 +24,12 @@ internal sealed unsafe class RecordedCommandState
     public nint[] Heaps = [];
     public int HostCommandCount;
     public RecordedBufferView? Index;
+    public RecordedUploadPage? LargeRectangleUploadPage;
     public string? LastHostCommand;
     public nint Pipeline;
+    public Dictionary<nint, RectangleUploadBuffer>? RectangleUploadBuffers;
+    public RecordedUploadPage? RectangleUploadPage;
+    public int RectangleUploadSliceCount;
     public RECT[]? Scissors;
     public uint? Stencil;
     public ulong[] Targets = [];
