@@ -8,7 +8,7 @@
   <p>
     <img alt="Windows x64" src="https://img.shields.io/badge/WINDOWS-x64-333840?style=for-the-badge" />
     <img alt="Experimental" src="https://img.shields.io/badge/STATUS-EXPERIMENTAL-333840?style=for-the-badge" />
-    <img alt="Past brightness settings" src="https://img.shields.io/badge/MILESTONE-PAST%20BRIGHTNESS-28704a?style=for-the-badge" />
+    <img alt="Past brightness settings" src="https://img.shields.io/badge/MILESTONE-PAST%20TITLECARDS-28704a?style=for-the-badge" />
     <img alt="C# first" src="https://img.shields.io/badge/C%23-FIRST-6942b8?style=for-the-badge" />
   </p>
   <p>
