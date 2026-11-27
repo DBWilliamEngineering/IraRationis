@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Runtime.Services.Async.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XAsyncProviderData
+internal struct XAsyncProviderData
 {
     public XAsyncBlock* Async;
     public nuint BufferSize;

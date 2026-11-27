@@ -5,8 +5,6 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using IraRationis.Graphics.Textures;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
@@ -15,8 +13,10 @@ using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
+using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Raster;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics;
 
@@ -27,12 +27,18 @@ public static unsafe partial class ConsoleGraphicsDevice
     private const int TextureSecondTransformOffset = 0x160;
     private const int TextureMaximumDrawBytes = 4 * 1024 * 1024;
     private const int TextureMaximumTextureBytes = 128 * 1024 * 1024;
-    private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<nint, RectanglePipeline>> TexturedDrawPipelines =
-        new();
+
+    private const int TexturePlanCacheLimit = 32;
+    private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<nint, RectanglePipeline>>
+        TexturedDrawPipelines =
+            new();
     private static readonly ConditionalWeakTable<RecordedCommandState, Dictionary<ulong, nint>> TexturePlacedResources =
         new();
     private static readonly Lock ResourceWriteGate = new();
     private static readonly Dictionary<long, nint> ResourceWriterQueues = new();
+    private static readonly object TexturePlanGate = new();
+
+    private static readonly Dictionary<TexturePlanKey, HostTextureCopy> TexturePlans = new();
 
     private static bool RejectTexturedDraw(string reason)
     {
@@ -184,7 +190,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        source = new TextureSource(handle, token.Id, token.Kind, guest, ((ResourceObject*)guest)->Generation, description);
+        source = new TextureSource(handle, token.Id, token.Kind, guest, ((ResourceObject*)guest)->Generation,
+            description);
 
         return true;
     }
@@ -333,15 +340,15 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             viewFormat = ReadDescriptorUInt32(bytes, 0);
 
-            if (!HostTextureViewFormats.IsCompatible(description, viewFormat))
+            if (!HostTextureViewFormats.IsSampledCompatible(description, viewFormat) ||
+                !HostTextureViewFormats.IsComponentMapping(ReadDescriptorUInt32(bytes, 8)))
             {
                 return false;
             }
         }
 
-        // Float/normalized color formats only; integer, depth and planar views require different shaders.
-        return viewFormat is 2 or 10 or 11 or 16 or 24 or 28 or 29 or 34 or 35 or 41 or 49 or 54 or 56 or 61 or
-            71 or 72 or 74 or 75 or 77 or 78 or 80 or 81 or 83 or 84 or 87 or 91 or 95 or 96 or 98 or 99;
+        // Integer, depth and planar views need distinct shader contracts.
+        return HostTextureViewFormats.IsSampledColorFormat(viewFormat);
     }
 
     private static byte[]? SerializeTextureRoot(TextWriter report)
@@ -460,7 +467,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var depthFormat = metadata.State.SingleOrDefault(static record => record.Kind == 16);
 
         if (vertex == null || pixel == null || depth == null || depthFormat == null || depth.Bytes.Length != 64 ||
-            ReadDescriptorUInt32(depth.Bytes, 4) != 0 || ReadDescriptorUInt32(depth.Bytes, 16) != 0 || ReadDescriptorUInt32(depth.Bytes, 56) != 0 ||
+            ReadDescriptorUInt32(depth.Bytes, 4) != 0 || ReadDescriptorUInt32(depth.Bytes, 16) != 0
+            || ReadDescriptorUInt32(depth.Bytes, 56) != 0 ||
             depthFormat.Bytes.Length != 8 || ReadDescriptorUInt32(depthFormat.Bytes, 4) != 0)
         {
             _ = RejectTexturedDraw("textured pipeline requires disabled depth and stencil and UNKNOWN DSV format");
@@ -539,7 +547,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                     };
                 }
 
-                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report, geometryShader, native,
+                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report, geometryShader,
+                    native,
                     (uint)elements.Length);
             }
 
@@ -586,7 +595,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static bool TryRecordTexturedGuestDraw(nint self, uint vertices, uint instances, uint first, uint firstInstance)
+    private static bool TryRecordTexturedGuestDraw(nint self, uint vertices, uint instances, uint first,
+        uint firstInstance)
     {
         using var stageTiming = BeginTiming(GraphicsStage.RecordTexture);
 
@@ -643,9 +653,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             return RejectTexturedDraw("textured host pipeline unavailable");
         }
 
-        if (!TryGetTextureSource(state, table, out var transform) || transform == null || !TryGetTextureBuffer(transform, out _) ||
-            !TryGetTextureSource(state, table + 32, out var texture) || texture == null
-            || !TryGetTextureView(texture, out var format))
+        if (!TryGetTextureSource(state, table, out var transform) || transform == null
+                                                                  || !TryGetTextureBuffer(transform, out _) ||
+                                                                  !TryGetTextureSource(state, table + 32,
+                                                                      out var texture) || texture == null
+                                                                  || !TryGetTextureView(texture, out var format))
         {
             WriteTextureTableEvidence(Console.Error, table);
 
@@ -673,7 +685,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var resource = (ResourceObject*)texture.Resource;
 
         TraceGraphicsSuccess($"[graphics] R16 texture: {resource->Description.Width}x{resource->Description.Height}, " +
-                 $"format={format}, layout=0x{resource->Description.Layout:X}, mips={resource->Description.MipLevels}; descriptor={texture.Token}.");
+                             $"format={format}, layout=0x{resource->Description.Layout:X}, mips={resource->Description.MipLevels}; descriptor={texture.Token}.");
 
         var capacity = checked((int)bytes + TexturedVertexOffset);
 
@@ -713,7 +725,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return RejectTexturedDraw("invalid native binding addresses");
             }
 
-            var deferred = new TexturedDrawUpload(transform, texture, table, vertex.Address + start, (int)bytes, capacity,
+            var deferred = new TexturedDrawUpload(transform, texture, table, vertex.Address + start, (int)bytes,
+                capacity,
                 upload,
                 textureHost, target);
 
@@ -773,7 +786,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             SealMemoryBoundary(self, state, null, null, textured: new TexturedDrawBoundary(deferred, true));
 
-            TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R16: RECORDED textured guest rectangle; awaiting submission.");
+            TraceGraphicsSuccess(
+                "[graphics] IRX-GFX-DRAW-R16: RECORDED textured guest rectangle; awaiting submission.");
 
             return true;
         }
@@ -791,7 +805,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void ExecuteTexturedDrawBoundary(nint queue, TexturedDrawBoundary boundary)
+    private static void ExecuteTexturedDrawBoundary(nint queue, TexturedDrawBoundary boundary,
+        OrderedTextureUploads? ordered = null)
     {
         using var stageTiming = BeginTiming(GraphicsStage.ExecuteTexture);
 
@@ -850,7 +865,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (constants == 0 || constants > ulong.MaxValue - TextureSecondTransformOffset ||
                 !TryReadGuestMemory(transform, snapshot[..TextureTransformBytes]) ||
-                !TryReadGuestMemory(constants + TextureSecondTransformOffset, snapshot.Slice(256, TextureTransformBytes)) ||
+                !TryReadGuestMemory(constants + TextureSecondTransformOffset,
+                    snapshot.Slice(256, TextureTransformBytes)) ||
                 !TryReadGuestMemory(upload.Vertex, snapshot.Slice(TexturedVertexOffset, upload.VertexBytes)) ||
                 !TryReadGuestMemory(upload.Table + 64, recheck) || !token.SequenceEqual(recheck) ||
                 !IsTextureSourceCurrent(upload.Transform) || !IsTextureSourceCurrent(upload.Texture))
@@ -891,7 +907,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (writer == 0)
         {
-            if (!UploadTextureTexture(queue, upload.Texture.Resource, upload.TextureHost))
+            if (!UploadTextureTexture(queue, upload.Texture.Resource, upload.TextureHost, ordered))
             {
                 Environment.FailFast("[graphics] R16 texture upload refused; inspect layout/source diagnostic.");
             }
@@ -902,15 +918,55 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         else
         {
-            TraceGraphicsSuccess("[graphics] R16 sampling prior same-queue GPU-written texture (guest alias writes untracked).");
+            TraceGraphicsSuccess(
+                "[graphics] R16 sampling prior same-queue GPU-written texture (guest alias writes untracked).");
         }
 
         TraceColor(queue, upload.Texture.Resource, "R16-texture-input", writer == 0);
 
-        TraceGraphicsSuccess($"[graphics] IRX-GFX-DRAW-R16: UPLOADED {upload.VertexBytes} vertex bytes and two transform blocks.");
+        TraceGraphicsSuccess(
+            $"[graphics] IRX-GFX-DRAW-R16: UPLOADED {upload.VertexBytes} vertex bytes and two transform blocks.");
     }
 
     private static bool TryPlanTextureTexture(ResourceDescription description, out HostTextureCopy? plan)
+    {
+        var key = new TexturePlanKey(description.Dimension, description.Alignment, description.Width,
+            description.Height,
+            description.DepthOrArraySize, description.MipLevels, description.Format, description.SampleCount,
+            description.SampleQuality, description.Layout, description.Flags);
+        lock (TexturePlanGate)
+        {
+            if (TexturePlans.TryGetValue(key, out var existing))
+            {
+                plan = existing;
+
+                return true;
+            }
+        }
+
+        if (!TryCreateTexturePlan(description, out plan) || plan == null)
+        {
+            return false;
+        }
+
+        // Bound the retained arrays; larger and unusually deep layouts remain uncached.
+        if (description.Width <= 4096 && description.Height <= 4096 && plan.Pitches.Length <= 256)
+        {
+            lock (TexturePlanGate)
+            {
+                if (TexturePlans.Count >= TexturePlanCacheLimit)
+                {
+                    TexturePlans.Clear();
+                }
+
+                TexturePlans[key] = plan;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryCreateTexturePlan(ResourceDescription description, out HostTextureCopy? plan)
     {
         plan = null;
 
@@ -922,19 +978,22 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var plane = layout.Planes[0];
 
-        if (!plane.Addressable || plane.Thick || plane.Slices != 1 || plane.Mips.Length != description.MipLevels)
+        if (!plane.Addressable || plane.Thick || plane.Slices == 0 || plane.Slices > 2048
+            || plane.Mips.Length != description.MipLevels ||
+            plane.Slices != description.DepthOrArraySize)
         {
             return false;
         }
 
-        var pitches = new uint[plane.Mips.Length];
-        var offsets = new ulong[plane.Mips.Length];
+        var subresources = checked(plane.Mips.Length * (int)plane.Slices);
+        var pitches = new uint[subresources];
+        var offsets = new ulong[subresources];
 
         ulong bytes = 0;
 
-        for (var index = 0; index < plane.Mips.Length; index++)
+        for (var index = 0; index < pitches.Length; index++)
         {
-            var mip = plane.Mips[index];
+            var mip = plane.Mips[index % plane.Mips.Length];
 
             if (mip.Depth != 1 || mip.Width == 0 || mip.Height == 0)
             {
@@ -956,7 +1015,22 @@ public static unsafe partial class ConsoleGraphicsDevice
             offsets[index] = offset;
         }
 
-        plan = new HostTextureCopy(layout, bytes, pitches, offsets);
+        var columns = new ulong[plane.Mips.Length][];
+        var patterns = plane.Patterns();
+        for (var index = 0; index < columns.Length; index++)
+        {
+            var mip = plane.Mips[index];
+            var values = plane.Mode == 0 ? Array.Empty<ulong>() : new ulong[mip.Width];
+            for (var x = 0U; x < values.Length; x++)
+            {
+                var tx = x + mip.TailX;
+                values[x] = (tx / plane.TileWidth * plane.Alignment) | patterns[0][tx % plane.TileWidth];
+            }
+
+            columns[index] = values;
+        }
+
+        plan = new HostTextureCopy(layout, bytes, pitches, offsets, columns);
 
         return true;
     }
@@ -972,9 +1046,30 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var patterns = plane.Patterns();
 
-        for (var index = 0; index < plane.Mips.Length; index++)
+        for (var index = 0; index < plan.Pitches.Length; index++)
         {
-            var mip = plane.Mips[index];
+            var mip = plane.Mips[index % plane.Mips.Length];
+            var sliceOffset = (ulong)(index / plane.Mips.Length) * plane.SliceSize;
+
+            var activeRowBytes = (ulong)mip.Width * plane.Bytes;
+            if (plane.Mode == 0 && activeRowBytes == (ulong)mip.Pitch * plane.Bytes
+                                && activeRowBytes == plan.Pitches[index])
+            {
+                var from = plane.Offset + sliceOffset + mip.Offset;
+                var bytes = activeRowBytes * mip.Height;
+                if (from > (ulong)source.Length || bytes > (ulong)source.Length - from ||
+                    plan.Offsets[index] > (ulong)destination.Length
+                    || bytes > (ulong)destination.Length - plan.Offsets[index])
+                {
+                    return false;
+                }
+
+                source.Slice((int)from, (int)bytes).CopyTo(destination.Slice((int)plan.Offsets[index], (int)bytes));
+
+                continue;
+            }
+
+            var xOffsets = plan.Columns[index % plane.Mips.Length];
 
             for (var coordinateY = 0U; coordinateY < mip.Height; coordinateY++)
             {
@@ -982,7 +1077,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 if (plane.Mode == 0)
                 {
-                    var from = plane.Offset + mip.Offset + (ulong)coordinateY * mip.Pitch * plane.Bytes;
+                    var from = plane.Offset + sliceOffset + mip.Offset + (ulong)coordinateY * mip.Pitch * plane.Bytes;
                     var count = mip.Width * plane.Bytes;
 
                     if (from > (ulong)source.Length || count > (ulong)source.Length - from)
@@ -995,15 +1090,14 @@ public static unsafe partial class ConsoleGraphicsDevice
                     continue;
                 }
 
+                var ty = coordinateY + mip.TailY;
+                var rowBase = plane.Offset + sliceOffset + mip.Offset +
+                              (ulong)(ty / plane.TileHeight) * (mip.Pitch / plane.TileWidth) * plane.Alignment;
+                var rowPattern = patterns[1][ty % plane.TileHeight] | patterns[2][0];
+
                 for (var coordinateX = 0U; coordinateX < mip.Width; coordinateX++)
                 {
-                    var tx = coordinateX + mip.TailX;
-                    var ty = coordinateY + mip.TailY;
-                    var from = plane.Offset + mip.Offset +
-                               ((ulong)(ty / plane.TileHeight) * (mip.Pitch / plane.TileWidth) + tx / plane.TileWidth)
-                               * plane.Alignment +
-                               (patterns[0][tx % plane.TileWidth] | patterns[1][ty % plane.TileHeight]
-                                                                  | patterns[2][0]);
+                    var from = rowBase + (xOffsets[coordinateX] | rowPattern);
 
                     if (from > (ulong)source.Length || plane.Bytes > (ulong)source.Length - from)
                     {
@@ -1021,19 +1115,20 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool TextureUploadFormat(uint format)
     {
-        return format is 2 or 10 or 11 or 16 or 24 or 28 or 29 or 34 or 35 or 41 or 49 or 54 or 56 or 61 or
-            71 or 72 or 74 or 75 or 77 or 78 or 80 or 81 or 83 or 84 or 87 or 91 or 95 or 96 or 98 or 99;
+        return HostTextureViewFormats.IsSampledColorFormat(format);
     }
 
-    private static bool UploadTextureTexture(nint queue, nint guest, nint host)
+    private static bool UploadTextureTexture(nint queue, nint guest, nint host, OrderedTextureUploads? ordered = null)
     {
         using var stageTiming = BeginTiming(GraphicsStage.UploadTexture);
 
         var resource = (ResourceObject*)guest;
         var description = resource->Description;
         // Do not overwrite a render target from CPU memory unless a real CPU-authoritative path is known.
-        if ((description.Flags & 7U) != 0 || resource->Address == 0 || !TextureUploadFormat(description.Format) ||
-            !TryPlanTextureTexture(description, out var plan) || plan == null)
+        if ((description.Flags & 7U) != 0 || resource->Address == 0
+                                          || !HostTextureViewFormats.TryGetColorCopyFormat(description.Format,
+                                              out var copyFormat) ||
+                                          !TryPlanTextureTexture(description, out var plan) || plan == null)
         {
             Console.Error.WriteLine(
                 $"[graphics] R16 CPU texture refused: flags=0x{description.Flags:X}, layout=0x{description.Layout:X}, format={description.Format}, mips={description.MipLevels}.");
@@ -1056,37 +1151,56 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var versioned = VersionedTextureUploadsEnabled && plan.Bytes <= 16UL * 1024 * 1024;
 
-            using var utility = AcquireUtilityContext(plan.Bytes, 0, versioned);
-
-            var staging = utility.Upload;
-            var list = utility.List;
-
-            if (!PrepareHostTextureUpload(utility, plan, source))
+            var utility = AcquireUtilityContext(plan.Bytes, 0, versioned);
+            var transferred = false;
+            try
             {
-                return false;
+                var staging = utility.Upload;
+                var list = utility.List;
+
+                if (!PrepareHostTextureUpload(utility, plan, source))
+                {
+                    return false;
+                }
+
+                TransitionHostResource(list, host, 0, CopyDestination);
+
+                for (var index = 0; index < plan.Pitches.Length; index++)
+                {
+                    var mip = index % description.MipLevels;
+                    var footprint = new HostTextureTransferFootprint((uint)index, copyFormat,
+                        (uint)Math.Max(1UL, description.Width >> mip), Math.Max(1U, description.Height >> mip),
+                        plan.Pitches[index], plan.Offsets[index]);
+
+                    RecordHostTextureTransfer(list, host, staging, plan.Bytes, footprint, true);
+                }
+
+                TransitionHostResource(list, host, CopyDestination, 0);
+
+                if (ordered is null)
+                {
+                    utility.SubmitAndWait(queue);
+                }
+                else
+                {
+                    ordered.Submit(utility);
+                    transferred = true;
+                }
+
+                ReportUtilityExecution();
+
+                TraceGraphicsSuccess(
+                    $"[graphics] IRX-GFX-TEXTURE-R16: {(transferred ? "QUEUED" : "UPLOADED")} {description.Width}x{description.Height}, mips={description.MipLevels}, bytes={plan.Bytes} from console layout.");
+
+                return true;
             }
-
-            TransitionHostResource(list, host, 0, CopyDestination);
-
-            for (var index = 0; index < plan.Pitches.Length; index++)
+            finally
             {
-                var footprint = new HostTextureTransferFootprint((uint)index, description.Format,
-                    (uint)Math.Max(1UL, description.Width >> index), Math.Max(1U, description.Height >> index),
-                    plan.Pitches[index], plan.Offsets[index]);
-
-                RecordHostTextureTransfer(list, host, staging, plan.Bytes, footprint, upload: true);
+                if (!transferred)
+                {
+                    utility.Dispose();
+                }
             }
-
-            TransitionHostResource(list, host, CopyDestination, 0);
-
-            utility.SubmitAndWait(queue);
-
-            ReportUtilityExecution();
-
-            TraceGraphicsSuccess(
-                $"[graphics] IRX-GFX-TEXTURE-R16: UPLOADED {description.Width}x{description.Height}, mips={description.MipLevels}, bytes={plan.Bytes} from console layout.");
-
-            return true;
         }
         finally
         {
@@ -1191,9 +1305,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             for (var coordinateX = 0U; coordinateX < 65; coordinateX++)
             {
-                var offset = (int)(plane.Offset + mip.Offset + ((ulong)coordinateY * mip.Pitch + coordinateX) * plane.Bytes);
+                var offset = (int)(plane.Offset + mip.Offset
+                                                + ((ulong)coordinateY * mip.Pitch + coordinateX) * plane.Bytes);
 
-                BinaryPrimitives.WriteUInt32LittleEndian(source.AsSpan(offset), coordinateX | (coordinateY << 16) | 0xFF000000U);
+                BinaryPrimitives.WriteUInt32LittleEndian(source.AsSpan(offset),
+                    coordinateX | (coordinateY << 16) | 0xFF000000U);
             }
         }
 
@@ -1204,6 +1320,118 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R16 texture staging copy regression failed.");
         }
 
+        description.DepthOrArraySize = 2;
+        if (!TryPlanTextureTexture(description, out var cachedLayout) || cachedLayout == null ||
+            !TryPlanTextureTexture(description, out var reusedLayout) || !ReferenceEquals(cachedLayout, reusedLayout))
+        {
+            throw new InvalidOperationException("R77 immutable texture plan reuse failed.");
+        }
+
+        var changedLayout = description;
+        changedLayout.Width += 1;
+        if (!TryPlanTextureTexture(changedLayout, out var isolatedLayout)
+            || ReferenceEquals(cachedLayout, isolatedLayout))
+        {
+            throw new InvalidOperationException("R77 texture plan cache did not isolate differing extents.");
+        }
+
+        if (!TryPlanTextureTexture(description, out var arrayPlan) || arrayPlan == null
+                                                                   || arrayPlan.Pitches.Length != 2)
+        {
+            throw new InvalidOperationException("Indexed UI array staging footprint failed.");
+        }
+
+        var arraySource = new byte[(int)arrayPlan.Layout.Size];
+        var arrayDestination = new byte[(int)arrayPlan.Bytes];
+        var arrayPlane = arrayPlan.Layout.Planes[0];
+        BinaryPrimitives.WriteUInt32LittleEndian(arraySource.AsSpan((int)arrayPlane.Offset), 0x10203040U);
+        BinaryPrimitives.WriteUInt32LittleEndian(arraySource.AsSpan((int)(arrayPlane.Offset + arrayPlane.SliceSize)),
+            0x50607080U);
+        if (!DetileTextureTexture(arrayPlan, arraySource, arrayDestination) ||
+            ReadDescriptorUInt32(arrayDestination, (int)arrayPlan.Offsets[0]) != 0x10203040U ||
+            ReadDescriptorUInt32(arrayDestination, (int)arrayPlan.Offsets[1]) != 0x50607080U)
+        {
+            throw new InvalidOperationException("Indexed UI array slice isolation failed.");
+        }
+
+        Console.WriteLine("[graphics-probe] Indexed UI texture-array slice staging passed (CPU only).");
+        Console.WriteLine("[graphics-probe] R77 immutable texture plan reuse and isolation passed (CPU only).");
+
+        description.Width = 64;
+        description.DepthOrArraySize = 1;
+        if (!TryPlanTextureTexture(description, out var tight) || tight == null)
+        {
+            throw new InvalidOperationException("R76 tight linear texture plan failed.");
+        }
+
+        var tightSource = new byte[(int)tight.Layout.Size];
+        var tightTarget = new byte[(int)tight.Bytes];
+        var tightPlane = tight.Layout.Planes[0];
+        var tightMip = tightPlane.Mips[0];
+        var tightOffset = (int)(tightPlane.Offset + tightMip.Offset);
+        for (var i = 0; i < tightTarget.Length; i++)
+        {
+            tightSource[tightOffset + i] = (byte)(i * 17);
+        }
+
+        if (!DetileTextureTexture(tight, tightSource, tightTarget) ||
+            !tightSource.AsSpan(tightOffset, tightTarget.Length).SequenceEqual(tightTarget))
+        {
+            throw new InvalidOperationException("R76 tight linear staging mismatch.");
+        }
+
+        description.Width = 133;
+        description.Height = 79;
+        description.MipLevels = 4;
+        description.DepthOrArraySize = 2;
+        foreach (var layout in new uint[] { 0x101, 0x105, 0x10A })
+        {
+            description.Layout = layout;
+            if (!TryPlanTextureTexture(description, out var tiled) || tiled == null)
+            {
+                throw new InvalidOperationException("R76 tiled staging plan failed.");
+            }
+
+            var tiledSource = new byte[(int)tiled.Layout.Size];
+            var tiledTarget = new byte[(int)tiled.Bytes];
+            new Random(76).NextBytes(tiledSource);
+            var tiledPlane = tiled.Layout.Planes[0];
+            var patterns = tiledPlane.Patterns();
+            if (!DetileTextureTexture(tiled, tiledSource, tiledTarget))
+            {
+                throw new InvalidOperationException("R76 tiled staging failed.");
+            }
+
+            for (var sub = 0; sub < tiled.Pitches.Length; sub++)
+            {
+                var m = tiledPlane.Mips[sub % tiledPlane.Mips.Length];
+                var slice = (ulong)(sub / tiledPlane.Mips.Length) * tiledPlane.SliceSize;
+                for (var y = 0U; y < m.Height; y++)
+                {
+                    for (var x = 0U; x < m.Width; x++)
+                    {
+                        var tx = x + m.TailX;
+                        var ty = y + m.TailY;
+                        var from = tiledPlane.Offset + slice + m.Offset +
+                                   ((ulong)(ty / tiledPlane.TileHeight) * (m.Pitch / tiledPlane.TileWidth)
+                                    + tx / tiledPlane.TileWidth) * tiledPlane.Alignment +
+                                   (patterns[0][tx % tiledPlane.TileWidth] | patterns[1][ty % tiledPlane.TileHeight]
+                                                                           | patterns[2][0]);
+                        var to = tiled.Offsets[sub] + (ulong)y * tiled.Pitches[sub] + (ulong)x * tiledPlane.Bytes;
+                        if (!tiledSource.AsSpan((int)from, (int)tiledPlane.Bytes)
+                                .SequenceEqual(tiledTarget.AsSpan((int)to, (int)tiledPlane.Bytes)))
+                        {
+                            throw new InvalidOperationException(
+                                "R76 tiled staging differs from original addressing formula.");
+                        }
+                    }
+                }
+            }
+        }
+
+        Console.WriteLine("[graphics-probe] R76 bulk linear and tiled addressing parity passed (CPU only).");
+
+        description.DepthOrArraySize = 1;
         description.Layout = 0x11B;
 
         if (TryPlanTextureTexture(description, out _))
@@ -1214,4 +1442,17 @@ public static unsafe partial class ConsoleGraphicsDevice
         Console.WriteLine(
             "[graphics-probe] R16 linear texture staging, bounds and unsupported-layout checks passed (CPU only).");
     }
+
+    private readonly record struct TexturePlanKey(
+        uint Dimension,
+        ulong Alignment,
+        ulong Width,
+        uint Height,
+        ushort Slices,
+        ushort Mips,
+        uint Format,
+        uint Samples,
+        uint Quality,
+        uint Layout,
+        uint Flags);
 }

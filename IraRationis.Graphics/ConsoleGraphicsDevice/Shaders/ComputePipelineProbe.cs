@@ -27,7 +27,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Compute capture bounds or retained blob identity failed.");
             }
 
-            Console.Error.WriteLine("[graphics-probe] Bounded compute capture identity and rejection passed (CPU only).");
+            Console.Error.WriteLine(
+                "[graphics-probe] Bounded compute capture identity and rejection passed (CPU only).");
         }
         finally
         {
@@ -73,7 +74,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 var firstPipeline = ComputePipelines[first];
                 var secondPipeline = ComputePipelines[second];
 
-                if (!ReferenceEquals(firstPipeline.Shader, secondPipeline.Shader) || firstPipeline.Shader.Bytes[0] != 1 || firstPipeline.Shader.References != 2)
+                if (!ReferenceEquals(firstPipeline.Shader, secondPipeline.Shader) || firstPipeline.Shader.Bytes[0] != 1
+                    || firstPipeline.Shader.References != 2)
                 {
                     throw new InvalidOperationException("Compute shader ownership or deduplication failed.");
                 }

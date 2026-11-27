@@ -13,7 +13,7 @@
 namespace irx
 {
     inline std::uintptr_t QueryAccessibleRegionEnd(std::uintptr_t address, bool writable,
-                                                 bool* ordinaryPrivate, std::uint64_t* queryCount) noexcept
+                                                   bool* ordinaryPrivate, std::uint64_t* queryCount) noexcept
     {
         if (ordinaryPrivate)
         {
@@ -59,8 +59,8 @@ namespace irx
     }
 
     inline std::uintptr_t QueryWritableCacheLine(std::uintptr_t address, std::uintptr_t pageSize,
-                                               bool useResidentPageQuery, bool* ordinaryPrivate,
-                                               MemoryAccessStatistics* statistics) noexcept
+                                                 bool useResidentPageQuery, bool* ordinaryPrivate,
+                                                 MemoryAccessStatistics* statistics) noexcept
     {
         if (ordinaryPrivate)
         {
@@ -84,11 +84,12 @@ namespace irx
             }
 
             const bool querySucceeded = K32QueryWorkingSetEx(GetCurrentProcess(), &information,
-                static_cast<DWORD>(sizeof(information))) != FALSE;
+                                                             static_cast<DWORD>(sizeof(information))) != FALSE;
             const auto attributes = information.VirtualAttributes;
 
             if (querySucceeded && attributes.Valid && CanUseResidentPage(true, true, attributes.Bad != 0,
-                static_cast<std::uint32_t>(attributes.Win32Protection)))
+                                                                         static_cast<std::uint32_t>(attributes.
+                                                                             Win32Protection)))
             {
                 if (statistics)
                 {
@@ -101,6 +102,6 @@ namespace irx
         }
 
         return QueryAccessibleRegionEnd(address, true, ordinaryPrivate,
-            statistics ? &statistics->destinationRegionQueries : nullptr);
+                                        statistics ? &statistics->destinationRegionQueries : nullptr);
     }
 }

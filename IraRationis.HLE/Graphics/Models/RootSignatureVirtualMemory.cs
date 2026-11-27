@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Graphics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct RootSignatureVirtualMemory
+internal struct RootSignatureVirtualMemory
 {
     public uint Flags;
     public uint PageTablePages;

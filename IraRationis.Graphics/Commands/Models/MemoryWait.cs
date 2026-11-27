@@ -4,4 +4,4 @@
 
 namespace IraRationis.Graphics.Commands.Models;
 
-internal readonly unsafe record struct MemoryWait(ulong Address, uint Comparison, ulong Reference, int Bytes);
+internal readonly record struct MemoryWait(ulong Address, uint Comparison, ulong Reference, int Bytes);

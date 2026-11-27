@@ -88,7 +88,8 @@ internal sealed unsafe partial class WindowsPcmClock : IDisposable
         get
         {
             var time = new WindowsPcmClockMultimediaTime { Type = 2 }; // TIME_SAMPLES
-            Check(WaveOutGetPosition(_device, &time, (uint)sizeof(WindowsPcmClockMultimediaTime)), "waveOutGetPosition");
+            Check(WaveOutGetPosition(_device, &time, (uint)sizeof(WindowsPcmClockMultimediaTime)),
+                "waveOutGetPosition");
 
             var seconds = time.Type switch
             {

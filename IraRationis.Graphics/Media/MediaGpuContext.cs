@@ -60,7 +60,8 @@ public sealed unsafe class MediaGpuContext : IDisposable
             var queueId = ConsoleGraphicsDevice.QueueId;
             var description = default(D3D12_COMMAND_QUEUE_DESC);
             var create =
-                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_device, 8);
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)ConsoleGraphicsDevice
+                    .Slot(_device, 8);
             var result = create(_device, &description, &queueId, &queue);
 
             _queue = queue;
@@ -167,7 +168,8 @@ public sealed unsafe class MediaGpuContext : IDisposable
                 throw new InvalidOperationException("R44 host media pipeline cache capacity reached.");
             }
 
-            ConsoleGraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot, out var createdPipeline, shader);
+            ConsoleGraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot,
+                out var createdPipeline, shader);
 
             entry = (createdRoot, createdPipeline);
 

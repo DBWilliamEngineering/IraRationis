@@ -7,9 +7,17 @@ namespace IraRationis.Runtime.Tests.RuntimeBridge;
 
 internal sealed class DisruptiveRuntimeBridgeWriter(bool throwOnWrite) : TextWriter
 {
-    internal int Writes { get; private set; }
+    internal int Writes
+    {
+        get;
+        private set;
+    }
 
-    internal bool ThrowOnWrite { get; set; } = throwOnWrite;
+    internal bool ThrowOnWrite
+    {
+        get;
+        set;
+    } = throwOnWrite;
 
     public override Encoding Encoding
     {

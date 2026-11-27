@@ -5,7 +5,7 @@ using IraRationis.Cli.Diagnostics.Instructions.Models;
 
 namespace IraRationis.Cli.Diagnostics.Instructions;
 
-internal static unsafe partial class InstructionProbeNativeMethods
+internal static partial class InstructionProbeNativeMethods
 {
     internal const uint Commit = 0x1000;
     internal const uint Reserve = 0x2000;
@@ -40,7 +40,8 @@ internal static unsafe partial class InstructionProbeNativeMethods
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    internal static partial nuint VirtualQuery(nint address, InstructionProbeMemoryInformation* information, nuint size);
+    internal static partial nuint
+        VirtualQuery(nint address, InstructionProbeMemoryInformation* information, nuint size);
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

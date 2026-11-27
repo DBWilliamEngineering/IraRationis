@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using IraRationis.HLE.Audio;
 using IraRationis.HLE.Kernel.Models;
 using IraRationis.HLE.Runtime.Models;
 using IraRationis.Loader.Threads;
@@ -78,6 +79,8 @@ public static unsafe partial class KernelThreadModule
             try
             {
                 var routine = (delegate* unmanaged[Stdcall]<nint, uint>)state.Routine;
+
+                using var audioScheduling = AudioMixerScheduling.TryEnter(state.Routine, state.Parameter);
 
                 return routine(state.Parameter);
             }

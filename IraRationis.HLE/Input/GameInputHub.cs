@@ -16,7 +16,8 @@ internal sealed unsafe class GameInputHub
     public readonly nint ReadingTable;
     public readonly List<GameInputRegistration> Registrations = [];
     public readonly List<(ulong Token, int Thread)> Running = [];
-    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInputModule.DeviceCount).Select(_ => new GameInputSlot()).ToArray();
+    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInputModule.DeviceCount)
+        .Select(_ => new GameInputSlot()).ToArray();
     private readonly DualSenseProvider? _dualSense;
     private readonly long[] _retryAt = new long[4];
     private bool _usingDualSense;
@@ -72,7 +73,7 @@ internal sealed unsafe class GameInputHub
 
     private void PollLoop()
     {
-        for(;;)
+        for (;;)
         {
             Thread.Sleep(8);
 
@@ -103,7 +104,8 @@ internal sealed unsafe class GameInputHub
 
             if (GameInputModule.XInputGetState((uint)index, out var state) == 0)
             {
-                pads[index] = GameInputModule.ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger, state.LeftX,
+                pads[index] = GameInputModule.ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger,
+                    state.LeftX,
                     state.LeftY, state.RightX, state.RightY);
             }
             else
@@ -142,7 +144,8 @@ internal sealed unsafe class GameInputHub
                     $"[input] IRX-R30-ROUTE: slot={GameInputModule.Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
             }
 
-            Update(GameInputModule.Fallback, useFallback, useFallback ? dualSense ?? GameInputModule.FallbackPad(keys) : null, [], timestamp,
+            Update(GameInputModule.Fallback, useFallback,
+                useFallback ? dualSense ?? GameInputModule.FallbackPad(keys) : null, [], timestamp,
                 events);
 
             Update(GameInputModule.Keyboard, true, null, keys, timestamp, events);
@@ -188,7 +191,8 @@ internal sealed unsafe class GameInputHub
         {
             if (Matches(registration, index) && (registration.Status & GameInputModule.Connected) != 0)
             {
-                events.Add(new GameInputNotification(registration, index, timestamp, connected ? GameInputModule.Connected : 0,
+                events.Add(new GameInputNotification(registration, index, timestamp,
+                    connected ? GameInputModule.Connected : 0,
                     previous ? GameInputModule.Connected : 0));
             }
         }

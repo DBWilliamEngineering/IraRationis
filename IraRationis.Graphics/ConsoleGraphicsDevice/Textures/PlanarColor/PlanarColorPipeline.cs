@@ -21,19 +21,25 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static bool IsPlanarColorLayout(VertexInputElement[] elements)
     {
         return elements.Length == 3 && elements.All(static element => element.Index == 0 && element.Slot == 0 &&
-            element.Class == 0 && element.Step == 0 && (element.Name.ToUpperInvariant() switch
-            {
-                "POSITION" => element.Format == 6 && element.Offset == 0,
-                "COLOR" => element.Format == 28 && element.Offset == 12,
-                "TEXCOORD" => element.Format == 16 && element.Offset == 16,
-                _ => false
-            })) && elements.Select(static element => element.Name.ToUpperInvariant()).Distinct().Count() == 3;
+                                                                      element.Class == 0 && element.Step == 0
+                                                                      && element.Name.ToUpperInvariant() switch
+                                                                      {
+                                                                          "POSITION" => element.Format == 6
+                                                                              && element.Offset == 0,
+                                                                          "COLOR" => element.Format == 28
+                                                                              && element.Offset == 12,
+                                                                          "TEXCOORD" => element.Format == 16
+                                                                              && element.Offset == 16,
+                                                                          _ => false
+                                                                      }) && elements.Select(static element =>
+            element.Name.ToUpperInvariant()).Distinct().Count() == 3;
     }
 
     private static bool IsSrgbTextureStrip(GraphicsPipelineMetadata metadata)
     {
         return metadata.Shaders.Count == 2 && metadata.Shaders.Any(static shader => shader.Stage == 1 &&
-            shader.Hash == SrgbTextureStripCompiler.VertexHash) && metadata.Shaders.Any(static shader => shader.Stage == 2 &&
+            shader.Hash == SrgbTextureStripCompiler.VertexHash) && metadata.Shaders.Any(static shader =>
+            shader.Stage == 2 &&
             shader.Hash == SrgbTextureStripCompiler.PixelHash);
     }
 
@@ -137,7 +143,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return result;
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or
-            NotSupportedException or OverflowException or DllNotFoundException or EntryPointNotFoundException)
+                                              NotSupportedException or OverflowException or DllNotFoundException
+                                              or EntryPointNotFoundException)
         {
             _ = RejectPlanarColorDraw(exception.Message);
 
@@ -188,8 +195,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             return CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report,
-                geometryShader: null, inputElements: native, inputCount: (uint)elements.Length,
-                allowDepthless: true);
+                null, native, (uint)elements.Length,
+                true);
         }
     }
 }

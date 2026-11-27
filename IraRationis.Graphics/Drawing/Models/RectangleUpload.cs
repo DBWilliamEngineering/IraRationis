@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed unsafe class RectangleUpload(ulong table, ulong vertex, uint stride, nint host)
+internal sealed class RectangleUpload(ulong table, ulong vertex, uint stride, nint host)
 {
     public readonly nint Host = host;
     public readonly uint Stride = stride;

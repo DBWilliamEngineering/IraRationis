@@ -120,8 +120,10 @@ public static class Rdna2VertexFetchCompiler
             var end = name.IndexOf((byte)0);
 
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(expectedElement.Name)) ||
-                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != expectedElement.Index || Word(data, byteOffset + 12) != expectedElement.System ||
-                Word(data, byteOffset + 16) != expectedElement.Component || Word(data, byteOffset + 20) != expectedElement.Register ||
+                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != expectedElement.Index
+                || Word(data, byteOffset + 12) != expectedElement.System ||
+                Word(data, byteOffset + 16) != expectedElement.Component
+                || Word(data, byteOffset + 20) != expectedElement.Register ||
                 data[byteOffset + 24] != expectedElement.Mask || Word(data, byteOffset + 28) != 0)
             {
                 throw new NotSupportedException($"Unsupported {tag} semantic at index {index}.");

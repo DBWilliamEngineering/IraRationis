@@ -10,11 +10,11 @@ namespace IraRationis.Graphics.Shaders;
 /// </summary>
 internal sealed class HostShaderBytecodeCache
 {
-    private readonly Lock _gate = new();
-    private readonly Dictionary<(string Source, string Profile), HostShaderBytecodeCacheEntry> _entries = new();
     private readonly LinkedList<HostShaderBytecodeCacheEntry> _completed = new();
-    private readonly int _maximumEntries;
+    private readonly Dictionary<(string Source, string Profile), HostShaderBytecodeCacheEntry> _entries = new();
+    private readonly Lock _gate = new();
     private readonly long _maximumBytes;
+    private readonly int _maximumEntries;
     private long _bytes;
 
     internal HostShaderBytecodeCache(int maximumEntries, long maximumBytes)
@@ -212,7 +212,8 @@ internal sealed class HostShaderBytecodeCache
         }
 
         _ = cache.GetOrCompile("source", "vs", () => [9], out var crossProfile);
-        _ = cache.GetOrCompile("source", "cs", () => throw new InvalidOperationException("Unexpected miss."), out var hit);
+        _ = cache.GetOrCompile("source", "cs", () => throw new InvalidOperationException("Unexpected miss."),
+            out var hit);
         _ = cache.GetOrCompile("other", "cs", () => [8], out _);
         _ = cache.GetOrCompile("source", "vs", () => [9], out var evicted);
 
@@ -243,13 +244,15 @@ internal sealed class HostShaderBytecodeCache
         _ = bounded.GetOrCompile("oversized", "cs", () => new byte[512], out _);
 
         var retained = bounded.GetOrCompile("keep", "cs",
-            () => throw new InvalidOperationException("R70 oversized artifact displaced a valid entry."), out var retainedHit);
+            () => throw new InvalidOperationException("R70 oversized artifact displaced a valid entry."),
+            out var retainedHit);
 
         if (!retainedHit || retained is not [11])
         {
             throw new InvalidOperationException("R70 cache retention mismatch.");
         }
 
-        Console.WriteLine("[graphics-probe] IRX-R63: requests=16; compilations=1; profileIsolation=verified; LRU=verified; retry=verified; byteBudget=verified (CPU cache contract).");
+        Console.WriteLine(
+            "[graphics-probe] IRX-R63: requests=16; compilations=1; profileIsolation=verified; LRU=verified; retry=verified; byteBudget=verified (CPU cache contract).");
     }
 }

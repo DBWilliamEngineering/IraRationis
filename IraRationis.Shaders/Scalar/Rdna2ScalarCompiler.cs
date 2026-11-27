@@ -37,6 +37,7 @@ public static class Rdna2ScalarCompiler
                         result.Add(new ScalarInstruction(offset, ScalarOperation.End, 0, default, default));
 
                         return result; // unreachable trailing words are not decoded.
+
                     case 0:
                         result.Add(new ScalarInstruction(offset, ScalarOperation.Nop, 0, default, default));
 
@@ -170,13 +171,14 @@ public static class Rdna2ScalarCompiler
                 ScalarOperation.And => "&",
                 ScalarOperation.Or => "|",
                 ScalarOperation.Xor => "^",
-                ScalarOperation.Nop => "nop",      // Or ";" / "" (empty string) if you omit no-ops in output
-                ScalarOperation.End => "return",   // Or "exit" / "end" to represent shader termination
+                ScalarOperation.Nop => "nop", // Or ";" / "" (empty string) if you omit no-ops in output
+                ScalarOperation.End => "return", // Or "exit" / "end" to represent shader termination
                 ScalarOperation.Move => "=",
                 _ => throw new InvalidOperationException("Unsupported scalar IR.")
             };
 
-            source.AppendLine($"    {{ uint a = {leftExpression}; uint b = {rightExpression}; uint r = a {operatorText} b;");
+            source.AppendLine(
+                $"    {{ uint a = {leftExpression}; uint b = {rightExpression}; uint r = a {operatorText} b;");
 
             var condition = instruction.Operation switch
             {

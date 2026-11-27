@@ -8,7 +8,7 @@
   <p>
     <img alt="Windows x64" src="https://img.shields.io/badge/WINDOWS-x64-333840?style=for-the-badge" />
     <img alt="Experimental" src="https://img.shields.io/badge/STATUS-EXPERIMENTAL-333840?style=for-the-badge" />
-    <img alt="Intro animation observed" src="https://img.shields.io/badge/MILESTONE-INTRO%20ANIMATION-28704a?style=for-the-badge" />
+    <img alt="Initial settings UI reached" src="https://img.shields.io/badge/MILESTONE-SETTINGS%20UI-28704a?style=for-the-badge" />
     <img alt="C# first" src="https://img.shields.io/badge/C%23-FIRST-6942b8?style=for-the-badge" />
   </p>
   <p>
@@ -20,7 +20,8 @@
   </p>
   <p>Native console compatibility research<br />
   Windows x64 · C# · Native AOT · Direct3D 12<br />
-  Updated November 26, 2026 · Intro animation milestone</p>
+  Updated November 26, 2026 · R77 · Initial settings UI reached<br />
+  Next development target: R78 · Main menu transition</p>
   <p><a href="#current-status">Status</a> · <a href="#architecture">Architecture</a> · <a href="#build-and-validate">Build &amp; validate</a> · <a href="#documentation">Documentation</a> · <a href="#distribution-and-releases">Releases</a> · <a href="#licensing-and-attribution">Licensing</a></p>
 </div>
 
@@ -28,43 +29,47 @@
 
 Ira Rationis (IRX) is an experimental native x86-64 Xbox Series X|S compatibility runtime for Windows. It develops its own architecture for loading, platform services, graphics, memory, input, storage, and media. It incorporates attributed upstream foundations; it does not claim that every component was independently authored from inception.
 
-The immediate goal is now stable, correctly timed intro playback with continuous audio and a successful transition into the main menu. Local account selection and the title’s animated startup logo have been observed. The longer-term objective is sustained, correct 60+ FPS in demanding titles on suitable hardware. That objective has not been demonstrated.
+IRX has progressed through local account selection, the animated title introduction, the Continue (A) prompt, and into the initial configuration interface. The next major development revision, R78, targets the remaining transition into the main menu, continuous movie audio, and improved runtime throughput. The longer-term objective is sustained, correct 60+ FPS in demanding titles on suitable hardware. That objective has not been demonstrated.
 
 ## Current status
 
-### Vindex milestone: native title intro animation
+### Vindex milestone: initial settings interface reached (R77)
 
-**November 26, 2026 (US Central time): the maintainer observed the actual title's animated intro logo and heard its audio during native guest execution on Windows.** The audio was severely intermittent, playing in short bursts with pauses and jitter. The title subsequently terminated during the post-logo transition. This is a startup integration milestone, not a claim of complete intro playback, main-menu compatibility, or gameplay.
+> **Approaching the main menu.** Ira Rationis has advanced beyond the intro logo and Continue (A) screen into the title's initial configuration interface, including minimap and subtitle settings. R78 is our next push toward a stable main menu, with movie audio correction and major performance improvements developed alongside compatibility.
 
-The latest local Native AOT run, using an NVIDIA GeForce RTX 4090, crossed the prior account-transition, planar-color, sRGB texture-strip, and curve-LUT execution boundaries. The accompanying `graphics-probe` log confirms numerical GPU readback for both two-segment and three-segment curve kernels on both older and newer graphics device ABI paths. Actual title curve output has not been independently compared with console output.
+On November 26, 2026 (US Central time), the maintainer observed and navigated the initial settings interface during native guest execution. UI navigation audio appeared normal; movie soundtrack playback remained choppy, with intermittent silence, and sounded worse in the R77 run. This is the furthest observed startup progression to date. Main-menu execution and gameplay have not yet been demonstrated, and the number of remaining compatibility boundaries is unknown.
 
-| Latest runtime evidence | Observed |
+The R77 local Native AOT run on an NVIDIA GeForce RTX 4090 crossed the previous indexed UI blocker. Dithered, plain textured and alpha-mask UI variants report native GPU completion. The runtime subsequently terminated on a new non-indexed draw involving a three-vertex rectangle-list workload (guest topology 17), not the prior indexed UI shader.
+
+| Latest runtime evidence (R77) | Observed |
 | --- | ---: |
-| Runtime elapsed at last startup observation | 46.005 seconds |
+| Elapsed time at last startup observation | 74.008 seconds |
 | Bound images / missing imports | 5 / 0 |
-| Successful presentations / attempts | 616 / 616 |
-| Draw calls observed | 4,358 |
-| Compute dispatches observed | 594 |
-| Late sampled presentation rate | 16.49/s |
-| Guest curve LUT output | 4,096 texels per dispatch, format 41 (R32_FLOAT) |
+| Successful presentations / attempts | 832 / 832 |
+| Draw calls observed | 7,823 |
+| Compute dispatches observed | 782 |
+| Last sampled presentation rate | 8.97/s |
+| Prior intro milestone presentations (R73) | 616 |
+| Main menu | Not yet reached |
 
-The presentation rate is not a gameplay FPS benchmark. Draw and dispatch counters record observed calls, not a guarantee that each produced correct pixels. The visual and audible milestone is a maintainer observation; the runtime's automated account/media lifecycle and pixel-content indicators still report unverified or not observed. No commercial title captures are distributed with the project.
+The presentation rate is not a gameplay FPS benchmark. R77 progressed into a more demanding UI workload; its lower late presentation rate is a performance concern, not a controlled same-scene regression measurement. Draw and dispatch counters record observed calls, not a guarantee that each produced correct pixels. Visual progression and audio quality are maintainer observations; automated account/media lifecycle and pixel-content indicators remain unverified or not observed. No commercial title captures are distributed with the project.
 
 ### Startup progression
 
 ```mermaid
 flowchart LR
     A[Native launch] --> B[Local account selection]
-    B --> C[Planar and sRGB rasterization]
-    C --> D[Curve LUT compute]
-    D --> E[Intro logo animation observed]
-    E --> F[Post-intro indexed draw blocked]
-    F -. next objective .-> G[Main menu]
+    B --> C[Intro logo animation]
+    C --> D[Continue A prompt]
+    D --> E[Initial settings UI]
+    E --> F[Non-indexed draw blocked]
+    F -. R78 target .-> G[Main menu]
     G -. future .-> H[Gameplay]
-    E --> I[Intermittent audio: unresolved]
+    C --> I[Movie audio: unresolved]
+    E --> J[UI navigation audio observed]
     classDef reached fill:#d8eee0,stroke:#28704a,color:#163822
     classDef blocked fill:#f8e1d5,stroke:#a64e2b,color:#59250e
-    class A,B,C,D,E reached
+    class A,B,C,D,E,J reached
     class F,I blocked
 ```
 
@@ -72,26 +77,29 @@ flowchart LR
 
 | Area | Evidence and current boundary |
 | --- | --- |
-| Native execution | Native entry, five bound images, and zero missing imports in the latest run. Import resolution does not establish behavioral parity. |
-| Graphics | Recognizable guest UI and title intro animation observed. Planar-color and single-texture sRGB strips complete native GPU execution; typeless RGBA8 backing and typed RTV interpretation pass authored GPU readback. Shader coverage, resource coherence, and general command semantics remain incomplete. |
-| Compute | Existing 3D color transform and two-/three-segment curve LUT dispatches complete on the GPU. Authored 17- and 29-texel numerical readback fixtures pass for both device ABI paths. General RDNA2 translation and console-equivalent title output remain unverified. |
-| Input and local account | Guest-consumed wired DualSense input and local profile selection observed; the real host async runtime successfully returns an offline local-user handle. General callback delivery, online identity, privilege and token services remain incomplete or explicitly unsupported. |
-| Storage | Raw/Zlib payload contracts passed in the maintainer's November 26 local run, including strict length checks, legacy short-output behavior, overflow, and invalid-data rejection. Ordered reads and completion reporting exist; persistent local storage path access succeeds in the latest guest run. BCPack and shared weighted scheduling remain outstanding. |
-| Title audio and media | Audible title audio is reported for the intro, but severe gaps and jitter prevent continuous playback. The exact failure mechanism is not established; timing, buffering, scheduling and synchronization require investigation. Independent authored media fixtures do not establish title audio/video parity. |
-| Memory and performance | Indexed mapped views, contiguous alias resolution, opt-in resident-page CLZERO validation, versioned uploads and bounded descriptor infrastructure remain in place. Late presentation intervals reach 16.49/s in the latest run; general alias coherence, residency and submission costs remain open. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
+| Native execution | Native entry, five bound images, and zero missing imports in the R77 run. Import resolution does not establish behavioral parity. |
+| Graphics | Title intro, Continue prompt and initial settings UI observed. Planar-color, sRGB texture strips, and dithered/plain/alpha-mask indexed UI workloads report GPU completion. Texture arrays, typed views, dynamic sampler translation and additional texture formats are supported within validated contracts. General shader coverage, resource coherence and command semantics remain incomplete. |
+| Compute | Existing 3D color transform and two-/three-segment curve LUT dispatches complete on the GPU. Authored 17- and 29-texel numerical readback fixtures pass for both device ABI paths at the existing tolerance. General RDNA2 translation and console-equivalent title output remain unverified. |
+| Input and local account | Guest-consumed wired DualSense input, local profile selection and settings navigation observed; the real host async runtime successfully returns an offline local-user handle. General callback delivery, online identity, privilege and token services remain incomplete or explicitly unsupported. |
+| Storage | Local strict storage contracts and native DirectStorage fixture passed, including raw/Zlib reads, virtual-drive access, physical-page writes and ordered error reporting. BCPack and shared weighted scheduling remain outstanding. |
+| Title audio and media | Guest 48 kHz XApu/Opus and pre-skip contracts pass. Narration and UI navigation audio were reported to sound normal, whereas the movie soundtrack remains severely intermittent and distorted. Experimental mixer/movie scheduling did not resolve the defect. Bink PCM production, buffering, timing and WASAPI delivery require direct investigation. |
+| Memory and performance | Guarded memory publication, ordered same-queue texture uploads, optimized detiling, bounded immutable layout caching and CLZERO batching reduce identified subsystem costs. The ordered-upload GPU readback fixture passes. R77 late presentation throughput remains below the requested rate; overall improvement has not been demonstrated. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
 | Runtime services | Host initialization, local-user completion, gamertag reads and persistent storage access observed. Unsupported online/provider requests remain explicit failures. See [service contracts](docs/runtime-services.md). |
-| Diagnostics | Bounded graphics/compute capture, expanded signature and resource-binding reports, startup/input observations, CPU attribution, native PDBs, and runtime-bridge query sampling support investigation. Captures remain local. |
-| Post-intro transition | Strict execution terminates at a new unsupported indexed triangle-list draw; the main menu has not been demonstrated. |
+| Diagnostics and validation | R77 local Release build (zero warnings/errors), Native AOT publication, runtime contracts, graphics probes, native entry/thread, GameInput/physical memory and DirectStorage fixtures passed. Bounded captures remain local. GitHub Actions status must be verified for the exact commit. |
+| Post-intro transition | Initial configuration UI reached; strict execution terminates at a new non-indexed raster workload. Main-menu transition is the R78 target. |
 | Gameplay and sustained FPS | Not demonstrated. No overall completion percentage or competitive performance claim is made. |
 
-### Next engineering objectives
+### R78: the next major implementation
 
-1. Implement the post-intro indexed raster pipeline: 30 indices, 12-byte COLOR/POSITION vertex layout, descriptor table and root constants, with the captured inactive depth/stencil state. Validate native shader semantics, index range and resource bindings rather than bypassing the strict rendering guard.
-2. Investigate title audio continuity using measured producer/consumer timing, PCM queue depth, underruns, host output timing and frame scheduling. The current audio symptoms alone do not identify the cause.
-3. Improve submission and memory-publication costs while maintaining guest ordering, resource lifetime and correctness.
-4. Reach and validate the main menu, then expand shader/ABI coverage toward gameplay.
+| Development front | Objective |
+| --- | --- |
+| **Main menu** | Resolve the captured non-indexed rectangle-list pipeline and subsequent compatibility boundaries. Validate correct resource bindings, fixed-function state and GPU output; establish stable menu rendering and input. |
+| **Movie audio** | Trace actual Bink PCM producer/consumer timing, buffer occupancy, underruns and endpoint delivery. Correct the identified defect without regressing working narration and UI audio. |
+| **Performance** | Profile comparable scenes, isolate CPU emulation, resource staging, submission and guest worker costs, and reduce the critical path toward sustained requested presentation cadence without weakening synchronization. |
 
-The local build and earlier CPU/component contracts were successful as reported on November 26. The latest graphics probe also passed the curve-family numerical fixtures, including the previously failing cubic case at the existing tolerance; HLSL compiler warnings remain. CI and release validation require separate evidence for the exact commit. See [build and validation](docs/RELEASING.md#local-build-and-component-checks). The [development handoff](docs/development-handoff.md) records an earlier pre-intro checkpoint; the milestone and blocker above supersede that historical status.
+R78 is a development objective, not a promised release or guarantee that the next patch will reach the main menu. The three fronts will be developed together, with consolidated validation and explicit unsupported-operation boundaries.
+
+The R77 local validation logs establish the contracts above; HLSL compiler warnings remain. CI and release validation require separate evidence for the exact commit. See [build and validation](docs/RELEASING.md#local-build-and-component-checks). The [development handoff](docs/development-handoff.md) records an earlier checkpoint; this milestone and blocker supersede its historical status.
 
 Historical measurements and their limits remain in the [Architecture Atlas](docs/ARCHITECTURE-ATLAS.md). Compare the same scene, settings, capture interval, and matching symbols; inclusive stack percentages are not FPS measurements.
 
@@ -176,6 +184,15 @@ dotnet run --project tests/runtime-media/RuntimeMedia.csproj -c Release --no-bui
 dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
 .\artifacts\native\irx.exe --help
 ```
+
+For the consolidated local validation and R77 launch profile, use the reviewed scripts from the repository root:
+
+```powershell
+.\scripts\Invoke-Validation.ps1 -OutputDirectory "artifacts/validation/R77" -UnblockReviewedFixtures
+.\scripts\Invoke-R77.ps1
+```
+
+Only use `-UnblockReviewedFixtures` after reviewing the named native fixtures. The launch profile contains experimental performance and movie scheduling options; `-DisableMovieScheduling` and `-DisableClzeroBatch` permit comparison runs. These options do not establish correct title playback.
 
 Console contract projects execute through `dotnet run`; building the solution does not run them. Preserve the exact published EXE/DLL/PDB set when profiling, and use a distinct directory for each build being compared.
 

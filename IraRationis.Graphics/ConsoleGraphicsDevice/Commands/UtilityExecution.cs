@@ -4,16 +4,28 @@ using IraRationis.Graphics.Commands;
 
 namespace IraRationis.Graphics;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
     private const int MaximumIdleUtilityContexts = 8;
     private const ulong MaximumIdleUtilityBytes = 64UL << 20;
     private static readonly bool UtilityPoolingEnabled =
         Environment.GetEnvironmentVariable("IRX_RUNTIME_UTILITY_POOL") != "0";
+    private static readonly bool EnableOrderedTextureUploads =
+        Environment.GetEnvironmentVariable("IRX_ORDERED_TEXTURE_UPLOADS") == "1";
+    private static long _orderedTextureUploads;
     private static readonly Lock UtilityPoolGate = new();
     private static readonly List<UtilityContext> IdleUtilityContexts = new();
     private static ulong _idleUtilityBytes;
     internal static long _utilityCreated, _utilityReused, _utilityUploadBytes, _utilityUploadSkipped;
+
+    internal static void ReportOrderedTextureUploads(int count)
+    {
+        var total = Interlocked.Add(ref _orderedTextureUploads, count);
+        if (total <= 8 || (total & (total - 1)) == 0 || total % 256 < count)
+        {
+            Console.Error.WriteLine($"[graphics] IRX-R76-ORDERED-UPLOAD: completed={total}; lastBatch={count}.");
+        }
+    }
 
     // Only completed DIRECT utility work is pooled. Never use this for a guest-owned
     // allocator, a deferred command list, or a resource with unproven GPU completion.
@@ -100,8 +112,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ReportUtilityExecution()
     {
         TraceGraphicsSuccess($"[graphics] IRX-R53-UTILITY: created={Interlocked.Read(ref _utilityCreated)}; " +
-                 $"reused={Interlocked.Read(ref _utilityReused)}; " +
-                 $"versionedUploadBytes={Interlocked.Read(ref _utilityUploadBytes)}; " +
-                 $"unchangedUploads={Interlocked.Read(ref _utilityUploadSkipped)}.");
+                             $"reused={Interlocked.Read(ref _utilityReused)}; " +
+                             $"versionedUploadBytes={Interlocked.Read(ref _utilityUploadBytes)}; " +
+                             $"unchangedUploads={Interlocked.Read(ref _utilityUploadSkipped)}.");
     }
 }

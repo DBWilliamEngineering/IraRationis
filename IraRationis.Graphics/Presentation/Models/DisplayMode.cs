@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct DisplayMode
+internal struct DisplayMode
 {
     public uint Width;
     public uint Height;

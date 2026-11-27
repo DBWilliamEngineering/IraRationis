@@ -7,7 +7,7 @@ using IraRationis.Media.Audio;
 
 namespace IraRationis.HLE.Audio.Apu;
 
-internal sealed unsafe class XApuConnection : IDisposable
+internal sealed class XApuConnection : IDisposable
 {
     public readonly EventWaitHandle? Event;
     public readonly Lock Gate = new();

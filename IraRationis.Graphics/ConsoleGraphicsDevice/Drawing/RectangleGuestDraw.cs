@@ -4,7 +4,6 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Text;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Drawing.Models;
@@ -12,6 +11,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.VertexFetch.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics;
 
@@ -44,7 +44,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return true;
         }
 
-        if (count > 32 || address == 0 || 32UL * count > ulong.MaxValue - address || sizeof(NativeVertexInputElement) != 32)
+        if (count > 32 || address == 0 || 32UL * count > ulong.MaxValue - address
+            || sizeof(NativeVertexInputElement) != 32)
         {
             return false;
         }
@@ -121,7 +122,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
     }
 
-    private static bool TryNormalizeRectangleLayout(VertexInputElement[]? input, uint stride, out VertexInputElement[] elements)
+    private static bool TryNormalizeRectangleLayout(VertexInputElement[]? input, uint stride,
+        out VertexInputElement[] elements)
     {
         elements = [];
 
@@ -284,7 +286,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 default);
             var blob = SerializeHostRoot(contract, report, true);
 
-            if (vertexShader == null || (!indexedColor && geometryShader == null) || pixelShader == null || blob == null)
+            if (vertexShader == null || (!indexedColor && geometryShader == null) || pixelShader == null
+                || blob == null)
             {
                 _ = RejectRectangleDraw("host shader compilation or root serialization failed");
 
@@ -335,7 +338,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                         $"[graphics] R14 input {element.Name}: format={element.Format}, offset={element.Offset}.");
                 }
 
-                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report, geometryShader, native,
+                pipeline = CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report, geometryShader,
+                    native,
                     (uint)elements.Length);
             }
 
@@ -384,7 +388,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static bool TryRecordRectangleGuestDraw(nint self, uint vertices, uint instances, uint first, uint firstInstance,
+    private static bool TryRecordRectangleGuestDraw(nint self, uint vertices, uint instances, uint first,
+        uint firstInstance,
         bool indexed = false, int baseVertex = 0)
     {
         using var stageTiming = BeginTiming(GraphicsStage.RecordRectangle);
@@ -495,7 +500,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 IndexedArray = translated.IndexedArray,
                 ConstantOffset = constantOffset,
                 Capacity = capacity,
-                ConstantBytes = translated.IndexedArray ? RectangleConstantArrayBytes : indexedColor ? 64 : RectangleConstantBytes
+                ConstantBytes = translated.IndexedArray ? RectangleConstantArrayBytes :
+                    indexedColor ? 64 : RectangleConstantBytes
             };
 
             state.HostViews.Add(upload);
@@ -598,7 +604,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (!upload.IndexedColor)
             {
-                TraceGraphicsSuccess("[graphics] IRX-GFX-DRAW-R14: GPU COMPLETED guest rectangle (presentation unverified).");
+                TraceGraphicsSuccess(
+                    "[graphics] IRX-GFX-DRAW-R14: GPU COMPLETED guest rectangle (presentation unverified).");
             }
 
             TraceColor(queue, upload.Target, upload.IndexedArray ? "R23-indexed-output" :
@@ -640,7 +647,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             token.Clear();
 
-            if (!TryReadGuestMemory(upload.Table, token) || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag)
+            if (!TryReadGuestMemory(upload.Table, token)
+                || BinaryPrimitives.ReadUInt32LittleEndian(token) != ConstantTag)
             {
                 Environment.FailFast($"[graphics] R14/R22/R23 submission-time descriptor is not an IRXC CBV token; " +
                                      $"tag=0x{BinaryPrimitives.ReadUInt32LittleEndian(token):X8}.");
@@ -890,7 +898,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         vertices[38] = 8;
 
         if (!TryConstantExtent(plan, vertices, [1, 0, 3, 0, 1, 0], out var small) || small != 576 ||
-            !TryConstantExtent(plan, vertices, [2, 0, 3, 0, 1, 0], out var large) || large != RectangleConstantArrayBytes ||
+            !TryConstantExtent(plan, vertices, [2, 0, 3, 0, 1, 0], out var large)
+            || large != RectangleConstantArrayBytes ||
             TryConstantExtent(plan, vertices, [0, 0, 1, 0, 2, 0], out _))
         {
             throw new InvalidOperationException("R23 indexed constant extent regression failed.");

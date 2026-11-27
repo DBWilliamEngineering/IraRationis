@@ -1,39 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Synchronization;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics.Commands;
 
 internal sealed unsafe class UtilityContext : IDisposable
 {
-    private readonly VersionedUploadBuffer? _versions;
-    private VersionedUploadBufferSnapshot? _snapshot;
-    private bool _prepared;
-    private bool _submitted;
-    private bool _completed;
-    private bool _returned;
+    internal readonly uint DescriptorCount;
 
     internal readonly nint Device;
-    internal readonly ulong UploadBytes;
-    internal readonly uint DescriptorCount;
     internal readonly int Owner = Environment.CurrentManagedThreadId;
+    internal readonly ulong UploadBytes;
     internal readonly bool Versioned;
+    private readonly VersionedUploadBuffer? _versions;
 
     internal nint Allocator;
+    internal nint Heap;
     internal nint List;
     internal nint Upload;
-    internal nint Heap;
-
-    internal int LastUploadBytes
-    {
-        get;
-        private set;
-    }
+    private bool _completed;
+    private bool _prepared;
+    private bool _returned;
+    private VersionedUploadBufferSnapshot? _snapshot;
+    private bool _submitted;
 
     internal UtilityContext(nint device, ulong uploadBytes, uint descriptorCount, bool versioned)
     {
@@ -55,7 +49,9 @@ internal sealed unsafe class UtilityContext : IDisposable
             {
                 var upload = nint.Zero;
 
-                var resultCode = ConsoleGraphicsDevice.CreateHostResource(ConsoleGraphicsDevice.HostBufferDescription(uploadBytes), 2, ConsoleGraphicsDevice.GenericRead, &upload);
+                var resultCode = ConsoleGraphicsDevice.CreateHostResource(
+                    ConsoleGraphicsDevice.HostBufferDescription(uploadBytes), 2, ConsoleGraphicsDevice.GenericRead,
+                    &upload);
 
                 Upload = upload;
 
@@ -89,6 +85,38 @@ internal sealed unsafe class UtilityContext : IDisposable
         }
     }
 
+    internal int LastUploadBytes
+    {
+        get;
+        private set;
+    }
+
+    public void Dispose()
+    {
+        if (_returned)
+        {
+            return;
+        }
+
+        if (_submitted && !_completed)
+        {
+            Environment.FailFast("R53 attempted to retire an in-flight utility context.");
+        }
+
+        _returned = true;
+
+        if (_completed && _snapshot is null)
+        {
+            ConsoleGraphicsDevice.ReturnUtilityContext(this);
+
+            return;
+        }
+
+        // Aborted recording is discarded, never pooled. Its upload state and
+        // native descriptors may contain partially prepared data.
+        Destroy();
+    }
+
     internal void Reset()
     {
         if (!_completed || _snapshot is not null)
@@ -99,9 +127,11 @@ internal sealed unsafe class UtilityContext : IDisposable
         _completed = false;
         _submitted = false;
 
-        ConsoleGraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)Allocator)->Reset(), "R53 utility allocator reset");
+        ConsoleGraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)Allocator)->Reset(),
+            "R53 utility allocator reset");
 
-        ConsoleGraphicsDevice.CheckHostResult(((ID3D12GraphicsCommandList*)List)->Reset((ID3D12CommandAllocator*)Allocator, null),
+        ConsoleGraphicsDevice.CheckHostResult(
+            ((ID3D12GraphicsCommandList*)List)->Reset((ID3D12CommandAllocator*)Allocator, null),
             "R53 utility list reset");
 
         _returned = false;
@@ -139,7 +169,8 @@ internal sealed unsafe class UtilityContext : IDisposable
 
         var noRead = default(HostRange);
         var mapped = (void*)null;
-        var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)ConsoleGraphicsDevice.Slot(Upload, 8);
+        var map =
+            (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)ConsoleGraphicsDevice.Slot(Upload, 8);
         var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)ConsoleGraphicsDevice.Slot(Upload, 9);
 
         ConsoleGraphicsDevice.CheckHostResult(map(Upload, 0, &noRead, &mapped), "R53 versioned upload map");
@@ -170,46 +201,18 @@ internal sealed unsafe class UtilityContext : IDisposable
 
     internal void SubmitAndWait(nint queue)
     {
-        if (_returned || _submitted || (Versioned && !_prepared) || queue == 0)
-        {
-            throw new InvalidOperationException("R53 invalid utility submission.");
-        }
-
         using var timing = ConsoleGraphicsDevice.BeginTiming(GraphicsStage.UtilitySubmit);
-
-        ConsoleGraphicsDevice.CheckHostResult(((ID3D12GraphicsCommandList*)List)->Close(), "R53 utility close");
-
-        // Establish the completion object before issuing work. If completion cannot
-        // be established after execution, native resources must not be reclaimed.
         using var completion = new HostCompletionFence();
-
-        if (_snapshot is { } snapshot)
-        {
-            _versions!.MarkSubmitted(snapshot);
-        }
-
-        var list = List;
-
-        _submitted = true;
 
         try
         {
-            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(queue, 10))(queue, 1, &list);
-
+            SubmitOrdered(queue);
             completion.Wait(queue);
-
-            _completed = true;
-
-            if (_snapshot is { } done)
-            {
-                _versions!.CompleteAfterFenceWait(done);
-
-                _snapshot = null;
-            }
+            CompleteOrdered();
         }
         catch (Exception exception)
         {
-            if (!_completed)
+            if (_submitted && !_completed)
             {
                 Environment.FailFast("R53 utility GPU completion is unproven.", exception);
             }
@@ -218,30 +221,38 @@ internal sealed unsafe class UtilityContext : IDisposable
         }
     }
 
-    public void Dispose()
+    // Caller retains this context until a later fence on the same queue completes.
+    internal void SubmitOrdered(nint queue)
     {
-        if (_returned)
+        if (_returned || _submitted || (Versioned && !_prepared) || queue == 0)
         {
-            return;
+            throw new InvalidOperationException("R53 invalid utility submission.");
         }
 
-        if (_submitted && !_completed)
+        ConsoleGraphicsDevice.CheckHostResult(((ID3D12GraphicsCommandList*)List)->Close(), "R53 utility close");
+        if (_snapshot is { } snapshot)
         {
-            Environment.FailFast("R53 attempted to retire an in-flight utility context.");
+            _versions!.MarkSubmitted(snapshot);
         }
 
-        _returned = true;
+        var list = List;
+        _submitted = true;
+        ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(queue, 10))(queue, 1, &list);
+    }
 
-        if (_completed && _snapshot is null)
+    internal void CompleteOrdered()
+    {
+        if (!_submitted || _completed)
         {
-            ConsoleGraphicsDevice.ReturnUtilityContext(this);
-
-            return;
+            throw new InvalidOperationException("Utility completion without outstanding submission.");
         }
 
-        // Aborted recording is discarded, never pooled. Its upload state and
-        // native descriptors may contain partially prepared data.
-        Destroy();
+        _completed = true;
+        if (_snapshot is { } done)
+        {
+            _versions!.CompleteAfterFenceWait(done);
+            _snapshot = null;
+        }
     }
 
     internal void Destroy()

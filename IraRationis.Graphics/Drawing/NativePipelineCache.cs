@@ -8,15 +8,16 @@ namespace IraRationis.Graphics.Drawing;
 // Cache references are independent of recorded command-list references.
 // Eviction cannot retire an object still owned by a recording.
 // Only immutable native pipeline objects are cached; bindings remain per list.
-internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : class
+internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
     where TValue : class
 {
     private const int Capacity = 64;
-    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>> _entries = new();
-    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
+    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>>
+        _entries = new();
     private readonly Lock _gate = new();
     private readonly Func<TValue, (nint Root, nint Pipeline)> _handles;
     private readonly string _name;
+    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
     private long _hits, _misses, _evictions;
 
     public NativePipelineCache(string name, Func<TValue, (nint Root, nint Pipeline)> handles)
@@ -69,9 +70,11 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
         // Never hold the native cache lock while writing diagnostics.
         var observations = value is null ? misses : hits;
 
-        if (ConsoleGraphicsDevice.EnableVerboseGraphics || observations <= 2 || (observations & (observations - 1)) == 0)
+        if (ConsoleGraphicsDevice.EnableVerboseGraphics || observations <= 2
+                                                        || (observations & (observations - 1)) == 0)
         {
-            Console.Error.WriteLine($"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
+            Console.Error.WriteLine(
+                $"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
         }
 
         return value;
@@ -90,7 +93,8 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
                 return;
             }
 
-            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(new NativePipelineCacheEntry<TKey, TValue>(key, value));
+            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(
+                new NativePipelineCacheEntry<TKey, TValue>(key, value));
             var handles = _handles(value);
 
             ConsoleGraphicsDevice.RetainHostObject(handles.Root);

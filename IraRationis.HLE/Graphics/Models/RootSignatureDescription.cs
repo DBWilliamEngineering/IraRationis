@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Graphics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct RootSignatureDescription
+internal struct RootSignatureDescription
 {
     public uint ParameterCount;
     public nint Parameters;

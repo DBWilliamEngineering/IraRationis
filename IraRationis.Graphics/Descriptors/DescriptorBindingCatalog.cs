@@ -11,9 +11,9 @@ namespace IraRationis.Graphics.Descriptors;
 /// </summary>
 internal sealed class DescriptorBindingCatalog
 {
+    private readonly int _capacity;
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly Dictionary<ulong, DescriptorBindingCatalogResourceEntry> _resources = [];
-    private readonly int _capacity;
     private ulong _generation;
 
     internal DescriptorBindingCatalog(int capacity = 1024)

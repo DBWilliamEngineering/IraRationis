@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Drawing.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NativeVertexInputElement
+internal struct NativeVertexInputElement
 {
     public nint Name;
     public uint Index;

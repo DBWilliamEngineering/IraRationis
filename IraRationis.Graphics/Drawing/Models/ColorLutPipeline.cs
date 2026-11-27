@@ -2,4 +2,4 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed unsafe record ColorLutPipeline(nint Root, nint Pipeline);
+internal sealed record ColorLutPipeline(nint Root, nint Pipeline);

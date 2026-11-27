@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.Shaders.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct PipelineObject
+internal struct PipelineObject
 {
     public GraphicsObjectHeader Header;
     public fixed uint Packet[8];

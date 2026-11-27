@@ -80,7 +80,8 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         var started = Stopwatch.GetTimestamp();
         var value = ++timeline.Value;
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(queue, 14))(queue, timeline.Fence,
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(queue, 14))(
+            queue, timeline.Fence,
             value);
 
         if (resultCode < 0)
@@ -102,7 +103,8 @@ internal sealed unsafe class HostCompletionFence : IDisposable
             // Reset before registering this signal's event, never after.
             timeline.Completion.Reset();
 
-            var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(timeline.Fence, 9);
+            var setEvent =
+                (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(timeline.Fence, 9);
 
             resultCode = setEvent(timeline.Fence, value, timeline.Completion.SafeWaitHandle.DangerousGetHandle());
 

@@ -29,5 +29,8 @@ internal enum GraphicsStage
     FrameStats,
     ClockCalibration,
     MemoryPublication,
+    FencePublication,
+    GuardedPublication,
+    KernelPublication,
     Count
 }

@@ -3,9 +3,9 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using IraRationis.Graphics.Commands;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
-using IraRationis.Graphics.Commands;
 
 namespace IraRationis.Graphics;
 

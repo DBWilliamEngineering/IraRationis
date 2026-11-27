@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct PresentationMonitorInfo
+internal struct PresentationMonitorInfo
 {
     public uint Size;
     public PresentationRect Monitor, Work;

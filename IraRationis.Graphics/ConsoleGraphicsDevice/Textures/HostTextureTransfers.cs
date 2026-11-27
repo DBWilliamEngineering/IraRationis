@@ -148,14 +148,15 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Extend the existing native resource round-trip probe. Original RGBA8 data,
     // two unequal mip extents, nonzero placement, pitched rows and a real GPU copy.
-    private static void VerifyHostTextureTransfers(nint queue)
+    private static void VerifyHostTextureTransfers(nint queue, bool deferUpload = false, uint storageFormat = 28,
+        uint copyFormat = 28)
     {
         const int bytes = 2048;
 
         HostTextureTransferFootprint[] footprints =
         [
-            new(0, 28, 7, 5, 256, 0),
-            new(1, 28, 3, 2, 256, 1536)
+            new(0, copyFormat, 7, 5, 256, 0),
+            new(1, copyFormat, 3, 2, 256, 1536)
         ];
 
         var data = new byte[bytes];
@@ -197,7 +198,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Height = 5,
             DepthOrArraySize = 1,
             MipLevels = 2,
-            Format = 28,
+            Format = storageFormat,
             SampleCount = 1
         };
         nint texture = 0, readback = 0;
@@ -211,7 +212,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 "R57 host texture readback");
             RequireHostObject(readback, "R57 host texture readback");
 
-            using var utility = AcquireUtilityContext(bytes, 0, versioned: true);
+            using var utility = AcquireUtilityContext(bytes, 0, true);
 
             utility.PrepareVersionedUpload(data);
 
@@ -221,19 +222,37 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             foreach (var footprint in footprints)
             {
-                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, upload: true);
+                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, true);
             }
 
-            TransitionHostResource(list, texture, CopyDestination, CopySource);
-
-            foreach (var footprint in footprints)
+            if (deferUpload)
             {
-                RecordHostTextureTransfer(list, texture, readback, bytes, footprint, upload: false);
+                TransitionHostResource(list, texture, CopyDestination, 0);
+                using var ordered = new OrderedTextureUploads(queue);
+                ordered.Submit(utility);
+                using var consumer = AcquireUtilityContext(0, 0);
+                var consumerList = consumer.List;
+                TransitionHostResource(consumerList, texture, 0, CopySource);
+                foreach (var footprint in footprints)
+                {
+                    RecordHostTextureTransfer(consumerList, texture, readback, bytes, footprint, false);
+                }
+
+                TransitionHostResource(consumerList, texture, CopySource, 0);
+                consumer.SubmitAndWait(queue);
+                ordered.CompleteAfterFence();
             }
+            else
+            {
+                TransitionHostResource(list, texture, CopyDestination, CopySource);
+                foreach (var footprint in footprints)
+                {
+                    RecordHostTextureTransfer(list, texture, readback, bytes, footprint, false);
+                }
 
-            TransitionHostResource(list, texture, CopySource, 0);
-
-            utility.SubmitAndWait(queue);
+                TransitionHostResource(list, texture, CopySource, 0);
+                utility.SubmitAndWait(queue);
+            }
 
             var read = new HostRange { End = bytes };
             var noWrite = default(HostRange);
@@ -276,7 +295,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 unmap(readback, 0, &noWrite);
             }
 
-            Console.WriteLine("[graphics-probe] IRX-R57: mips=2; activeBytes=164; readback=verified; invalidFootprints=rejected.");
+            Console.WriteLine(storageFormat != 28
+                ? $"[graphics-probe] R77 color storage readback passed: storage={storageFormat}; footprint={copyFormat}."
+                : deferUpload
+                    ? "[graphics-probe] R76 ordered texture upload and subsequent same-queue readback passed."
+                    : "[graphics-probe] IRX-R57: mips=2; activeBytes=164; readback=verified; invalidFootprints=rejected.");
         }
         finally
         {

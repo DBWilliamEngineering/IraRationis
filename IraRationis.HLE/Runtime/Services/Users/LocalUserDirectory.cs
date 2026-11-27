@@ -9,8 +9,8 @@ internal sealed class LocalUserDirectory
     private const int MaximumHandles = 4096;
     private readonly Lock _gate = new();
     private readonly HashSet<nint> _handles = [];
-    private long _nextHandle;
     private bool _added;
+    private long _nextHandle;
 
     internal LocalUserDirectory(LocalUserProfile profile)
     {
@@ -19,7 +19,10 @@ internal sealed class LocalUserDirectory
         Profile = profile;
     }
 
-    internal LocalUserProfile Profile { get; }
+    internal LocalUserProfile Profile
+    {
+        get;
+    }
 
     internal bool IsAdded
     {

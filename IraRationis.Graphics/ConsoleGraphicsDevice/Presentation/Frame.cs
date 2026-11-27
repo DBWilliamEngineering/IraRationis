@@ -154,7 +154,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var deadline = Stopwatch.GetTimestamp() + ticks;
 
-        for(;;)
+        for (;;)
         {
             var remaining = deadline - Stopwatch.GetTimestamp();
 

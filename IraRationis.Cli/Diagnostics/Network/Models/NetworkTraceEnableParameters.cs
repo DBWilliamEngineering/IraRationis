@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Cli.Diagnostics.Network.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NetworkTraceEnableParameters
+internal struct NetworkTraceEnableParameters
 {
     public uint Version;
     public uint EnableProperty;

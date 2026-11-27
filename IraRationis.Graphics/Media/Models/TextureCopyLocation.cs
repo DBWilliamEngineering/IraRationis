@@ -6,7 +6,7 @@ using TerraFX.Interop.DirectX;
 namespace IraRationis.Graphics.Media.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 48)]
-internal unsafe struct TextureCopyLocation
+internal struct TextureCopyLocation
 {
     [FieldOffset(0)] public nint Resource;
     [FieldOffset(8)] public uint Type;

@@ -7,18 +7,22 @@ using IraRationis.Shaders.Raster.Models;
 namespace IraRationis.Shaders.Raster;
 
 /// <summary>
-/// Bounded, independently authored float4 graphics IR. Stage interfaces are fixed;
-/// the expressions producing position, color, UV and target color are programmable.
-/// This is not a console shader decoder.
+///     Bounded, independently authored float4 graphics IR. Stage interfaces are fixed;
+///     the expressions producing position, color, UV and target color are programmable.
+///     This is not a console shader decoder.
 /// </summary>
 public sealed class ProgrammableRasterProgram
 {
     private const int MaximumNodes = 128;
-    private readonly RasterNode[] _vertex;
+
+    private const string Varyings =
+        "struct Varyings { float4 Position : SV_Position; float4 Color : COLOR0; float4 UV : TEXCOORD0; };\n";
     private readonly RasterNode[] _pixel;
     private readonly int _position, _color, _uv, _target;
+    private readonly RasterNode[] _vertex;
 
-    public ProgrammableRasterProgram(ReadOnlySpan<RasterNode> vertex, int position, int color, int textureCoordinateExpression,
+    public ProgrammableRasterProgram(ReadOnlySpan<RasterNode> vertex, int position, int color,
+        int textureCoordinateExpression,
         ReadOnlySpan<RasterNode> pixel, int target)
     {
         _vertex = Validate(vertex, false);
@@ -58,6 +62,7 @@ public sealed class ProgrammableRasterProgram
                 case RasterExpression.Color:
                 case RasterExpression.TexCoord:
                     break;
+
                 case RasterExpression.Constant:
                     if (!Finite(node.Constant))
                     {
@@ -65,6 +70,7 @@ public sealed class ProgrammableRasterProgram
                     }
 
                     break;
+
                 case RasterExpression.Add:
                 case RasterExpression.Subtract:
                 case RasterExpression.Multiply:
@@ -72,14 +78,17 @@ public sealed class ProgrammableRasterProgram
                     ValidateOutput(node.Right, index);
 
                     break;
+
                 case RasterExpression.Saturate:
                     ValidateOutput(node.Left, index);
 
                     break;
+
                 case RasterExpression.Sample when pixel:
                     ValidateOutput(node.Left, index);
 
                     break;
+
                 default:
                     throw new NotSupportedException("Unsupported graphics expression or shader stage.");
             }
@@ -93,13 +102,12 @@ public sealed class ProgrammableRasterProgram
         return float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z) && float.IsFinite(value.W);
     }
 
-    private const string Varyings = "struct Varyings { float4 Position : SV_Position; float4 Color : COLOR0; float4 UV : TEXCOORD0; };\n";
-
     public string EmitVertex()
     {
         var source = new StringBuilder(Varyings);
 
-        source.AppendLine("struct Vertex { float4 Position : POSITION0; float4 Color : COLOR0; float4 UV : TEXCOORD0; };");
+        source.AppendLine(
+            "struct Vertex { float4 Position : POSITION0; float4 Color : COLOR0; float4 UV : TEXCOORD0; };");
         source.AppendLine("Varyings main(Vertex input)\n{");
 
         EmitNodes(source, _vertex);

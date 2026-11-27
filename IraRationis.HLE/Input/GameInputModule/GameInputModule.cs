@@ -380,12 +380,14 @@ public static unsafe partial class GameInputModule
                 if (TraceInput)
                 {
                     InputDiagnostics.Write(InputDiagnosticCategory.DeviceRegistration,
-                        (Registration: registration, Enumeration: enumeration, Immediate: events.Count, Queued: enumerationCount),
-                        static request => $"token={request.Registration.Token}; device=0x{request.Registration.Device:X}; "
-                                          + $"kind=0x{request.Registration.Kind:X}; status=0x{request.Registration.Status:X}; "
-                                          + $"callback=0x{request.Registration.Callback:X}; context=0x{request.Registration.Context:X}; "
-                                          + $"enumeration={request.Enumeration}; immediate={request.Immediate}; "
-                                          + $"queued={request.Queued}; phase=registered");
+                        (Registration: registration, Enumeration: enumeration, Immediate: events.Count,
+                            Queued: enumerationCount),
+                        static request =>
+                            $"token={request.Registration.Token}; device=0x{request.Registration.Device:X}; "
+                            + $"kind=0x{request.Registration.Kind:X}; status=0x{request.Registration.Status:X}; "
+                            + $"callback=0x{request.Registration.Callback:X}; context=0x{request.Registration.Context:X}; "
+                            + $"enumeration={request.Enumeration}; immediate={request.Immediate}; "
+                            + $"queued={request.Queued}; phase=registered");
                 }
             }
 
@@ -680,7 +682,7 @@ public static unsafe partial class GameInputModule
             var category = GuestReadingCategory(unchecked((uint)previous), pad.Buttons);
 
             InputDiagnostics.Write(category,
-                (Observation: observation, Snapshot: snapshot, Buttons: pad.Buttons),
+                (Observation: observation, Snapshot: snapshot, pad.Buttons),
                 static reading => $"reads={reading.Observation}; slot={reading.Snapshot.Index}; "
                                   + $"sequence={reading.Snapshot.Sequence}; inputTimestamp={reading.Snapshot.Timestamp}; "
                                   + $"buttons=0x{reading.Buttons:X8}; Y={(reading.Buttons & 32) != 0}");
@@ -870,7 +872,8 @@ public static unsafe partial class GameInputModule
         return (nint)table;
     }
 
-    public static GameInputPadState ConvertPad(ushort buttons, byte leftTrigger, byte rightTrigger, short leftX, short leftY,
+    public static GameInputPadState ConvertPad(ushort buttons, byte leftTrigger, byte rightTrigger, short leftX,
+        short leftY,
         short rightX, short rightY)
     {
         var guest = 0U;
@@ -964,7 +967,8 @@ public static unsafe partial class GameInputModule
 
     public static void VerifyLayouts()
     {
-        if (sizeof(GameInputPadState) != 28 || sizeof(GameInputKeyState) != 12 || sizeof(GameInputDeviceInfo) != 320 || sizeof(GameInputXInputState) != 16)
+        if (sizeof(GameInputPadState) != 28 || sizeof(GameInputKeyState) != 12 || sizeof(GameInputDeviceInfo) != 320
+            || sizeof(GameInputXInputState) != 16)
         {
             throw new InvalidOperationException("GameInput ABI layout mismatch.");
         }

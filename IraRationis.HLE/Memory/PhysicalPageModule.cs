@@ -3,9 +3,9 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 using IraRationis.HLE.Memory.Models;
 using IraRationis.HLE.Runtime.Models;
+using Microsoft.Win32.SafeHandles;
 
 namespace IraRationis.HLE.Memory;
 

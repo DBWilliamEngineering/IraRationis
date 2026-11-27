@@ -5,7 +5,7 @@ using IraRationis.Media.Playback;
 
 namespace IraRationis.Cli.Media;
 
-internal sealed unsafe class RuntimeMediaPresenter : IGpuVideoPresenter
+internal sealed class RuntimeMediaPresenter : IGpuVideoPresenter
 {
     private readonly Nv12Presenter _presenter;
 

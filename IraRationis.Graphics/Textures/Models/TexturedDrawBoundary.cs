@@ -2,4 +2,4 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal readonly unsafe record struct TexturedDrawBoundary(TexturedDrawUpload Upload, bool Complete);
+internal readonly record struct TexturedDrawBoundary(TexturedDrawUpload Upload, bool Complete);

@@ -4,10 +4,10 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 using IraRationis.HLE.Memory;
 using IraRationis.HLE.Runtime.Models;
 using IraRationis.HLE.Storage.Models;
+using Microsoft.Win32.SafeHandles;
 
 namespace IraRationis.HLE.Storage;
 

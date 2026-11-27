@@ -5,5 +5,8 @@ using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics.Commands.Models;
 
-internal readonly unsafe record struct DeferredCopy(ulong Destination, ulong Source, ulong Size,
+internal readonly record struct DeferredCopy(
+    ulong Destination,
+    ulong Source,
+    ulong Size,
     LinearTextureTransfer? Texture = null);

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XMemAddressRequirements
+internal struct XMemAddressRequirements
 {
     public nuint Lowest;
     public nuint Highest;

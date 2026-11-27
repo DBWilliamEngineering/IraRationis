@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 24)]
-internal unsafe struct PresentPlanePrefix
+internal struct PresentPlanePrefix
 {
     [FieldOffset(0)] public ulong Token;
     [FieldOffset(8)] public uint ResourceCount;

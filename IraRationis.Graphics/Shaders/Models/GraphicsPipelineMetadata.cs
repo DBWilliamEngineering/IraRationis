@@ -5,7 +5,7 @@ using IraRationis.Graphics.Drawing.Models;
 
 namespace IraRationis.Graphics.Shaders.Models;
 
-internal sealed unsafe record GraphicsPipelineMetadata(
+internal sealed record GraphicsPipelineMetadata(
     nint Root,
     List<PipelineShader> Shaders,
     List<PipelineStateRecord> State,

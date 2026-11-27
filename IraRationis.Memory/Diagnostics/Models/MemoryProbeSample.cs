@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Memory.Diagnostics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct MemoryProbeSample
+public struct MemoryProbeSample
 {
     public double StagingMs;
     public double CopyMs;

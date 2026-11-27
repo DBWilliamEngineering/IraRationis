@@ -7,7 +7,7 @@ using IraRationis.HLE.Storage.Models;
 
 namespace IraRationis.HLE.Storage;
 
-internal sealed unsafe class DirectStorageQueue : IDisposable
+internal sealed class DirectStorageQueue : IDisposable
 {
     private readonly int _capacity;
     private readonly object _gate = new();
@@ -16,12 +16,12 @@ internal sealed unsafe class DirectStorageQueue : IDisposable
     private readonly Queue<StorageCommand> _submitted = new();
     private readonly Thread _worker;
     private bool _closed;
-    private int _firstFailure;
     private long _completedStorageRequests;
     private long _failedStorageRequests;
+    private int _firstFailure;
+    private bool _running;
     private long _storageOutputBytes;
     private long _storageStatusCount;
-    private bool _running;
 
     public DirectStorageQueue(int capacity)
     {
@@ -136,7 +136,7 @@ internal sealed unsafe class DirectStorageQueue : IDisposable
 
     private void Work()
     {
-        for(;;)
+        for (;;)
         {
             StorageCommand command;
 

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XMemProcessMemoryCounters
+internal struct XMemProcessMemoryCounters
 {
     public uint Size;
     public uint PageFaultCount;

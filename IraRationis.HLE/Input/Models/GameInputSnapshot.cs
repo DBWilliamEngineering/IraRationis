@@ -4,7 +4,12 @@
 
 namespace IraRationis.HLE.Input.Models;
 
-internal sealed unsafe record GameInputSnapshot(int Index, ulong Sequence, ulong Timestamp, GameInputPadState? Pad, GameInputKeyState[] Keys)
+internal sealed record GameInputSnapshot(
+    int Index,
+    ulong Sequence,
+    ulong Timestamp,
+    GameInputPadState? Pad,
+    GameInputKeyState[] Keys)
 {
     public uint Kind
     {

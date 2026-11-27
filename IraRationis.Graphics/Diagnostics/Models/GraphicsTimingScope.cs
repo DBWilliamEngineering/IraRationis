@@ -4,7 +4,8 @@ using System.Diagnostics;
 
 namespace IraRationis.Graphics.Diagnostics.Models;
 
-internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample) : IDisposable
+internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample)
+    : IDisposable
 {
     public void Dispose()
     {

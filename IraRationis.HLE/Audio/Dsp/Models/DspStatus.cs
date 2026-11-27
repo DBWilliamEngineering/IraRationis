@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Dsp.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct DspStatus
+public struct DspStatus
 {
     public uint Submitted;
     public uint Completed;

@@ -6,7 +6,7 @@ using IraRationis.Loader.Memory.Models;
 
 namespace IraRationis.Loader.Memory;
 
-internal static unsafe partial class WindowsNative
+internal static partial class WindowsNative
 {
     internal const uint ReadWrite = 4;
     internal const uint ExecuteRead = 0x20;

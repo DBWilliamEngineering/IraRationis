@@ -22,7 +22,8 @@ public static unsafe class DspModule
                 (nuint)(delegate* unmanaged[Stdcall]<void*, uint, uint, uint, uint, DspHandle**, int>)&Connect),
             new HleExport("XDspDisconnect", (nuint)(delegate* unmanaged[Stdcall]<DspHandle*, int>)&Disconnect),
             new HleExport("XDspActivate",
-                (nuint)(delegate* unmanaged[Stdcall]<DspHandle*, DspStreamDescription*, DspStatus**, DspStream**, int>)&Activate),
+                (nuint)(delegate* unmanaged[Stdcall]<DspHandle*, DspStreamDescription*, DspStatus**, DspStream**, int>)
+                &Activate),
             new HleExport("XDspDeactivate", (nuint)(delegate* unmanaged[Stdcall]<DspStream*, int>)&Deactivate),
             new HleExport("XDspSubmitCommand",
                 (nuint)(delegate* unmanaged[Stdcall]<DspStream*, DspCommand*, uint*, int>)&Submit)
@@ -87,12 +88,14 @@ public static unsafe class DspModule
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int Activate(DspHandle* dsp, DspStreamDescription* description, DspStatus** status, DspStream** stream)
+    private static int Activate(DspHandle* dsp, DspStreamDescription* description, DspStatus** status,
+        DspStream** stream)
     {
         return ActivateCore(dsp, description, status, stream);
     }
 
-    public static int ActivateCore(DspHandle* dsp, DspStreamDescription* description, DspStatus** status, DspStream** stream)
+    public static int ActivateCore(DspHandle* dsp, DspStreamDescription* description, DspStatus** status,
+        DspStream** stream)
     {
         if (status == null || stream == null)
         {
@@ -118,7 +121,7 @@ public static unsafe class DspModule
             return InvalidArgument;
         }
 
-        for(;;)
+        for (;;)
         {
             var active = Volatile.Read(ref dsp->Active);
 

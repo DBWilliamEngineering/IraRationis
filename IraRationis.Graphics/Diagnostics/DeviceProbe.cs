@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using IraRationis.Graphics.Textures;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Diagnostics.Models;
+using IraRationis.Graphics.Textures;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Raster;
+using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 
 namespace IraRationis.Graphics.Diagnostics;
 
@@ -246,10 +246,11 @@ public static unsafe class DeviceProbe
                 }
 
                 ConsoleGraphicsDevice.VerifyHostClearProbe(clearReadback);
-                ConsoleGraphicsDevice.VerifyHostClearProbe(linearReadback, 64, tolerance: 1);
-                ConsoleGraphicsDevice.VerifyHostClearProbe(srgbReadback, 137, tolerance: 1);
+                ConsoleGraphicsDevice.VerifyHostClearProbe(linearReadback, 64, 1);
+                ConsoleGraphicsDevice.VerifyHostClearProbe(srgbReadback, 137, 1);
 
-                writer.WriteLine("[graphics-probe] Guest sRGB backing with linear and default sRGB RTVs passed GPU readback.");
+                writer.WriteLine(
+                    "[graphics-probe] Guest sRGB backing with linear and default sRGB RTVs passed GPU readback.");
 
                 ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
 

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct DescriptorToken
+internal struct DescriptorToken
 {
     public uint Tag;
     public uint Kind;

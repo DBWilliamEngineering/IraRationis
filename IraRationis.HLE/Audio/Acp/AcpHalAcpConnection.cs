@@ -6,7 +6,7 @@ using IraRationis.HLE.Audio.Acp.Models;
 
 namespace IraRationis.HLE.Audio.Acp;
 
-internal sealed unsafe class AcpHalAcpConnection
+internal sealed class AcpHalAcpConnection
 {
     public readonly Lock Gate = new();
     public readonly long Started = Stopwatch.GetTimestamp();

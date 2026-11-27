@@ -4,15 +4,16 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders;
 using IraRationis.Graphics.Shaders.Models;
+using IraRationis.Shaders.Compute;
 using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics;
 
@@ -617,13 +618,15 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("sRGB texture-strip host shader/root serialization failed.");
             }
 
-            Console.WriteLine("[graphics-probe] sRGB texture-strip host shader compilation and root serialization passed (no GPU draw).");
+            Console.WriteLine(
+                "[graphics-probe] sRGB texture-strip host shader compilation and root serialization passed (no GPU draw).");
 
             foreach (var format in new uint[] { 41, 56, 58, 16, 35, 37, 2, 28, 31 })
             {
-                if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(format), "cs_5_1", Console.Out) == null)
+                if (CompileHostShader(CurveLutCompiler.CreateHostSource(format), "cs_5_1", Console.Out) == null)
                 {
-                    throw new InvalidOperationException($"Curve LUT host shader compilation failed for format {format}.");
+                    throw new InvalidOperationException(
+                        $"Curve LUT host shader compilation failed for format {format}.");
                 }
             }
 
@@ -632,12 +635,38 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Curve LUT shared compute root serialization failed.");
             }
 
-            if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(41, 3), "cs_5_1", Console.Out) == null)
+            if (CompileHostShader(CurveLutCompiler.CreateHostSource(41, 3), "cs_5_1", Console.Out) == null)
             {
                 throw new InvalidOperationException("Three-segment curve LUT host shader compilation failed.");
             }
 
-            Console.WriteLine("[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
+            Console.WriteLine(
+                "[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
+
+            VerifyIndexedUiSampler();
+
+            if (CompileHostShader(IndexedUiCompiler.VertexSource, "vs_5_1", Console.Out) == null ||
+                CompileHostShader(IndexedUiCompiler.PixelSource, "ps_5_1", Console.Out) == null
+                || SerializeIndexedUiRoot() == null ||
+                CompileHostShader(IndexedUiCompiler.PlainPixelSource, "ps_5_1", Console.Out) == null
+                || SerializeIndexedUiRoot(false) == null ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.VertexHash, IndexedUiCompiler.PixelHash,
+                    out var dither) || dither != IndexedUiVariant.Dithered ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.PlainVertexHash, IndexedUiCompiler.PlainPixelHash,
+                    out var plainVariant) || plainVariant != IndexedUiVariant.Plain ||
+                CompileHostShader(IndexedUiCompiler.AlphaVertexSource, "vs_5_1", Console.Out) == null ||
+                CompileHostShader(IndexedUiCompiler.AlphaPixelSource, "ps_5_1", Console.Out) == null ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.AlphaPixelHash,
+                    out var alphaVariant) || alphaVariant != IndexedUiVariant.AlphaMask ||
+                IndexedUiCompiler.TryClassify(IndexedUiCompiler.VertexHash, IndexedUiCompiler.PlainPixelHash, out _) ||
+                IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.PlainPixelHash,
+                    out _))
+            {
+                throw new InvalidOperationException("Indexed UI host shader/root serialization failed.");
+            }
+
+            Console.WriteLine(
+                "[graphics-probe] Indexed UI host shader compilation and root serialization passed (no GPU draw).");
         }
     }
 

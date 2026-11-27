@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Cli.Interop.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct OpenFileName
+internal struct OpenFileName
 {
     public uint Size;
     public nint Owner;

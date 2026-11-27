@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Textures.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct LinearCopyBox
+internal struct LinearCopyBox
 {
     public uint Left;
     public uint Top;

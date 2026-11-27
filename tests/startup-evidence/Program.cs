@@ -76,7 +76,8 @@ internal static class Program
 
         for (var index = 0; index < 4601; index++)
         {
-            writer.WriteLine("[graphics] Resource view: dimension=3, width=32, layout=0x0, address=0x1000 (CPU backing only).");
+            writer.WriteLine(
+                "[graphics] Resource view: dimension=3, width=32, layout=0x0, address=0x1000 (CPU backing only).");
         }
 
         for (var index = 0; index < 625; index++)
@@ -107,8 +108,8 @@ internal static class Program
         Require(lines.Contains("[audio] untouched"), "Unrelated messages preserved");
 
         Require(string.Equals(lines[^1],
-            "[performance] IRX-R50-LOG: resourceLines=4601; resourceEmitted=14; listLines=625; listEmitted=11.",
-            StringComparison.Ordinal), $"Summary counters: {lines[^1]}");
+                "[performance] IRX-R50-LOG: resourceLines=4601; resourceEmitted=14; listLines=625; listEmitted=11.",
+                StringComparison.Ordinal), $"Summary counters: {lines[^1]}");
     }
 
     private static void Require(bool condition, string message)

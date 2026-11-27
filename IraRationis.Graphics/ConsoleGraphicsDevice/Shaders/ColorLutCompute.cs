@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Text;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Diagnostics.Models;
@@ -11,6 +10,7 @@ using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.ColorLut;
 using IraRationis.Shaders.Compute;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics;
 
@@ -66,7 +66,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         if (record.Description is { } bytes && (bytes.Length != 40 || ReadDescriptorUInt32(bytes, 0) != desc.Format ||
-                                                ReadDescriptorUInt32(bytes, 4) != 8 || ReadDescriptorUInt32(bytes, 8) != 0
+                                                ReadDescriptorUInt32(bytes, 4) != 8
+                                                || ReadDescriptorUInt32(bytes, 8) != 0
                                                 || ReadDescriptorUInt32(bytes, 12) != 0 ||
                                                 (ReadDescriptorUInt32(bytes, 16) != desc.DepthOrArraySize
                                                  && ReadDescriptorUInt32(bytes, 16) != uint.MaxValue)))
@@ -76,7 +77,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        source = new TextureSource(handle, token.Id, token.Kind, record.Resource, resource->Generation, record.Description);
+        source = new TextureSource(handle, token.Id, token.Kind, record.Resource, resource->Generation,
+            record.Description);
 
         return true;
     }
@@ -90,7 +92,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static bool IsSameColorLutConstant(ConstantDescriptor leftDescriptor, ConstantDescriptor rightDescriptor)
     {
-        return leftDescriptor.Tag == rightDescriptor.Tag && leftDescriptor.Size == rightDescriptor.Size && leftDescriptor.Address == rightDescriptor.Address;
+        return leftDescriptor.Tag == rightDescriptor.Tag && leftDescriptor.Size == rightDescriptor.Size
+                                                         && leftDescriptor.Address == rightDescriptor.Address;
     }
 
     private static byte[]? SerializeColorLutRoot()
@@ -192,8 +195,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 try
                 {
-                    var hlsl = curveFormat == 0 ? Rdna2ColorLutCompiler.Translate(metadata.Shader.Bytes) :
-                        CurveLutCompiler.Translate(metadata.Shader.Bytes, curveFormat);
+                    var hlsl = curveFormat == 0
+                        ? Rdna2ColorLutCompiler.Translate(metadata.Shader.Bytes)
+                        : CurveLutCompiler.Translate(metadata.Shader.Bytes, curveFormat);
 
                     Console.Error.WriteLine(
                         $"[graphics] guest compute compiler: format={curveFormat}; compiling cs_5_1.");
@@ -207,7 +211,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
                 catch (Exception exception)
                 {
-                    return RejectColorLutDispatch($"compute translation failed: {exception.GetType().Name}: {exception.Message}");
+                    return RejectColorLutDispatch(
+                        $"compute translation failed: {exception.GetType().Name}: {exception.Message}");
                 }
             }
         }
@@ -225,7 +230,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             fixed (byte* bytes = rootBytes)
             {
-                var resultCode = (int)_host->CreateRootSignature(0, bytes, (nuint)rootBytes.Length, &rootId, &nativeRoot);
+                var resultCode =
+                    (int)_host->CreateRootSignature(0, bytes, (nuint)rootBytes.Length, &rootId, &nativeRoot);
 
                 if (resultCode < 0 || nativeRoot == null)
                 {
@@ -280,7 +286,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static bool TryRecordColorLutCompute(nint self, uint coordinateX, uint coordinateY, uint coordinateZ, uint flags = 0)
+    private static bool TryRecordColorLutCompute(nint self, uint coordinateX, uint coordinateY, uint coordinateZ,
+        uint flags = 0)
     {
         using var stageTiming = BeginTiming(GraphicsStage.RecordCompute);
 
@@ -311,10 +318,12 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (metadata.Hash != Rdna2ColorLutCompiler.ContainerHash)
         {
-            return RejectColorLutDispatch($"unsupported compute SHA256={metadata.Hash}; groups={coordinateX}x{coordinateY}x{coordinateZ}; flags=0x{flags:X}");
+            return RejectColorLutDispatch(
+                $"unsupported compute SHA256={metadata.Hash}; groups={coordinateX}x{coordinateY}x{coordinateZ}; flags=0x{flags:X}");
         }
 
-        if (_host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 || coordinateX != 5 || coordinateY != 5 || coordinateZ != 33 || flags != 0
+        if (_host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 || coordinateX != 5 || coordinateY != 5
+            || coordinateZ != 33 || flags != 0
             ||
             state.Compute.Signature != metadata.Root || !IsRootSignature(metadata.Root)
             || RootSignatureBlob(metadata.Root).Length != 7600 ||
@@ -406,7 +415,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         SealMemoryBoundary(self, state, null, null, compute: new ColorLutComputeBoundary(input, output, table,
             inputHost, outputHost, root, pipeline));
 
-        TraceGraphicsSuccess("[graphics] IRX-GFX-COMPUTE-R17: RECORDED 5x5x33 color transform dispatch; awaiting submission.");
+        TraceGraphicsSuccess(
+            "[graphics] IRX-GFX-COMPUTE-R17: RECORDED 5x5x33 color transform dispatch; awaiting submission.");
 
         return true;
     }
@@ -444,7 +454,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         var readsTexture = ReadDescriptorUInt32(snapshot, 0) != 0;
         var writer = GetResourceWriterQueue(boundary.Input.Resource);
 
-        if (readsTexture && ((writer == 0 && !UploadTextureTexture(queue, boundary.Input.Resource, boundary.InputHost)) ||
+        if (readsTexture && ((writer == 0 && !UploadTextureTexture(queue, boundary.Input.Resource, boundary.InputHost))
+                             ||
                              (writer != 0 && writer != queue)))
         {
             throw new InvalidOperationException("R17 input texture coherence unavailable.");
@@ -457,7 +468,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R17 output was GPU-written on another queue.");
         }
 
-        using var utility = AcquireUtilityContext(ColorLutUploadBytes, 2, versioned: true);
+        using var utility = AcquireUtilityContext(ColorLutUploadBytes, 2, true);
 
         utility.PrepareVersionedUpload(snapshot);
 

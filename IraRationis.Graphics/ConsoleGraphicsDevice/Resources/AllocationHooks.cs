@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.Graphics;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
     private static Func<(nint Allocate, nint Free)>? _resourceAllocator;
 

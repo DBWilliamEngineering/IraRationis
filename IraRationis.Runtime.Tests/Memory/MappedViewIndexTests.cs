@@ -98,7 +98,8 @@ internal static class MappedViewIndexTests
             var queryAddress = (ulong)random.Next(32768);
             var querySize = (ulong)random.Next(1024);
             var expected = reference.Where(pair => querySize != 0 && pair.Key < queryAddress + querySize
-                && pair.Key + pair.Value.Size > queryAddress).OrderBy(pair => pair.Key).ToArray();
+                                                                  && pair.Key + pair.Value.Size > queryAddress)
+                .OrderBy(pair => pair.Key).ToArray();
             var actual = index.SnapshotOverlaps(queryAddress, querySize);
 
             Require(actual.Length == expected.Length, "Random overlap count agrees with linear model");
@@ -106,12 +107,12 @@ internal static class MappedViewIndexTests
             for (var match = 0; match < expected.Length; match++)
             {
                 Require(actual[match].Key == expected[match].Key
-                    && ReferenceEquals(actual[match].Value, expected[match].Value.Value),
+                        && ReferenceEquals(actual[match].Value, expected[match].Value.Value),
                     "Random overlap identity and ordering agree with linear model");
             }
 
             var containing = reference.Where(pair => pair.Key <= queryAddress
-                && queryAddress - pair.Key < pair.Value.Size).ToArray();
+                                                     && queryAddress - pair.Key < pair.Value.Size).ToArray();
             var found = index.TryGetContaining(queryAddress, out var view);
 
             Require(found == (containing.Length == 1), "Random containment agrees with linear model");

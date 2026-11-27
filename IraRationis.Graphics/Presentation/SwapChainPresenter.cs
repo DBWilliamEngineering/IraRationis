@@ -37,7 +37,8 @@ internal sealed unsafe class SwapChainPresenter
         {
             var factoryId = ConsoleGraphicsDevice.FactoryId;
 
-            ConsoleGraphicsDevice.CheckHostResult(ConsoleGraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory), "R19 CreateDXGIFactory2");
+            ConsoleGraphicsDevice.CheckHostResult(ConsoleGraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory),
+                "R19 CreateDXGIFactory2");
 
             var desc = new SwapDescription
             {
@@ -53,13 +54,15 @@ internal sealed unsafe class SwapChainPresenter
             };
 
             ConsoleGraphicsDevice.CheckHostResult(
-                ((delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)ConsoleGraphicsDevice.Slot(
-                    factory, 15))
+                ((delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)
+                    ConsoleGraphicsDevice.Slot(
+                        factory, 15))
                 (factory, queue, window, &desc, null, 0, &baseChain), "R19 CreateSwapChainForHwnd");
 
             var chainId = ConsoleGraphicsDevice.SwapChainId;
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(baseChain, 0))
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(baseChain, 0))
                 (baseChain, &chainId, &chain), "R19 IDXGISwapChain3");
 
             _chain = chain;
@@ -67,7 +70,9 @@ internal sealed unsafe class SwapChainPresenter
             var fenceId = ConsoleGraphicsDevice.FenceId;
             var device = (nint)ConsoleGraphicsDevice._host;
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(device, 36))
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(device,
+                    36))
                 (device, 0, 0, &fenceId, &fence), "R19 frame fence");
 
             _fence = fence;
@@ -79,14 +84,16 @@ internal sealed unsafe class SwapChainPresenter
 
                 nint buffer = 0;
 
-                ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_chain, 9))
+                ConsoleGraphicsDevice.CheckHostResult(
+                    ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_chain, 9))
                     (_chain, (uint)index, &resourceId, &buffer), "R19 GetBuffer");
 
                 slot.Buffer = buffer;
 
                 ConsoleGraphicsDevice.CreateUtilityCommandList(out slot.Allocator, out slot.List);
 
-                ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 9))(slot.List),
+                ConsoleGraphicsDevice.CheckHostResult(
+                    ((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 9))(slot.List),
                     "R19 initial close");
             }
         }
@@ -159,7 +166,8 @@ internal sealed unsafe class SwapChainPresenter
 
         if (completed < slot.FenceValue)
         {
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(_fence, 9))
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(_fence, 9))
                 (_fence, slot.FenceValue, _event.SafeWaitHandle.DangerousGetHandle()), "R19 frame fence event");
 
             if (!_event.WaitOne(ConsoleGraphicsDevice.MemoryWaitTimeoutMilliseconds))
@@ -205,24 +213,31 @@ internal sealed unsafe class SwapChainPresenter
 
             WaitForSlot(slot);
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.Allocator, 8))(slot.Allocator),
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.Allocator,
+                    8))(slot.Allocator),
                 "R19 allocator reset");
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 10))
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 10))
                 (slot.List, slot.Allocator, 0), "R19 list reset");
             // Guest draw paths currently restore COMMON. PRESENT is also 0.
             ConsoleGraphicsDevice.TransitionHostResource(slot.List, source, 0, ConsoleGraphicsDevice.CopySource);
 
-            ConsoleGraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, 0, ConsoleGraphicsDevice.CopyDestination);
+            ConsoleGraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, 0,
+                ConsoleGraphicsDevice.CopyDestination);
 
-            ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)ConsoleGraphicsDevice.Slot(slot.List, 17))(slot.List, slot.Buffer,
+            ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)ConsoleGraphicsDevice.Slot(slot.List, 17))(slot.List,
+                slot.Buffer,
                 source);
 
-            ConsoleGraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, ConsoleGraphicsDevice.CopyDestination, 0);
+            ConsoleGraphicsDevice.TransitionHostResource(slot.List, slot.Buffer, ConsoleGraphicsDevice.CopyDestination,
+                0);
 
             ConsoleGraphicsDevice.TransitionHostResource(slot.List, source, ConsoleGraphicsDevice.CopySource, 0);
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 9))(slot.List),
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(slot.List, 9))(slot.List),
                 "R19 list close");
             // Keep the source alive until the copy completes, even if the
             // guest releases its resource immediately after PresentX.
@@ -232,12 +247,16 @@ internal sealed unsafe class SwapChainPresenter
 
             var list = slot.List;
 
-            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(Queue, 10))(Queue, 1, &list);
+            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(Queue, 10))(Queue, 1,
+                &list);
 
-            var resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)ConsoleGraphicsDevice.Slot(_chain, 8))(_chain, 1, 0);
+            var resultCode =
+                ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)ConsoleGraphicsDevice.Slot(_chain, 8))(_chain, 1,
+                    0);
             var value = ++_nextValue;
 
-            ConsoleGraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(Queue, 14))
+            ConsoleGraphicsDevice.CheckHostResult(
+                ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(Queue, 14))
                 (Queue, _fence, value), "R19 frame fence signal");
 
             slot.FenceValue = value;

@@ -10,10 +10,10 @@ namespace IraRationis.HLE.Runtime.Services.Users;
 internal sealed unsafe class LocalUserAddOperation
 {
     private readonly HostRuntimeAsyncService _async;
-    private readonly LocalUserDirectory _users;
     private readonly RuntimeServiceTrace _trace;
-    private nint _context;
+    private readonly LocalUserDirectory _users;
     private int _completed;
+    private nint _context;
 
     internal LocalUserAddOperation(HostRuntimeAsyncService asyncService, LocalUserDirectory users,
         RuntimeServiceTrace trace)
@@ -88,7 +88,8 @@ internal sealed unsafe class LocalUserAddOperation
                 if (Interlocked.CompareExchange(ref _completed, 1, 0) == 0)
                 {
                     _users.AddUser();
-                    _trace.Write("UserAddCompleted", $"block=0x{(nint)data->Async:X}; localId={_users.Profile.LocalId}; offline=True");
+                    _trace.Write("UserAddCompleted",
+                        $"block=0x{(nint)data->Async:X}; localId={_users.Profile.LocalId}; offline=True");
                     _async.Complete(data->Async, RuntimeServiceResult.Success, (nuint)sizeof(nint));
                 }
 

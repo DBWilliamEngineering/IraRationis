@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Drawing.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public readonly unsafe struct RasterVertex
+public readonly struct RasterVertex
 {
     public readonly Vector4 Position, Color, TexCoord;
 

@@ -32,10 +32,10 @@ namespace irx
             std::copy_n(input, count, ranges_.begin());
 
             std::sort(ranges_.begin(), ranges_.begin() + count,
-                [](const Range& left, const Range& right) noexcept
-                {
-                    return left.start < right.start;
-                });
+                      [](const Range& left, const Range& right) noexcept
+                      {
+                          return left.start < right.start;
+                      });
 
             std::size_t used = 0;
 

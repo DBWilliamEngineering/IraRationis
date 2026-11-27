@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe record struct GameInputPadState(
+public record struct GameInputPadState(
     uint Buttons,
     float LeftTrigger,
     float RightTrigger,

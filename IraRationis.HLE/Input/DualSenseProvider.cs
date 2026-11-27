@@ -29,7 +29,7 @@ internal sealed unsafe class DualSenseProvider
 
     private void Run()
     {
-        for(;;)
+        for (;;)
         {
             try
             {
@@ -184,7 +184,8 @@ internal sealed unsafe class DualSenseProvider
                 var info = new GameInputRawInfo { Size = (uint)sizeof(GameInputRawInfo) };
                 var bytes = info.Size;
 
-                if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x2000000B, &info, ref bytes) == uint.MaxValue ||
+                if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x2000000B, &info, ref bytes) == uint.MaxValue
+                    ||
                     info.Type != 2 || info.Vendor != 0x054C || info.Product != 0x0CE6 ||
                     info.UsagePage != 1 || info.Usage is not (4 or 5))
                 {
@@ -203,7 +204,8 @@ internal sealed unsafe class DualSenseProvider
 
                 fixed (char* buffer = name)
                 {
-                    if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x20000007, buffer, ref chars) == uint.MaxValue)
+                    if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x20000007, buffer, ref chars)
+                        == uint.MaxValue)
                     {
                         continue;
                     }

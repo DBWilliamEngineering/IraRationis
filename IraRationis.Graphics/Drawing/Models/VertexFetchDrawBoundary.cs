@@ -2,4 +2,4 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal readonly unsafe record struct VertexFetchDrawBoundary(VertexFetchVertexUpload Upload, bool Complete);
+internal readonly record struct VertexFetchDrawBoundary(VertexFetchVertexUpload Upload, bool Complete);

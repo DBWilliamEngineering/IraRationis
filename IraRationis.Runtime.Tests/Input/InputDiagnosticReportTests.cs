@@ -75,7 +75,8 @@ internal static class InputDiagnosticReportTests
         var report = new InputDiagnosticReport(true, _ => Interlocked.Increment(ref writes));
 
         Parallel.For(0, 8192, observation =>
-            report.Write(InputDiagnosticCategory.DeviceCallbackEnter, observation, static value => $"delivery={value}"));
+            report.Write(InputDiagnosticCategory.DeviceCallbackEnter, observation,
+                static value => $"delivery={value}"));
 
         Require(writes is > 0 and <= 24,
             "Concurrent callback delivery must retain a shared, bounded diagnostic budget.");
@@ -95,18 +96,20 @@ internal static class InputDiagnosticReportTests
 
         Require(record is not null, "The first enabled diagnostic record must be emitted.");
 
-        var fields = record!.Split("; ", StringSplitOptions.None)
+        var fields = record!.Split("; ")
             .Select(field => field.Split('=', 2))
             .Where(parts => parts.Length == 2)
             .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
         var utc = DateTimeOffset.Parse(fields["utc"], CultureInfo.InvariantCulture);
         var timestamp = long.Parse(fields["qpc"], CultureInfo.InvariantCulture);
 
-        Require(utc >= earliestUtc && utc <= latestUtc && timestamp >= earliestTimestamp && timestamp <= latestTimestamp,
+        Require(
+            utc >= earliestUtc && utc <= latestUtc && timestamp >= earliestTimestamp && timestamp <= latestTimestamp,
             "Input diagnostics must carry current UTC and monotonic timestamps for cross-log correlation.");
         Require(long.Parse(fields["qpcFrequency"], CultureInfo.InvariantCulture) == Stopwatch.Frequency
                 && int.Parse(fields["process"], CultureInfo.InvariantCulture) == Environment.ProcessId
-                && uint.Parse(fields["thread"], CultureInfo.InvariantCulture) == InputDiagnosticNativeMethods.GetCurrentThreadId(),
+                && uint.Parse(fields["thread"], CultureInfo.InvariantCulture)
+                == InputDiagnosticNativeMethods.GetCurrentThreadId(),
             "Input diagnostic timestamps must identify their frequency, process, and native thread.");
     }
 

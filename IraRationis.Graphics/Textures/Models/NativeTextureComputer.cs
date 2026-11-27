@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Textures.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NativeTextureComputer
+internal struct NativeTextureComputer
 {
     public nint Table;
     public int References;

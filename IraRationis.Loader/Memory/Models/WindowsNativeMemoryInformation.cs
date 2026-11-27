@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Loader.Memory.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 48)]
-internal unsafe struct WindowsNativeMemoryInformation
+internal struct WindowsNativeMemoryInformation
 {
     [FieldOffset(0)] public nuint BaseAddress;
     [FieldOffset(24)] public nuint RegionSize;

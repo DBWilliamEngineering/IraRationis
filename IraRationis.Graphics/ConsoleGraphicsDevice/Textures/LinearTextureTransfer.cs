@@ -3,10 +3,10 @@
 
 using System.Buffers;
 using System.Runtime.InteropServices;
-using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics;
@@ -20,7 +20,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Opt-in for authorized, authored callers using the documented PC copy-location ABI.
     // A console-specific encoding must not be inferred from a matching method name.
-    private static bool TryRecordLinearTextureTransfer(nint self, nint destination, uint coordinateX, uint coordinateY, uint coordinateZ,
+    private static bool TryRecordLinearTextureTransfer(nint self, nint destination, uint coordinateX, uint coordinateY,
+        uint coordinateZ,
         nint source, nint box)
     {
         if (coordinateZ != 0 || !TryReadLinearCopyLocation(destination, out var to) ||
@@ -94,7 +95,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             state.RetainObject(from.Resource);
             state.RetainObject(destination.Resource);
 
-            transfer = new LinearTextureTransfer(from, destination, sourceSurface, destinationSurface, region, coordinateX, coordinateY, plan);
+            transfer = new LinearTextureTransfer(from, destination, sourceSurface, destinationSurface, region,
+                coordinateX, coordinateY, plan);
         }
 
         // Capture the descriptors at recording time, not the pixel bytes. The copy
@@ -110,7 +112,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         nuint transferred = 0;
 
         var success = address != 0 &&
-                      ReadProcessMemory(-1, (void*)address, &value, (nuint)sizeof(LinearCopyLocation), &transferred) != 0 &&
+                      ReadProcessMemory(-1, (void*)address, &value, (nuint)sizeof(LinearCopyLocation), &transferred)
+                      != 0 &&
                       transferred == (nuint)sizeof(LinearCopyLocation);
 
         location = value;
@@ -146,7 +149,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         // No external allocator, placed-resource alias, raw address view, host
         // backing, or GPU-writable resource is eligible for this first slice.
         if (resource->OwnedMemory == 0 || resource->FreeHook != 0 || resource->OwningHeap != 0 ||
-            resource->Address != (ulong)(nuint)resource->OwnedMemory || resource->HostResource != 0 ||
+            resource->Address != (nuint)resource->OwnedMemory || resource->HostResource != 0 ||
             description.Flags != 0 || resource->Address == 0 || resource->Address > (ulong)nint.MaxValue)
         {
             return false;
@@ -217,7 +220,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var rowBytes = (ulong)width * pixelBytes;
 
         if (pitch < rowBytes || rowBytes > capacity - offset ||
-            (ulong)(height - 1) > (capacity - offset - rowBytes) / pitch)
+            height - 1 > (capacity - offset - rowBytes) / pitch)
         {
             return false;
         }
@@ -251,7 +254,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var from = source.Address + region.Top * source.Pitch + (ulong)region.Left * source.PixelBytes;
-        var destinationPath = destination.Address + coordinateY * destination.Pitch + (ulong)coordinateX * destination.PixelBytes;
+        var destinationPath = destination.Address + coordinateY * destination.Pitch
+                                                  + (ulong)coordinateX * destination.PixelBytes;
 
         plan = new LinearCopyPlan(from, destinationPath, source.Pitch, destination.Pitch, (int)rowBytes, (int)height);
 
@@ -277,7 +281,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         TraceGraphicsSuccess($"[graphics] IRX-R55-LINEAR-COPY: rows={transfer.Plan.Rows}; " +
-                 $"rowBytes={transfer.Plan.RowBytes}; bytes={(long)transfer.Plan.Rows * transfer.Plan.RowBytes}; CPU-only.");
+                             $"rowBytes={transfer.Plan.RowBytes}; bytes={(long)transfer.Plan.Rows * transfer.Plan.RowBytes}; CPU-only.");
     }
 
     private static void CopyLinearRows(LinearCopyPlan plan)
@@ -318,7 +322,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(scratch, clearArray: true);
+            ArrayPool<byte>.Shared.Return(scratch, true);
         }
     }
 
@@ -521,7 +525,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var properties = new GraphicsHeapProperties { Kind = 1, CreationNodes = 1, VisibleNodes = 1 };
 
         // NewResource owns the backing, including on its error paths.
-        CheckHostResult(NewResource(description, properties, 0, (ulong)(nuint)memory, 0, memory, &id, &resource),
+        CheckHostResult(NewResource(description, properties, 0, (nuint)memory, 0, memory, &id, &resource),
             "R55 fixture resource");
 
         return resource;

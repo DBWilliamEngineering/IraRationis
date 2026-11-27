@@ -277,35 +277,35 @@ public static class Rdna2RectangleCompiler
         var helpers = Pixel[Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..
             Pixel.IndexOf("float4 main", StringComparison.Ordinal)];
         const string transfer = """
-            Texture2D<float4> GuestTexture : register(t0);
-            SamplerState GuestSampler : register(s0);
+                                Texture2D<float4> GuestTexture : register(t0);
+                                SamplerState GuestSampler : register(s0);
 
-            float EncodeRgb(float value)
-            {
-                precise float result = 0.0f;
-                if (value > asfloat(0x3b4d2e1cu))
-                {
-                    precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
-                    result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
-                }
-                else
-                {
-                    result = LegacyMul(value, asfloat(0x414eb852u));
-                }
+                                float EncodeRgb(float value)
+                                {
+                                    precise float result = 0.0f;
+                                    if (value > asfloat(0x3b4d2e1cu))
+                                    {
+                                        precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
+                                        result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
+                                    }
+                                    else
+                                    {
+                                        result = LegacyMul(value, asfloat(0x414eb852u));
+                                    }
 
-                return result;
-            }
+                                    return result;
+                                }
 
-            float4 main(Varyings input) : SV_Target0
-            {
-                float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
-                precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
-                    LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
-                    LegacyMul(texel.w, input.Color.w));
-                return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
-                    HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
-            }
-            """;
+                                float4 main(Varyings input) : SV_Target0
+                                {
+                                    float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
+                                    precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
+                                        LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
+                                        LegacyMul(texel.w, input.Color.w));
+                                    return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
+                                        HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
+                                }
+                                """;
 
         return new PlanarColorShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + helpers + transfer);
     }
@@ -431,8 +431,10 @@ public static class Rdna2RectangleCompiler
             var end = name.IndexOf((byte)0);
 
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(expectedElement.Name)) ||
-                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0 || Word(data, byteOffset + 12) != expectedElement.System ||
-                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register || data[byteOffset + 24] != expectedElement.Mask ||
+                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0
+                || Word(data, byteOffset + 12) != expectedElement.System ||
+                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register
+                || data[byteOffset + 24] != expectedElement.Mask ||
                 Word(data, byteOffset + 28) != 0)
             {
                 throw new NotSupportedException($"R14 unsupported {tag} semantic {index}.");

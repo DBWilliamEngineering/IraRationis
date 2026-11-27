@@ -2,7 +2,10 @@
 
 namespace IraRationis.Graphics.Descriptors.Models;
 
-internal sealed class DescriptorBindingCatalogResourceEntry(DescriptorResourceIdentity identity, ulong length, bool writable)
+internal sealed class DescriptorBindingCatalogResourceEntry(
+    DescriptorResourceIdentity identity,
+    ulong length,
+    bool writable)
 {
     internal readonly DescriptorResourceIdentity Identity = identity;
     internal readonly ulong Length = length;

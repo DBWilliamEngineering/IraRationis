@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Dsp.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct DspCommand
+public struct DspCommand
 {
     public float GainLeft;
     public float GainRight;

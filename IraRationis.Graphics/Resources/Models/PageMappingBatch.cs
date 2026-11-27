@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct PageMappingBatch
+internal struct PageMappingBatch
 {
     public ulong Destination;
     public uint Count;

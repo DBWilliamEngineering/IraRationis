@@ -7,34 +7,26 @@ using IraRationis.Cli.Diagnostics.Network.Models;
 namespace IraRationis.Cli.Diagnostics.Network;
 
 /// <summary>
-/// Owns one bounded ETW session. Scope filters enable user-mode providers only
-/// in the requested process; event filters select network-operation metadata.
+///     Owns one bounded ETW session. Scope filters enable user-mode providers only
+///     in the requested process; event filters select network-operation metadata.
 /// </summary>
 internal sealed unsafe partial class NetworkTraceSession : IDisposable
 {
     private const uint FilterProcessId = 0x80000004;
     private const uint FilterEventId = 0x80000200;
     private const uint ControlStop = 1;
-    private NetworkTraceProperties* _properties;
     private ulong _handle;
-    private readonly string _name;
-
-    internal string Name
-    {
-        get
-        {
-            return _name;
-        }
-    }
+    private NetworkTraceProperties* _properties;
 
     internal NetworkTraceSession(string path)
     {
-        if (!OperatingSystem.IsWindows() || sizeof(NetworkTraceProperties) != 120 || sizeof(NetworkTraceEnableParameters) != 48)
+        if (!OperatingSystem.IsWindows() || sizeof(NetworkTraceProperties) != 120
+                                         || sizeof(NetworkTraceEnableParameters) != 48)
         {
             throw new PlatformNotSupportedException("Network tracing requires Windows x64.");
         }
 
-        _name = $"IraRationis.Network.{Environment.ProcessId}.{Guid.NewGuid():N}";
+        Name = $"IraRationis.Network.{Environment.ProcessId}.{Guid.NewGuid():N}";
 
         var nameBytes = checked((Name.Length + 1) * sizeof(char));
         var pathBytes = checked((path.Length + 1) * sizeof(char));
@@ -70,10 +62,34 @@ internal sealed unsafe partial class NetworkTraceSession : IDisposable
             NativeMemory.Free(_properties);
             _properties = null;
 
-            throw new Win32Exception((int)result, $"Cannot start network trace ({result}). Run this diagnostic from an elevated terminal.");
+            throw new Win32Exception((int)result,
+                $"Cannot start network trace ({result}). Run this diagnostic from an elevated terminal.");
         }
 
         _handle = handle;
+    }
+
+    internal string Name
+    {
+        get;
+    }
+
+    public void Dispose()
+    {
+        if (_properties == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = Stop();
+        }
+        finally
+        {
+            NativeMemory.Free(_properties);
+            _properties = null;
+        }
     }
 
     internal void EnableNetworkEvents(uint processId)
@@ -150,31 +166,14 @@ internal sealed unsafe partial class NetworkTraceSession : IDisposable
             _properties->BuffersWritten);
     }
 
-    public void Dispose()
-    {
-        if (_properties == null)
-        {
-            return;
-        }
-
-        try
-        {
-            _ = Stop();
-        }
-        finally
-        {
-            NativeMemory.Free(_properties);
-            _properties = null;
-        }
-    }
-
     [LibraryImport("advapi32.dll", EntryPoint = "StartTraceW", StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint StartTrace(out ulong handle, string name, NetworkTraceProperties* properties);
 
     [LibraryImport("advapi32.dll", EntryPoint = "ControlTraceW", StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint ControlTrace(ulong handle, string? name, NetworkTraceProperties* properties, uint control);
+    private static partial uint ControlTrace(ulong handle, string? name, NetworkTraceProperties* properties,
+        uint control);
 
     [LibraryImport("advapi32.dll", EntryPoint = "EnableTraceEx2")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

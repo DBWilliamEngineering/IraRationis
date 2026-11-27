@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers;
+using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Resources.Models;
@@ -10,7 +11,8 @@ namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
-    private static void ExecutePlanarColorDrawBoundary(nint queue, PlanarColorDrawBoundary boundary)
+    private static void ExecutePlanarColorDrawBoundary(nint queue, PlanarColorDrawBoundary boundary,
+        OrderedTextureUploads? ordered = null)
     {
         using var stageTiming = BeginTiming(GraphicsStage.ExecuteTexture);
 
@@ -28,18 +30,21 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast("[graphics] planar-color command list requires reset before resubmission.");
         }
 
-        var lookupEnabled = upload.SrgbTexture ? UploadSrgbTextureStripConstants(upload) : UploadPlanarColorConstants(upload);
+        var lookupEnabled = upload.SrgbTexture
+            ? UploadSrgbTextureStripConstants(upload)
+            : UploadPlanarColorConstants(upload);
 
-        PreparePlanarColorTextures(queue, upload.Textures, lookupEnabled);
+        PreparePlanarColorTextures(queue, upload.Textures, lookupEnabled, ordered);
 
         if (upload.SrgbTexture)
         {
-            TraceGraphicsSuccess($"[graphics] srgb-texture-strip PREPARED: vertexBytes={upload.VertexBytes}; transformBytes=64+64.");
+            TraceGraphicsSuccess(
+                $"[graphics] srgb-texture-strip PREPARED: vertexBytes={upload.VertexBytes}; transformBytes=64+64.");
         }
         else
         {
             TraceGraphicsSuccess($"[graphics] planar-color PREPARED: vertexBytes={upload.VertexBytes}; " +
-                $"transformBytes=64+64; sharedBytes={PlanarColorSharedConstantBytes}; lookupEnabled={lookupEnabled}.");
+                                 $"transformBytes=64+64; sharedBytes={PlanarColorSharedConstantBytes}; lookupEnabled={lookupEnabled}.");
         }
     }
 
@@ -54,8 +59,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         Interlocked.Increment(ref _draws);
 
-        TraceGraphicsSuccess(upload.SrgbTexture ? "[graphics] srgb-texture-strip GPU COMPLETED." :
-            "[graphics] planar-color GPU COMPLETED triangle strip.");
+        TraceGraphicsSuccess(upload.SrgbTexture
+            ? "[graphics] srgb-texture-strip GPU COMPLETED."
+            : "[graphics] planar-color GPU COMPLETED triangle strip.");
 
         TraceColor(queue, upload.Target, upload.SrgbTexture ? "srgb-texture-strip-output" : "planar-color-output");
 
@@ -120,7 +126,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 out transformConstants) ||
             !TryGetColorLutConstants(upload.Table + 0xC0, PlanarColorSharedConstantBytes, out sharedConstants))
         {
-            Environment.FailFast("[graphics] planar-color sources changed or constant descriptors lack their full required extent.");
+            Environment.FailFast(
+                "[graphics] planar-color sources changed or constant descriptors lack their full required extent.");
         }
 
         var rented = ArrayPool<byte>.Shared.Rent(upload.Capacity);
@@ -141,14 +148,16 @@ public static unsafe partial class ConsoleGraphicsDevice
                 !IsSameColorLutConstant(transformConstants, transformRecheck) ||
                 !IsSameColorLutConstant(sharedConstants, sharedRecheck) || !ArePlanarColorSourcesCurrent(upload))
             {
-                Environment.FailFast("[graphics] planar-color submission snapshot is unreadable or its descriptors changed.");
+                Environment.FailFast(
+                    "[graphics] planar-color submission snapshot is unreadable or its descriptors changed.");
             }
 
             var lookupEnabled = ReadDescriptorUInt32(snapshot, 512 + PlanarColorLookupEnableOffset) != 0;
 
             if (lookupEnabled && upload.Textures.Length != 4)
             {
-                Environment.FailFast("[graphics] planar-color lookup is enabled but table+0x80 lacks a supported retained Texture3D SRV.");
+                Environment.FailFast(
+                    "[graphics] planar-color lookup is enabled but table+0x80 lacks a supported retained Texture3D SRV.");
             }
 
             MapPlanarColorUpload(upload.Host, snapshot);
@@ -187,7 +196,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void PreparePlanarColorTextures(nint queue, PlanarColorTextureBinding[] textures, bool lookupEnabled)
+    private static void PreparePlanarColorTextures(nint queue, PlanarColorTextureBinding[] textures, bool lookupEnabled,
+        OrderedTextureUploads? ordered = null)
     {
         for (var textureIndex = 0; textureIndex < textures.Length; textureIndex++)
         {
@@ -196,23 +206,26 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (writer != 0 && writer != queue)
             {
-                Environment.FailFast($"[graphics] planar-color texture {textureIndex} was written on another queue; coherence is not established.");
+                Environment.FailFast(
+                    $"[graphics] planar-color texture {textureIndex} was written on another queue; coherence is not established.");
             }
 
             if (textureIndex == 3)
             {
                 if (lookupEnabled && writer == 0)
                 {
-                    Environment.FailFast("[graphics] planar-color Texture3D lookup requires a completed prior same-queue GPU writer; CPU volume upload is unsupported.");
+                    Environment.FailFast(
+                        "[graphics] planar-color Texture3D lookup requires a completed prior same-queue GPU writer; CPU volume upload is unsupported.");
                 }
 
                 continue;
             }
 
             if (writer == 0 && !HasEarlierPlanarColorHost(textures, textureIndex) &&
-                !UploadTextureTexture(queue, binding.Source.Resource, binding.Host))
+                !UploadTextureTexture(queue, binding.Source.Resource, binding.Host, ordered))
             {
-                Environment.FailFast($"[graphics] planar-color plane {textureIndex} upload refused; inspect its layout or source diagnostic.");
+                Environment.FailFast(
+                    $"[graphics] planar-color plane {textureIndex} upload refused; inspect its layout or source diagnostic.");
             }
         }
     }

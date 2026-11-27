@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct ConstantDescriptor
+internal struct ConstantDescriptor
 {
     public uint Tag;
     public uint Size;

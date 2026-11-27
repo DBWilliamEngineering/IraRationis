@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Shaders.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct ShaderBytecode
+internal struct ShaderBytecode
 {
     public byte* Code;
     public nuint Size;

@@ -4,7 +4,7 @@
 
 namespace IraRationis.HLE.Input.Models;
 
-internal sealed unsafe record GameInputNotification(
+internal sealed record GameInputNotification(
     GameInputRegistration Registration,
     int Index,
     ulong Timestamp,

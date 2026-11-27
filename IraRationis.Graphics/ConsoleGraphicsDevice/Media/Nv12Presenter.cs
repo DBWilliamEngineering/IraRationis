@@ -2,6 +2,6 @@
 
 namespace IraRationis.Graphics;
 
-public static unsafe partial class ConsoleGraphicsDevice
+public static partial class ConsoleGraphicsDevice
 {
 }

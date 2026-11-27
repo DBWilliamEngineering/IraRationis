@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Dsp.Models;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-public unsafe struct DspStreamDescription
+public struct DspStreamDescription
 {
     public uint Kind;
     public uint Options;

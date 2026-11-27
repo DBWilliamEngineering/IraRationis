@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XMemWorkingSet
+internal struct XMemWorkingSet
 {
     public nuint TitleLimit;
     public nuint TitleUsed;

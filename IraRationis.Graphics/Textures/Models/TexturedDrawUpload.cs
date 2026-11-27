@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal sealed unsafe class TexturedDrawUpload(
+internal sealed class TexturedDrawUpload(
     TextureSource transform,
     TextureSource texture,
     ulong table,

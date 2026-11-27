@@ -6,7 +6,7 @@ using IraRationis.HLE.Interop;
 
 namespace IraRationis.HLE.Runtime.Diagnostics;
 
-internal static unsafe partial class RuntimeBridgeCallbacks
+internal static partial class RuntimeBridgeCallbacks
 {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint LoadLibrary(char* name)
@@ -85,7 +85,8 @@ internal static unsafe partial class RuntimeBridgeCallbacks
 
         incoming.Restore();
 
-        var result = ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
+        var result =
+            ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
         var outgoing = NativeErrorState.Capture();
 
         try

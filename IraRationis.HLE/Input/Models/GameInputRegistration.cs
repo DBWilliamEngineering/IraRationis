@@ -4,4 +4,10 @@
 
 namespace IraRationis.HLE.Input.Models;
 
-internal sealed unsafe record GameInputRegistration(ulong Token, nint Device, uint Kind, uint Status, nint Context, nint Callback);
+internal sealed record GameInputRegistration(
+    ulong Token,
+    nint Device,
+    uint Kind,
+    uint Status,
+    nint Context,
+    nint Callback);

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from apps/victory/src/run.rs; runtime bring-up, not gameplay parity.
 
-using IraRationis.Graphics;
 using IraRationis.Cli.Diagnostics;
 using IraRationis.Cli.Diagnostics.Models;
 using IraRationis.Cli.Media;
 using IraRationis.Core.Configuration;
 using IraRationis.Core.Hardware;
+using IraRationis.Graphics;
 using IraRationis.Graphics.Device;
+using IraRationis.HLE.Audio;
 using IraRationis.HLE.Audio.Acp;
 using IraRationis.HLE.Audio.Apu;
 using IraRationis.HLE.Audio.Dsp;
@@ -108,6 +109,10 @@ internal static class RunCommand
             var original = dependencies.GetOriginalPath(image);
 
             RuntimeState.SetImagePath(image.BaseAddress, original);
+            if (string.Equals(Path.GetFileName(original), "Bink2Scarlett.dll", StringComparison.OrdinalIgnoreCase))
+            {
+                AudioMixerScheduling.ConfigureBinkImage(image.BaseAddress, image.Info.SizeOfImage);
+            }
 
             Console.WriteLine($"Mapped {original} at 0x{image.BaseAddress:X}");
         }
@@ -194,6 +199,8 @@ internal static class RunCommand
             config.CacheSubdirectory($"compatibility/{prepared.OriginalHash}"));
 
         var main = LoadedImage.Load(prepared, cache);
+
+        AudioMixerScheduling.Configure(main.BaseAddress, prepared.OriginalHash);
 
         Console.WriteLine($"Mapped {path} at 0x{main.BaseAddress:X} (preferred 0x{main.Info.ImageBase:X})");
 

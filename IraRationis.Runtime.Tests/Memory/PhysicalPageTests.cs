@@ -23,7 +23,7 @@ internal static unsafe partial class PhysicalPageTests
         nuint Export(string name)
         {
             return registry.Lookup("xmem.dll", name)
-                ?? throw new InvalidOperationException($"Missing physical page export {name}.");
+                   ?? throw new InvalidOperationException($"Missing physical page export {name}.");
         }
 
         var allocate = (delegate* unmanaged[Stdcall]<ulong, nuint*, nuint*, int>)Export("XMemAllocatePhysicalPages");
@@ -72,7 +72,8 @@ internal static unsafe partial class PhysicalPageTests
             Require(PhysicalPageModule.MapAlias(address + PageSize, address, 3 * PageSize),
                 "Overlapping alias captures source before destination changes");
             Require(*(int*)reservation == 10 && *(int*)(reservation + PageSize) == 10
-                && *(int*)(reservation + 2 * PageSize) == 21 && *(int*)(reservation + 3 * PageSize) == 30,
+                                             && *(int*)(reservation + 2 * PageSize) == 21
+                                             && *(int*)(reservation + 3 * PageSize) == 30,
                 "Overlapping alias retains original source identities after physical IDs are freed");
 
             Require(map(reservation + 2 * PageSize, 1, null) == reservation + 2 * PageSize,

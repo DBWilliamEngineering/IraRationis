@@ -2,6 +2,7 @@
 // xapu.dll ABI cross-checked against VIctory/victory-fork modules/apu.rs.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Concentus.Structs;
@@ -34,6 +35,8 @@ public static unsafe partial class XApuModule
     private const uint MaxMemory = 512U * 1024 * 1024;
     private static readonly ConcurrentDictionary<nint, XApuConnection> Connections = new();
     private static long _nextHandle;
+    private static readonly bool TraceAudio = Environment.GetEnvironmentVariable("IRX_AUDIO_TRACE") == "1";
+    private static long _decodeAttempts, _decodeFailures, _decodedFrames;
 
     public static HleModule Create()
     {
@@ -318,7 +321,35 @@ public static unsafe partial class XApuModule
         }
     }
 
-    private static void Decode(XApuConnection connection, XApuVoice voice, XApuProcessCommand command, ref XApuResult result)
+    private static void Decode(XApuConnection connection, XApuVoice voice, XApuProcessCommand command,
+        ref XApuResult result)
+    {
+        var observation = Interlocked.Increment(ref _decodeAttempts);
+        var started = Stopwatch.GetTimestamp();
+        DecodeCore(connection, voice, command, ref result);
+        if (result.Error != 0)
+        {
+            var failures = Interlocked.Increment(ref _decodeFailures);
+            if (failures <= 4 || (failures & (failures - 1)) == 0)
+            {
+                Console.Error.WriteLine(
+                    $"[audio] XApu decode rejected: rate={command.TargetPitch}; ramp={command.PitchRamp}; error=0x{result.Error:X8}; failures={failures}.");
+            }
+        }
+        else
+        {
+            _ = Interlocked.Add(ref _decodedFrames, result.Frames);
+        }
+
+        if (TraceAudio && (observation <= 4 || (observation & (observation - 1)) == 0))
+        {
+            Console.Error.WriteLine(
+                $"[audio] XApu decode: attempts={observation}; failures={Interlocked.Read(ref _decodeFailures)}; frames={Interlocked.Read(ref _decodedFrames)}; rate={command.TargetPitch}; elapsedMs={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}.");
+        }
+    }
+
+    private static void DecodeCore(XApuConnection connection, XApuVoice voice, XApuProcessCommand command,
+        ref XApuResult result)
     {
         result.Input = command.Input;
 
@@ -336,8 +367,10 @@ public static unsafe partial class XApuModule
             return;
         }
 
-        // Plain decode only; do not silently claim variable-pitch processing.
-        if (command.TargetPitch != 1.0f || command.PitchRamp != 0.0f)
+        // The guest passes the source sample rate at +0x1C; 1.0 is retained for
+        // legacy normalized-pitch callers. The decoder produces 48 kHz PCM.
+        // Other rates and nonzero ramp fields require explicit conversion support.
+        if (command.TargetPitch is not (1.0f or 48_000.0f) || command.PitchRamp != 0.0f)
         {
             result.Error = NotImplemented;
 

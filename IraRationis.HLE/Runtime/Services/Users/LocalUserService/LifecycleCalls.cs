@@ -21,7 +21,8 @@ internal sealed unsafe partial class LocalUserService
         {
             var instance = FromObject(self);
 
-            instance._trace.Write("UserAddBegin", $"options=0x{options:X}; block=0x{(nint)block:X}; queue=0x{block->Queue:X}; offline=True");
+            instance._trace.Write("UserAddBegin",
+                $"options=0x{options:X}; block=0x{(nint)block:X}; queue=0x{block->Queue:X}; offline=True");
 
             var operation = new LocalUserAddOperation(instance._async, instance._users, instance._trace);
 
@@ -49,7 +50,8 @@ internal sealed unsafe partial class LocalUserService
             var result = instance._async.GetResult(block, instance._baseObject.Address, (nuint)sizeof(nint),
                 (nint)output, null);
 
-            instance._trace.Write("UserAddResult", $"block=0x{(nint)block:X}; hresult=0x{unchecked((uint)result):X8}; handle=0x{*output:X}");
+            instance._trace.Write("UserAddResult",
+                $"block=0x{(nint)block:X}; hresult=0x{unchecked((uint)result):X8}; handle=0x{*output:X}");
 
             return result;
         }

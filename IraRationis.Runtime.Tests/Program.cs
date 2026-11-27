@@ -3,6 +3,7 @@
 
 using System.Buffers.Binary;
 using IraRationis.Graphics.Device;
+using IraRationis.HLE.Audio;
 using IraRationis.HLE.Input;
 using IraRationis.HLE.Input.Models;
 using IraRationis.HLE.Runtime;
@@ -14,8 +15,8 @@ using IraRationis.Loader.Threads;
 using IraRationis.PE.Models;
 using IraRationis.Runtime.Tests.Contracts;
 using IraRationis.Runtime.Tests.Hardware;
-using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Input;
+using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Memory;
 using IraRationis.Runtime.Tests.RuntimeBridge;
 using IraRationis.Runtime.Tests.RuntimeServices;
@@ -32,7 +33,8 @@ internal static class Program
             var translated = SrgbTextureStripCompiler.Translate(File.ReadAllBytes(vertex), File.ReadAllBytes(pixel),
                 File.ReadAllBytes(root));
 
-            Console.WriteLine($"Captured sRGB texture-strip contract accepted: VS source={translated.VertexSource.Length}; PS source={translated.PixelSource.Length} (CPU only).");
+            Console.WriteLine(
+                $"Captured sRGB texture-strip contract accepted: VS source={translated.VertexSource.Length}; PS source={translated.PixelSource.Length} (CPU only).");
 
             return 0;
         }
@@ -87,6 +89,23 @@ internal static class Program
         PhysicalPageTests.Run();
 
         InteropTests.Run();
+
+        var image = (nuint)0x10000000;
+        Require(AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x5C60800), "Audio mixer thunk");
+        Require(AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x1E95040), "Audio mixer direct entry");
+        Require(!AudioMixerScheduling.Matches(image, image + 0x2215EA0, image + 0x5B94C00) &&
+                !AudioMixerScheduling.Matches(image, image + 0x2215EA1, image + 0x5C60800) &&
+                !AudioMixerScheduling.Matches(image, image - 1, image + 0x5C60800) &&
+                !AudioMixerScheduling.Matches(0, 0x2215EA0, 0x5C60800), "Audio mixer unrelated thread rejection");
+        Require(AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA0, image + 0x442FA80) &&
+                !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA0, image + 0x1E95040) &&
+                !AudioMixerScheduling.MatchesMovie(image, image + 0x2215EA1, image + 0x442FA80) &&
+                AudioMixerScheduling.IsBinkWorker(image, 0x1000, image + 0xFFF) &&
+                !AudioMixerScheduling.IsBinkWorker(image, 0x1000, image + 0x1000) &&
+                !AudioMixerScheduling.IsBinkWorker(image, 0x1000, image - 1),
+            "Movie scheduling identity and mapped range");
+        Console.WriteLine("Audio mixer scheduling identity and unrelated thread rejection passed (CPU only).");
+        Console.WriteLine("R77 movie worker scheduling identity passed (CPU only).");
 
         GameInputModule.VerifyLayouts();
 

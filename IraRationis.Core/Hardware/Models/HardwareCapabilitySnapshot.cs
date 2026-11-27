@@ -6,18 +6,6 @@ namespace IraRationis.Core.Hardware.Models;
 
 public sealed record HardwareCapabilitySnapshot
 {
-    public Architecture ProcessArchitecture { get; }
-
-    public int EffectiveProcessorCount { get; }
-
-    public CpuInstructionSets UsableInstructionSets { get; }
-
-    public ulong? TotalPhysicalMemoryBytes { get; }
-
-    public ulong? AvailablePhysicalMemoryBytes { get; }
-
-    public long GarbageCollectorMemoryBudgetBytes { get; }
-
     public HardwareCapabilitySnapshot(Architecture processArchitecture, int effectiveProcessorCount,
         CpuInstructionSets usableInstructionSets, ulong? totalPhysicalMemoryBytes,
         ulong? availablePhysicalMemoryBytes, long garbageCollectorMemoryBudgetBytes)
@@ -31,5 +19,35 @@ public sealed record HardwareCapabilitySnapshot
         TotalPhysicalMemoryBytes = totalPhysicalMemoryBytes;
         AvailablePhysicalMemoryBytes = availablePhysicalMemoryBytes;
         GarbageCollectorMemoryBudgetBytes = garbageCollectorMemoryBudgetBytes;
+    }
+
+    public Architecture ProcessArchitecture
+    {
+        get;
+    }
+
+    public int EffectiveProcessorCount
+    {
+        get;
+    }
+
+    public CpuInstructionSets UsableInstructionSets
+    {
+        get;
+    }
+
+    public ulong? TotalPhysicalMemoryBytes
+    {
+        get;
+    }
+
+    public ulong? AvailablePhysicalMemoryBytes
+    {
+        get;
+    }
+
+    public long GarbageCollectorMemoryBudgetBytes
+    {
+        get;
     }
 }

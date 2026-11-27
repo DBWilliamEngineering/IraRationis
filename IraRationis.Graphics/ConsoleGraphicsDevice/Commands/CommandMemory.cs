@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Device.Models;
@@ -13,6 +12,7 @@ using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Synchronization;
 using IraRationis.Graphics.Textures.Models;
+using TerraFX.Interop.DirectX;
 
 namespace IraRationis.Graphics;
 
@@ -20,6 +20,49 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     internal const int MemoryWaitTimeoutMilliseconds = 30000;
     private const int MaximumMemoryOperations = 65536;
+    private static readonly bool EnableGuardedPublication =
+        Environment.GetEnvironmentVariable("IRX_GUARDED_MEMORY_PUBLICATION") == "1";
+    private static int _guardedPublicationUnavailable;
+    private static long _guardedPublicationHits;
+    private static long _guardedPublicationMisses;
+
+    [DllImport("irx-native", EntryPoint = "IrxTryPublishResidentScalar", ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.ApplicationDirectory)]
+    private static extern int TryPublishResidentScalar(nuint address, ulong value, uint bytes);
+
+    private static bool TryGuardedPublication(ulong address, ulong value, int bytes)
+    {
+        if (!EnableGuardedPublication || Volatile.Read(ref _guardedPublicationUnavailable) != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var accepted = TryPublishResidentScalar((nuint)address, value, (uint)bytes) != 0;
+            var count = accepted
+                ? Interlocked.Increment(ref _guardedPublicationHits)
+                : Interlocked.Increment(ref _guardedPublicationMisses);
+            if (count <= 2 || (count & (count - 1)) == 0)
+            {
+                Console.Error.WriteLine(
+                    $"[graphics] IRX-R75-PUBLICATION: residentHits={Interlocked.Read(ref _guardedPublicationHits)}; kernelFallbacks={Interlocked.Read(ref _guardedPublicationMisses)}.");
+            }
+
+            return accepted;
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException
+                                              or BadImageFormatException)
+        {
+            if (Interlocked.Exchange(ref _guardedPublicationUnavailable, 1) == 0)
+            {
+                Console.Error.WriteLine(
+                    "[graphics] IRX-R75-PUBLICATION: native export unavailable; retaining kernel writes.");
+            }
+
+            return false;
+        }
+    }
 
     // Use kernel-checked access rather than dereferencing arbitrary guest addresses.
     [DllImport("kernel32.dll", ExactSpelling = true)]
@@ -50,11 +93,23 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void PublishMemory(ulong address, ulong value, int bytes)
     {
-        if (TryPublishFenceAddress(address, value, bytes))
+        using (BeginTiming(GraphicsStage.FencePublication))
         {
-            return;
+            if (TryPublishFenceAddress(address, value, bytes))
+            {
+                return;
+            }
         }
 
+        using (BeginTiming(GraphicsStage.GuardedPublication))
+        {
+            if (TryGuardedPublication(address, value, bytes))
+            {
+                return;
+            }
+        }
+
+        using var kernelTiming = BeginTiming(GraphicsStage.KernelPublication);
         nuint transferred = 0;
 
         if (WriteProcessMemory(-1, (void*)(nuint)address, &value, (nuint)bytes, &transferred) == 0 ||
@@ -94,7 +149,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void SealMemoryBoundary(nint self, RecordedCommandState state, MemoryWrite? write, MemoryWait? wait,
         DeferredCopy? copy = null, VertexFetchDrawBoundary? draw = null, RectangleDrawBoundary? rectangle = null,
         TexturedDrawBoundary? textured = null, ColorLutComputeBoundary? compute = null,
-        PlanarColorDrawBoundary? planarColor = null)
+        PlanarColorDrawBoundary? planarColor = null, IndexedUiBoundary? indexedUi = null)
     {
         using var stageTiming = BeginTiming(GraphicsStage.SealBoundary);
 
@@ -102,7 +157,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (current == 0) // Synthetic ABI probe only.
         {
-            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute, planarColor));
+            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute,
+                planarColor, indexedUi));
 
             return;
         }
@@ -113,7 +169,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (resultCode < 0)
         {
-            var boundary = planarColor.HasValue ? "planar-color" :
+            var boundary = indexedUi.HasValue ? "indexed-ui" :
+                planarColor.HasValue ? "planar-color" :
                 compute != null ? "compute" :
                 textured.HasValue ? "textured-rectangle" :
                 rectangle.HasValue ? "rectangle" :
@@ -140,7 +197,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{resultCode:X8}.");
         }
 
-        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor));
+        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute,
+            planarColor, indexedUi));
 
         var enhanced = *(nint*)(self + ListEnhancedHost);
 
@@ -258,7 +316,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var started = Stopwatch.GetTimestamp();
 
-        for(;;)
+        for (;;)
         {
             if (!TryReadMemory(wait.Address, wait.Bytes, out var value))
             {
@@ -296,6 +354,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (CommandStates.TryGetValue(list, out var state) && state.MemoryBoundaries.Count != 0)
         {
             using var completion = new HostCompletionFence();
+            using var ordered = EnableOrderedTextureUploads && !EnableColorFlow && !EnableInputColorTrace &&
+                                !EnableTextureIntermediatePreview && !EnableGuestPreviewWindow
+                ? new OrderedTextureUploads(queue)
+                : null;
 
             foreach (var boundary in state.MemoryBoundaries)
             {
@@ -304,6 +366,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &segment);
 
                 completion.Wait(queue);
+                ordered?.CompleteAfterFence();
 
                 if (boundary.Write is { } write)
                 {
@@ -347,11 +410,25 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     try
                     {
-                        ExecutePlanarColorDrawBoundary(queue, planarColor);
+                        ExecutePlanarColorDrawBoundary(queue, planarColor, ordered);
                     }
                     catch (Exception exception)
                     {
-                        Environment.FailFast($"[graphics] Planar color submission failed: {exception.Message}", exception);
+                        Environment.FailFast($"[graphics] Planar color submission failed: {exception.Message}",
+                            exception);
+                    }
+                }
+
+                if (boundary.IndexedUi is { } indexedUi)
+                {
+                    try
+                    {
+                        ExecuteIndexedUiBoundary(queue, indexedUi, ordered);
+                    }
+                    catch (Exception exception)
+                    {
+                        Environment.FailFast($"[graphics] Indexed UI submission failed: {exception.Message}",
+                            exception);
                     }
                 }
 
@@ -364,7 +441,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     try
                     {
-                        ExecuteTexturedDrawBoundary(queue, textured);
+                        ExecuteTexturedDrawBoundary(queue, textured, ordered);
                     }
                     catch (Exception exception)
                     {
@@ -392,7 +469,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 ulong gpu = 0, cpu = 0;
                 // ID3D12CommandQueue::GetClockCalibration is slot 17.
-                var resultCode = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
+                var resultCode =
+                    ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)Slot(queue, 17))(queue, &gpu, &cpu);
 
                 if (resultCode < 0)
                 {
@@ -403,6 +481,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                 break;
             }
+
             case 8 when write.Flags == 2:
                 value = (ulong)Stopwatch.GetTimestamp();
 

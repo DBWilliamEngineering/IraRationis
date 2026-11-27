@@ -145,7 +145,8 @@ internal static unsafe class Program
 
             for (var index = 0; index < guest.Length; index++)
             {
-                Require(Math.Abs(guest[index] - sink.LastPacket[index] * (1.0f / 32768.0f)) < Tolerance, "Guest output unchanged");
+                Require(Math.Abs(guest[index] - sink.LastPacket[index] * (1.0f / 32768.0f)) < Tolerance,
+                    "Guest output unchanged");
             }
 
             Require(XApuModule.AttachPcmSink(handle, 1, null), "Sink detached");

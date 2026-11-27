@@ -217,7 +217,8 @@ internal ref struct PlanarInstructionReader
 
         if (source == 255)
         {
-            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."), "scalar literal");
+            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."),
+                "scalar literal");
         }
     }
 
@@ -245,7 +246,7 @@ internal ref struct PlanarInstructionReader
         if (actual != expected)
         {
             throw new NotSupportedException($"Planar-color {operation} differs at native offset 0x{offset:X}: " +
-                $"expected 0x{expected:X8}, received 0x{actual:X8}.");
+                                            $"expected 0x{expected:X8}, received 0x{actual:X8}.");
         }
     }
 
@@ -276,6 +277,7 @@ internal ref struct PlanarInstructionReader
         {
             reader = new PlanarInstructionReader(arithmetic);
             reader.FusedMultiplyAdd(7, 1, Vector(2), 3);
+
             throw new InvalidOperationException("Planar native register mutation was accepted.");
         }
         catch (NotSupportedException)
@@ -286,6 +288,7 @@ internal ref struct PlanarInstructionReader
         {
             reader = new PlanarInstructionReader(arithmetic.AsSpan(0, 4));
             reader.FusedMultiplyAdd(6, 1, Vector(2), 3);
+
             throw new InvalidOperationException("Planar truncated operand was accepted.");
         }
         catch (InvalidDataException)
@@ -309,6 +312,7 @@ internal ref struct PlanarInstructionReader
         {
             reader = new PlanarInstructionReader(header);
             reader.IdentityHeader();
+
             throw new InvalidOperationException("Planar non-NOP header was accepted.");
         }
         catch (NotSupportedException)

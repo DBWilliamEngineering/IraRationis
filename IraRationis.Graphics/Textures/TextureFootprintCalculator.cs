@@ -250,7 +250,8 @@ internal static class TextureFootprintCalculator
             var paddedWidth = (uint)PaddedDimension(width, index, block);
             var paddedHeight = (uint)PaddedDimension(height, index, block);
 
-            if (blockLog != 0 && mips > 1 && paddedWidth <= fixedWidth && paddedHeight <= fixedHeight && mips - index <= (uint)maxTail)
+            if (blockLog != 0 && mips > 1 && paddedWidth <= fixedWidth && paddedHeight <= fixedHeight
+                && mips - index <= (uint)maxTail)
             {
                 firstTail = index;
 
@@ -334,7 +335,8 @@ internal static class TextureFootprintCalculator
 
             entries[index] = new TextureMip(Dimension(width, index, block), Dimension(height, index, block),
                 dimension == 4 ? Dimension(depth, index, 1) : 1U, tailPitch, tailRows,
-                thick ? (uint)RoundUp(PaddedDimension(depth, index, 1), microZ) : 1U, 0, true, tailOffset, coordinateX * microX,
+                thick ? (uint)RoundUp(PaddedDimension(depth, index, 1), microZ) : 1U, 0, true, tailOffset,
+                coordinateX * microX,
                 coordinateY * microY);
 
             tailPitch = Math.Max(tailPitch >> 1, microX);

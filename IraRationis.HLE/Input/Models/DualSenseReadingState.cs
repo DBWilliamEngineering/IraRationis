@@ -4,4 +4,4 @@
 
 namespace IraRationis.HLE.Input.Models;
 
-internal sealed unsafe record DualSenseReadingState(GameInputPadState Pad);
+internal sealed record DualSenseReadingState(GameInputPadState Pad);

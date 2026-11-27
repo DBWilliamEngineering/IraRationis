@@ -9,8 +9,10 @@ namespace IraRationis.Graphics;
 
 public static partial class ConsoleGraphicsDevice
 {
-    internal static readonly bool EnableVerboseGraphics = Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
-    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts = new();
+    internal static readonly bool EnableVerboseGraphics =
+        Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
+    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts =
+        new();
     private static readonly object RuntimeMetricsGate = new();
     private static Timer? _runtimeMetricsTimer;
     internal static long _fenceCreations, _fenceReuses, _fenceWaits, _fenceTicks;
@@ -43,7 +45,8 @@ public static partial class ConsoleGraphicsDevice
 
     // Only repetitive success messages use this method. Failures, first-use
     // markers and correctness evidence retain their original logging paths.
-    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "",
+        [CallerLineNumber] int line = 0)
     {
         if (EnableVerboseGraphics)
         {
@@ -106,7 +109,8 @@ public static partial class ConsoleGraphicsDevice
             {
                 _lastRuntimeMetricsReport = Stopwatch.GetTimestamp();
 
-                Volatile.Write(ref _runtimeMetricsTimer, new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
+                Volatile.Write(ref _runtimeMetricsTimer,
+                    new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
             }
         }
     }
@@ -115,7 +119,8 @@ public static partial class ConsoleGraphicsDevice
     {
         var now = Stopwatch.GetTimestamp();
 
-        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency || !Monitor.TryEnter(RuntimeMetricsGate))
+        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency
+            || !Monitor.TryEnter(RuntimeMetricsGate))
         {
             return;
         }

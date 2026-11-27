@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ABI adapted from DexNom/VIctory crates/victory-gpu/src/list.rs and object.rs.
 
+using IraRationis.Graphics.Commands.Models;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
-using IraRationis.Graphics.Commands.Models;
 
 namespace IraRationis.Graphics.Commands;
 
-internal sealed unsafe class RecordedCommandState
+internal sealed class RecordedCommandState
 {
     public readonly RecordedRootState Compute = new();
     public readonly RecordedRootState Graphics = new();

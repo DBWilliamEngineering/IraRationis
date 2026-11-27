@@ -13,11 +13,11 @@ internal sealed partial class RuntimeBridgeTrace
 
     private readonly object _queryGate = new();
     private readonly Dictionary<RuntimeBridgeQueryKey, RuntimeBridgeQuerySeries> _querySeries = [];
+    private long _additionalQueryFailures;
     private long _queryFailures;
     private long _queryReportedCalls;
     private long _queryReportedCompletions;
     private long _untrackedQueries;
-    private long _additionalQueryFailures;
 
     internal RuntimeBridgeQueryObservation BeginQuery(RuntimeBridgeQueryKey key, nint output,
         Func<string>? captureCaller = null)
@@ -97,7 +97,8 @@ internal sealed partial class RuntimeBridgeTrace
             if (result >= 0)
             {
                 returnedObject = RuntimeBridgeMemoryReader.TryReadPointer(observation.Output, out var value)
-                    ? $"0x{value:X}" : "unreadable";
+                    ? $"0x{value:X}"
+                    : "unreadable";
             }
 
             Interlocked.Increment(ref _queryReportedCompletions);

@@ -5,13 +5,13 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
+using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 
 namespace IraRationis.Graphics;
 
@@ -93,9 +93,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (reportFailure)
             {
                 Console.Error.WriteLine($"[graphics] target view REFUSED: guestFormat={description.Format}; " +
-                    $"hostFormat={HostTextureViewFormats.BackingFormat(description)}; viewFormat={viewFormat}; " +
-                    $"dimension={description.Dimension}; slices={description.DepthOrArraySize}; mips={description.MipLevels}; " +
-                    $"samples={description.SampleCount}; flags=0x{description.Flags:X}; descriptorBytes={metadata.Description?.Length ?? 0}.");
+                                        $"hostFormat={HostTextureViewFormats.BackingFormat(description)}; viewFormat={viewFormat}; "
+                                        +
+                                        $"dimension={description.Dimension}; slices={description.DepthOrArraySize}; mips={description.MipLevels}; "
+                                        +
+                                        $"samples={description.SampleCount}; flags=0x{description.Flags:X}; descriptorBytes={metadata.Description?.Length ?? 0}.");
             }
 
             return false;
@@ -116,7 +118,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         nint heap = 0;
 
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
+        var resultCode =
+            ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
             (device, &heapDescription, &iid, &heap);
 
         if (resultCode < 0 || heap == 0)
@@ -475,6 +478,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void DrawIndexedGuest(nint self, uint indices, uint instances, uint first, int baseVertex,
         uint firstInstance)
     {
+        if (TryRecordIndexedUi(self, indices, instances, first, baseVertex, firstInstance))
+        {
+            return;
+        }
+
         // Both rectangle and triangle-list paths validate their shader and IA contracts.
         if (StateFor(self).Topology is RectangleRectangleTopology or 4 &&
             TryRecordRectangleGuestDraw(self, indices, instances, first, firstInstance, true, baseVertex))
@@ -501,9 +509,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void CopyTextureGuest(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ, nint src, nint box)
+    private static void CopyTextureGuest(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ,
+        nint src, nint box)
     {
-        if (LinearTextureTransferEnabled && TryRecordLinearTextureTransfer(self, dst, coordinateX, coordinateY, coordinateZ, src, box))
+        if (LinearTextureTransferEnabled
+            && TryRecordLinearTextureTransfer(self, dst, coordinateX, coordinateY, coordinateZ, src, box))
         {
             return;
         }
@@ -557,7 +567,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void CopyTextureGuestX(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ, nint src, nint box, uint flags)
+    private static void CopyTextureGuestX(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ,
+        nint src, nint box, uint flags)
     {
         IncompleteOperation(self, "CopyTextureRegionX", "texture upload/readback and resource coherence");
     }
@@ -696,8 +707,10 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             case 142:
                 return "registered-optional-noop";
+
             case 148:
                 return "registered-cpu-only";
+
             case >= 61:
                 slot -= 2;
 
@@ -846,7 +859,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                         pixel[2] != 255 || pixel[3] != 255)
                     {
                         throw new InvalidOperationException(
-                            $"GPU clear readback differs: expected R={expectedRed} +/- {tolerance}, G=0, B=255, A=255; " +
+                            $"GPU clear readback differs: expected R={expectedRed} +/- {tolerance}, G=0, B=255, A=255; "
+                            +
                             $"actual={pixel[0]},{pixel[1]},{pixel[2]},{pixel[3]}.");
                     }
                 }
@@ -859,7 +873,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9))(readback, 0, &written);
         }
 
-        Console.WriteLine($"[graphics-probe] Native RTV clear and readback passed (16 RGBA8 pixels; R={expectedRed} +/- {tolerance}).");
+        Console.WriteLine(
+            $"[graphics-probe] Native RTV clear and readback passed (16 RGBA8 pixels; R={expectedRed} +/- {tolerance}).");
     }
 
     private static void VerifyKnownListOperations()

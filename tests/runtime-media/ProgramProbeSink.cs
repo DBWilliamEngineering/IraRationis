@@ -4,7 +4,7 @@ using IraRationis.Media.Audio;
 
 namespace IraRationis.RuntimeMedia.Tests;
 
-internal sealed unsafe class ProgramProbeSink(WindowsPcmMonitor? monitor) : IPcmPacketSink
+internal sealed class ProgramProbeSink(WindowsPcmMonitor? monitor) : IPcmPacketSink
 {
     public int Packets
     {

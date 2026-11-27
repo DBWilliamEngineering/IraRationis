@@ -12,6 +12,7 @@
 #include "InstructionHandlerOptions.h"
 #include "Memory/CacheLineMemoryQuery.h"
 #include "Memory/WritableCacheLineProbeResult.h"
+#include "Memory/GuardedPublication.h"
 
 namespace
 {
@@ -44,7 +45,9 @@ namespace
     ULONG_PTR QueryInstructionRegionEnd(ULONG_PTR address) noexcept
     {
         return irx::QueryAccessibleRegionEnd(address, false, nullptr,
-            profileInstructions ? &memoryAccessStatistics.instructionRegionQueries : nullptr);
+                                             profileInstructions
+                                                 ? &memoryAccessStatistics.instructionRegionQueries
+                                                 : nullptr);
     }
 
     void AppendText(char*& cursor, const char* value) noexcept
@@ -119,7 +122,7 @@ namespace
         AppendHex(cursor, zeroedLines);
         AppendText(cursor, " regionQueries=");
         AppendHex(cursor, memoryAccessStatistics.instructionRegionQueries +
-            memoryAccessStatistics.destinationRegionQueries);
+                  memoryAccessStatistics.destinationRegionQueries);
         AppendText(cursor, " instructionQueries=");
         AppendHex(cursor, memoryAccessStatistics.instructionRegionQueries);
         AppendText(cursor, " destinationQueries=");
@@ -199,8 +202,11 @@ namespace
                     instruction.length == 12 && instruction.destination != 0 && instruction.destination < 16 &&
                     (ctx.EFlags & 0x100) == 0;
                 const auto writableEnd = irx::QueryWritableCacheLine(line, systemPageSize,
-                    useResidentPageQueries && !batchCandidate, &ordinaryPrivate,
-                    profileInstructions ? &memoryAccessStatistics : nullptr);
+                                                                     useResidentPageQueries && !batchCandidate,
+                                                                     &ordinaryPrivate,
+                                                                     profileInstructions
+                                                                         ? &memoryAccessStatistics
+                                                                         : nullptr);
                 if (writableEnd < line + 64)
                 {
                     return EXCEPTION_CONTINUE_SEARCH;
@@ -362,7 +368,8 @@ namespace
 }
 
 extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandlerWithOptions(const ImageRange* input, unsigned count,
-    const irx::InstructionHandlerOptions* options) noexcept
+                                                                           const irx::InstructionHandlerOptions*
+                                                                           options) noexcept
 {
     // Called once, before title threads start. Ranges immutable until process exit.
     if (!input || count == 0 || count > MaxRanges || registration || !options ||
@@ -402,8 +409,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandlerWithOptions(const
                               : "[performance] IRX-R28-VEH: CLZERO batching disabled.\r\n";
     WriteDiagnostic(message, static_cast<DWORD>(std::strlen(message)));
     const char* queryMessage = useResidentPageQueries
-        ? "[performance] Resident-page CLZERO validation enabled; fresh exact-RW page query with region fallback.\r\n"
-        : "[performance] Resident-page CLZERO validation disabled; region validation active.\r\n";
+                                   ? "[performance] Resident-page CLZERO validation enabled; fresh exact-RW page query with region fallback.\r\n"
+                                   : "[performance] Resident-page CLZERO validation disabled; region validation active.\r\n";
     WriteDiagnostic(queryMessage, static_cast<DWORD>(std::strlen(queryMessage)));
     return ERROR_SUCCESS;
 }
@@ -411,7 +418,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandlerWithOptions(const
 extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange* input, unsigned count) noexcept
 {
     const irx::InstructionHandlerOptions options{
-        static_cast<std::uint32_t>(sizeof(irx::InstructionHandlerOptions)),
+        (sizeof(irx::InstructionHandlerOptions)),
         (Enabled(L"IRX_VEH_BATCH_CLZERO") ? irx::BatchClzero : 0U) |
         (Enabled(L"IRX_VEH_PROFILE") ? irx::ProfileInstructions : 0U)
     };
@@ -420,7 +427,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxInstallHandler(const ImageRange
 }
 
 extern "C" __declspec(dllexport) DWORD WINAPI IrxProbeClearCacheLine(ULONG_PTR address, DWORD residentPageQuery,
-    irx::WritableCacheLineProbeResult* result) noexcept
+                                                                     irx::WritableCacheLineProbeResult* result) noexcept
 {
     if (!result || result->size != sizeof(irx::WritableCacheLineProbeResult) || residentPageQuery > 1)
     {
@@ -436,7 +443,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IrxProbeClearCacheLine(ULONG_PTR a
     __try
     {
         const auto validatedEnd = irx::QueryWritableCacheLine(address, systemInformation.dwPageSize,
-            residentPageQuery != 0, nullptr, &statistics);
+                                                              residentPageQuery != 0, nullptr, &statistics);
         result->validatedEnd = validatedEnd;
 
         if (address <= UINTPTR_MAX - irx::CacheLineBytes && validatedEnd >= address + irx::CacheLineBytes)
@@ -461,4 +468,10 @@ extern "C" __declspec(dllexport) void WINAPI IrxDisableHandler() noexcept
 {
     // Keep DLL and registration resident. A handler may already be in flight.
     active.store(false, std::memory_order_release);
+}
+
+extern "C" __declspec(dllexport) BOOL WINAPI IrxTryPublishResidentScalar(
+    ULONG_PTR address, ULONG64 value, unsigned bytes) noexcept
+{
+    return irx::TryPublishResidentScalar(address, value, bytes) ? TRUE : FALSE;
 }

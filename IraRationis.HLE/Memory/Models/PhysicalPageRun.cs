@@ -4,4 +4,4 @@
 
 namespace IraRationis.HLE.Memory.Models;
 
-internal sealed unsafe record PhysicalPageRun(PhysicalPageSlice First, ulong Count);
+internal sealed record PhysicalPageRun(PhysicalPageSlice First, ulong Count);
