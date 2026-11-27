@@ -42,7 +42,7 @@ C_ASSERT(sizeof(Request) == 0x48);
 C_ASSERT(offsetof(Request, source) == 0x20);
 C_ASSERT(sizeof(QueueDesc) == 0x20);
 
-typedef HRESULT (WINAPI *OpenFile)(void *, const WCHAR *, const GUID *, void **);
+typedef HRESULT (WINAPI *PFN_DStorageOpenFile)(void *, const WCHAR *, const GUID *, void **);
 typedef HRESULT (WINAPI *CreateStatus)(void *, UINT, const char *, const GUID *, void **);
 typedef HRESULT (WINAPI *CreateQueue)(void *, const QueueDesc *, const GUID *, void **);
 typedef HRESULT (WINAPI *SetStaging)(void *, UINT);
@@ -108,7 +108,7 @@ UINT WINAPI ProbeEntry(void *reserved)
     {
         return 13;
     }
-    if (FAILED(((OpenFile)SLOT(factory, 4))(factory, L"G:\\payload.bin", 0, &file)) || !file)
+    if (FAILED(((PFN_DStorageOpenFile)SLOT(factory, 4))(factory, L"G:\\payload.bin", 0, &file)) || !file)
     {
         return 14;
     }
