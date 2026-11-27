@@ -37,7 +37,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         new("rectangle", static value => (value.Root, value.Pipeline));
     private static readonly NativePipelineCache<GraphicsPipelineMetadata, RectanglePipeline> SharedTexturedPipelines =
         new("textured rectangle", static value => (value.Root, value.Pipeline));
-    private static readonly NativePipelineCache<ComputePipelineState, ColorLutPipeline> SharedColorLutPipelines =
+    private static readonly NativePipelineCache<GuestComputePipelineKey, ColorLutPipeline> SharedColorLutPipelines =
         new("compute", static value => (value.Root, value.Pipeline));
 
     internal static void RetainHostObject(nint value)

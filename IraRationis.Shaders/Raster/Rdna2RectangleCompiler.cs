@@ -269,6 +269,47 @@ public static class Rdna2RectangleCompiler
                                          }
                                          """;
 
+    // The texture strip shares the two-transform IA vertex contract with the
+    // rectangle path, but its pixel program encodes RGB before the FP16 export.
+    // It is already a triangle strip, so no geometry expansion is necessary.
+    internal static PlanarColorShaderPair BuildSrgbTextureStrip()
+    {
+        var helpers = Pixel[Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..
+            Pixel.IndexOf("float4 main", StringComparison.Ordinal)];
+        const string transfer = """
+            Texture2D<float4> GuestTexture : register(t0);
+            SamplerState GuestSampler : register(s0);
+
+            float EncodeRgb(float value)
+            {
+                precise float result = 0.0f;
+                if (value > asfloat(0x3b4d2e1cu))
+                {
+                    precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
+                    result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
+                }
+                else
+                {
+                    result = LegacyMul(value, asfloat(0x414eb852u));
+                }
+
+                return result;
+            }
+
+            float4 main(Varyings input) : SV_Target0
+            {
+                float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
+                precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
+                    LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
+                    LegacyMul(texel.w, input.Color.w));
+                return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
+                    HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
+            }
+            """;
+
+        return new PlanarColorShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + helpers + transfer);
+    }
+
     // A separate indexed IA contract. Validate complete containers before lowering;
     // the native descriptor table, not the PC-facing RTS0 range order, selects the CBV.
     public static RectangleShaderPair TranslateIndexedColor(ReadOnlyMemory<byte> vertex,

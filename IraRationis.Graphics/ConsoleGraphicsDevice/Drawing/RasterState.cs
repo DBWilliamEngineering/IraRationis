@@ -12,6 +12,7 @@ namespace IraRationis.Graphics;
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private const uint RectangleRectangleTopology = 17;
+    private const uint TriangleStripTopology = 5;
 
     private static uint HostRasterTopology(uint guest)
     {

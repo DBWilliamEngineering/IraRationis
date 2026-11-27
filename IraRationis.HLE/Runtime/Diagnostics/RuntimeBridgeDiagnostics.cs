@@ -217,13 +217,14 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         }
     }
 
-    internal static nint EndLookup(RuntimeBridgeCall call, nint module, nint name, nint result, int error)
+    internal static nint EndLookup(RuntimeBridgeCall call, nint module, nint name, nint result, int error,
+        nint? explicitReturn = null)
     {
         try
         {
-            var returnedAddress = result;
+            var returnedAddress = explicitReturn ?? result;
 
-            if (Active is { } session && result != 0 && (nuint)name > ushort.MaxValue &&
+            if (explicitReturn is null && Active is { } session && result != 0 && (nuint)name > ushort.MaxValue &&
                 RuntimeBridgeMemoryReader.TryReadAnsi(name, 256, out var export))
             {
                 var path = RuntimeBridgeNativeMethods.GetModulePath(module);
@@ -253,7 +254,7 @@ public sealed class RuntimeBridgeDiagnostics : IHostFunctionObserver, IDisposabl
         }
         catch
         {
-            return result;
+            return explicitReturn ?? result;
         }
     }
 

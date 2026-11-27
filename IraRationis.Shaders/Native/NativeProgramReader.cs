@@ -129,6 +129,7 @@ public static class NativeProgramReader
             var root = ReadTable(payload, U64(record, 0x28), U32(record, 0x38));
             var used = ReadTable(payload, U64(record, 0x30), U32(record, 0x3c));
             var stage = (NativeShaderStage)index;
+            var stageMetadata = ReadStageMetadata(payload, offset, stage);
 
             uint[]? threads = null;
 
@@ -140,15 +141,37 @@ public static class NativeProgramReader
             }
 
             if (programs.Sum(program =>
-                    (long)program.Code.Length + program.RootLayout.Length + program.UsedResources.Length) +
-                code.Length + root.Length + used.Length > MaximumNativeBytes)
+                    (long)program.Code.Length + program.RootLayout.Length + program.UsedResources.Length + program.StageMetadata.Length) +
+                code.Length + root.Length + used.Length + stageMetadata.Length > MaximumNativeBytes)
             {
                 throw new InvalidDataException("Native program retention budget exceeded.");
             }
 
             programs.Add(new NativeProgram(stage, (U32(record, 0x14) & 32) == 0,
-                registers & 0x3ff, (registers >> 20) & 0xff, U32(record, 0x4c), root, used, threads, code.ToArray()));
+                registers & 0x3ff, (registers >> 20) & 0xff, U32(record, 0x4c), root, used, threads, code.ToArray())
+            {
+                StageMetadata = stageMetadata
+            });
         }
+    }
+
+    private static byte[] ReadStageMetadata(ReadOnlySpan<byte> payload, ulong recordOffset, NativeShaderStage stage)
+    {
+        var length = stage switch
+        {
+            NativeShaderStage.Vertex => 0x18C,
+            NativeShaderStage.Pixel => 0x14C + 8 * 404,
+            _ => 0
+        };
+        var metadataOffset = recordOffset + 0x54;
+
+        if (length == 0 || metadataOffset > (ulong)payload.Length ||
+            (ulong)length > (ulong)payload.Length - metadataOffset)
+        {
+            return [];
+        }
+
+        return payload.Slice((int)metadataOffset, length).ToArray();
     }
 
     private static byte[] ReadTable(ReadOnlySpan<byte> payload, ulong offset, uint count)

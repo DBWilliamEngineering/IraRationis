@@ -51,7 +51,9 @@ The native probe scripts convert their expected synthetic success sentinel into 
 
 ## Runtime bridge diagnostic validation
 
-The bridge tests use authored unmanaged-callable C# targets and owned memory. They do not load or initialize the real gaming runtime, sign in a user, or make network requests. The regular component suite includes forwarding, error-state, bounded input correlation, and private-ABI policy tests. A separate Native AOT publication exercises the same forwarding contracts in the execution model used by the game host.
+Damon supplied the earlier `Runtime bridge diagnostic contracts passed.` output before the local-service work, then reported all tests passed for the latest changeset on November 26, 2026. Detailed per-command output was not supplied with the later report. Agents have statically reviewed the new query sampling, host-async adapter, local-user, routing, and persistent-storage contracts but have not independently built or executed them. This is maintainer-reported validation, not CI or actual title integration. The next step is a fresh local-service game capture. Host-interface allowlist review remains open; see the [service handoff](runtime-services.md).
+
+The bridge/service tests use authored unmanaged-callable C# targets, owned memory, temporary files, and a controlled async fixture. They do not load or initialize the real gaming runtime, authenticate an online user, or make network requests. The fixture checks protocol ordering and ownership; actual Windows runtime queue dispatch needs a title run. Both the regular component suite and `--runtime-bridge-only` include the new service contracts. A separate Native AOT publication exercises them in the execution model used by the game host.
 
 `PublishAot` is configured locally in the test executable's project, as it is in the CLI project. Do not pass `-p:PublishAot=true` globally: MSBuild forwards that setting to referenced projects, including the compiler's `netstandard2.0` source generator, which produces `NETSDK1207`. The generator's framework is intentional; ordinary test builds and `dotnet run` remain managed.
 
@@ -65,20 +67,20 @@ dotnet run --project IraRationis.Runtime.Tests -c Release --no-build -p:Platform
 if ($LASTEXITCODE -ne 0) { throw 'Component tests failed.' }
 
 dotnet publish IraRationis.Runtime.Tests -c Release -r win-x64 `
-    -p:Platform=AnyCPU -o artifacts/runtime-bridge-contracts
+    -p:Platform=AnyCPU -o artifacts/local-services-contracts
 if ($LASTEXITCODE -ne 0) { throw 'Native AOT contract publication failed.' }
 
-& .\artifacts\runtime-bridge-contracts\IraRationis.Runtime.Tests.exe --runtime-bridge-only
+& .\artifacts\local-services-contracts\IraRationis.Runtime.Tests.exe --runtime-bridge-only
 if ($LASTEXITCODE -ne 0) { throw 'Native AOT bridge contracts failed.' }
 
 dotnet publish IraRationis.Cli -c Release -r win-x64 `
-    -p:Platform=AnyCPU -o artifacts/runtime-bridge
+    -p:Platform=AnyCPU -o artifacts/local-services
 if ($LASTEXITCODE -ne 0) { throw 'Game-host publication failed.' }
 ```
 
-The final authored-contract marker is `Runtime bridge diagnostic contracts passed.` Coverage includes full-width arguments, opaque options, exact HRESULT/output handling, both error channels, aliases/ordinals, conflicting addresses, throwing writers, limits, and cached callbacks after disposal. Owned-page fixtures check guard preservation, page-edge terminators, cross-page GUID/pointer reads, permission changes, and reserved pages. These additions have received static review; compilation and execution remain maintainer validation until results are supplied. They do not establish the actual Account Picker outcome.
+The final authored-contract marker remains `Runtime bridge diagnostic contracts passed.` Existing coverage includes full-width arguments, opaque options, exact HRESULT/output handling, both error channels, aliases/ordinals, conflicting addresses, throwing writers, and cached callbacks after disposal. Owned-page fixtures check guard preservation, page-edge terminators, cross-page GUID/pointer reads, permission changes, and reserved pages. New checks cover per-interface sampling and failure visibility, async lifetime/order, local handles and UTF-8 names, interface routing, persistent paths and bounded disk accounting. A passing prior binary does not cover these additions. Compilation and execution remain maintainer validation and do not establish the actual Account Picker outcome.
 
-Then follow the [runtime service bridge capture](DIAGNOSTICS.md#runtime-service-bridge). Keep its EXE/DLL/PDB files together in the new publication directory; the prior `native-validation` build remains available for comparison.
+Then follow the [local runtime service capture](DIAGNOSTICS.md#local-runtime-service-capture) in PowerShell 7. Keep its EXE/DLL/PDB files together in the new publication directory; retain the prior `runtime-bridge` and `native-validation` builds for comparison. These runtime-service changes add no C++ implementation.
 
 ## Media and GPU acceptance
 

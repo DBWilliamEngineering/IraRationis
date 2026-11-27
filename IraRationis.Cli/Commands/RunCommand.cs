@@ -18,6 +18,7 @@ using IraRationis.HLE.Memory;
 using IraRationis.HLE.Runtime;
 using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.HLE.Runtime.Models;
+using IraRationis.HLE.Runtime.Services;
 using IraRationis.HLE.Storage;
 using IraRationis.Loader.Images;
 using IraRationis.Loader.Images.Models;
@@ -40,6 +41,7 @@ internal static class RunCommand
         using var logSampling = RuntimeLogSampling.Begin();
         using var startup = RuntimeStartupObservation.Begin();
         using var runtimeBridge = RuntimeBridgeDiagnostics.Begin(Console.Error);
+        var runtimeServices = RuntimeServiceHost.CreateFromEnvironment(Console.Error);
 
         HardwareCapabilityReport.WriteTo(Console.Error, HardwareCapabilityProbe.Capture());
 
@@ -84,6 +86,11 @@ internal static class RunCommand
         if (mediaSample is not null)
         {
             modules.Add(RuntimeMediaSample.CreateModule());
+        }
+
+        if (runtimeServices is not null)
+        {
+            modules.Add(RuntimeServiceModule.Create());
         }
 
         var registry = new HleRegistry(modules);

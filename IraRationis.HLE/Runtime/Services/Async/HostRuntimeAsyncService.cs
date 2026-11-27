@@ -8,6 +8,13 @@ namespace IraRationis.HLE.Runtime.Services.Async;
 
 internal sealed unsafe class HostRuntimeAsyncService : IDisposable
 {
+    private const int AddReferenceSlot = 1;
+    private const int ReleaseReferenceSlot = 2;
+    private const int BeginSlot = 7;
+    private const int ScheduleSlot = 9;
+    private const int CompleteSlot = 10;
+    private const int GetResultSlot = 11;
+    private const int SubmitCallbackSlot = 18;
     private readonly object _lifetimeGate = new();
     private readonly delegate* unmanaged[Stdcall]<nint, uint> _addReference;
     private readonly delegate* unmanaged[Stdcall]<nint, uint> _releaseReference;
@@ -15,6 +22,7 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int> _schedule;
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void> _complete;
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int> _getResult;
+    private readonly delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, int> _submitCallback;
     private nint _interfaceObject;
 
     // A successful construction takes ownership of one ABI-verified QueryApi reference.
@@ -32,18 +40,19 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
 
         var methods = *(nint**)interfaceObject;
 
-        if (methods == null || methods[1] == 0 || methods[2] == 0 || methods[7] == 0 ||
-            methods[9] == 0 || methods[10] == 0 || methods[11] == 0)
+        if (methods == null || methods[AddReferenceSlot] == 0 || methods[ReleaseReferenceSlot] == 0 || methods[BeginSlot] == 0 ||
+            methods[ScheduleSlot] == 0 || methods[CompleteSlot] == 0 || methods[GetResultSlot] == 0 || methods[SubmitCallbackSlot] == 0)
         {
             throw new ArgumentException("The runtime async interface is missing a required method.", nameof(interfaceObject));
         }
 
-        _addReference = (delegate* unmanaged[Stdcall]<nint, uint>)methods[1];
-        _releaseReference = (delegate* unmanaged[Stdcall]<nint, uint>)methods[2];
-        _begin = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nint, byte*, nint, int>)methods[7];
-        _schedule = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int>)methods[9];
-        _complete = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void>)methods[10];
-        _getResult = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)methods[11];
+        _addReference = (delegate* unmanaged[Stdcall]<nint, uint>)methods[AddReferenceSlot];
+        _releaseReference = (delegate* unmanaged[Stdcall]<nint, uint>)methods[ReleaseReferenceSlot];
+        _begin = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nint, byte*, nint, int>)methods[BeginSlot];
+        _schedule = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int>)methods[ScheduleSlot];
+        _complete = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void>)methods[CompleteSlot];
+        _getResult = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)methods[GetResultSlot];
+        _submitCallback = (delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, int>)methods[SubmitCallbackSlot];
         _interfaceObject = interfaceObject;
     }
 
@@ -96,6 +105,20 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
         try
         {
             return _getResult(interfaceObject, asyncBlock, identity, bufferSize, buffer, bufferUsed);
+        }
+        finally
+        {
+            ReleaseAfterCall(interfaceObject);
+        }
+    }
+
+    internal int SubmitCallback(nint queue, uint port, nint context, nint callback)
+    {
+        var interfaceObject = RetainForCall();
+
+        try
+        {
+            return _submitCallback(interfaceObject, queue, port, context, callback);
         }
         finally
         {

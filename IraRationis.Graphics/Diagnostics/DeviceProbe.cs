@@ -5,6 +5,7 @@ using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Shaders.Native;
+using IraRationis.Shaders.Raster;
 
 namespace IraRationis.Graphics.Diagnostics;
 
@@ -15,6 +16,10 @@ public static unsafe class DeviceProbe
         NativeShaderProbe.Verify();
 
         writer.WriteLine("Native shader extraction and scalar diagnostic lowering passed (CPU only).");
+
+        PlanarColorShaderCompiler.VerifyAuthoredContracts();
+
+        writer.WriteLine("Planar color shader and resource contracts passed (CPU only).");
 
         TextureComputerProbe.Verify();
 
@@ -161,6 +166,10 @@ public static unsafe class DeviceProbe
                 ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
 
                 var clearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list);
+                // Captured guest pairing and its original typed default, both
+                // using real materialization, descriptors, clears and readbacks.
+                var linearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list, 29, 28, 0.25f);
+                var srgbReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list, 29, 0, 0.25f);
 
                 ulong marker = 0;
 
@@ -237,6 +246,10 @@ public static unsafe class DeviceProbe
                 }
 
                 ConsoleGraphicsDevice.VerifyHostClearProbe(clearReadback);
+                ConsoleGraphicsDevice.VerifyHostClearProbe(linearReadback, 64, tolerance: 1);
+                ConsoleGraphicsDevice.VerifyHostClearProbe(srgbReadback, 137, tolerance: 1);
+
+                writer.WriteLine("[graphics-probe] Guest sRGB backing with linear and default sRGB RTVs passed GPU readback.");
 
                 ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
 

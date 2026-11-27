@@ -4,11 +4,10 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.HLE.Runtime.Services.Async.Models;
 
-[StructLayout(LayoutKind.Sequential)]
-internal unsafe struct XAsyncBlock
+[StructLayout(LayoutKind.Sequential, Size = 56)]
+internal struct XAsyncBlock
 {
-    internal nint Queue;
-    internal nint Context;
-    internal nint Callback;
-    private fixed byte _reserved[32];
+    public nint Queue;
+    public nint Context;
+    public nint Callback;
 }

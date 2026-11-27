@@ -3,6 +3,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Drawing.Models;
@@ -173,6 +174,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             report.WriteLine($"PSO record kind={record.Kind} bytes={record.Bytes.Length} sha256={hash}");
 
+            WriteFixedStateEvidence(report, record);
+
             if (directory != null)
             {
                 File.WriteAllBytes(Path.Combine(directory, $"pso-{record.Kind}-{hash}.bin"), record.Bytes);
@@ -181,7 +184,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         foreach (var shader in pipeline.Shaders)
         {
-            WriteShaderEvidence(report, shader, directory);
+            WriteShaderEvidence(report, shader, directory, state.Graphics);
         }
 
         if (pipeline.InputLayout is { } layout)
@@ -201,6 +204,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             report.WriteLine("[graphics] Rectangle execution refused; inspect preceding R14/R16 reasons.");
+
+            return;
+        }
+
+        if (state.Topology == TriangleStripTopology)
+        {
+            report.WriteLine("[graphics] Triangle-strip shader contract unsupported; R10 vertex-fetch probe is not applicable.");
+
+            if (directory == null)
+            {
+                report.WriteLine("[graphics] Set IRX_DRAW_CAPTURE_DIR to retain the blocked shaders, root and PSO records.");
+            }
 
             return;
         }
@@ -280,7 +295,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static void WriteShaderEvidence(TextWriter report, PipelineShader shader, string? directory)
+    private static void WriteShaderEvidence(TextWriter report, PipelineShader shader, string? directory,
+        RecordedRootState? root = null)
     {
         var bytes = shader.Container.Bytes;
 
@@ -296,6 +312,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             var container = ShaderContainer.Parse(bytes);
 
             report.WriteLine($"  parts={string.Join(",", container.Parts.Select(static part => part.FourCC))}");
+
+            foreach (var part in container.Parts.Where(static part => part.FourCC is "ISG1" or "OSG1" or "PSG1"))
+            {
+                WriteExtendedSignatureEvidence(report, part);
+            }
 
             var dxil = container.Part("DXIL");
 
@@ -329,6 +350,17 @@ public static unsafe partial class ConsoleGraphicsDevice
                                  $"local={program.LocalBytes} rootLayout={program.RootLayout.Length} " +
                                  $"usedResources={program.UsedResources.Length} code={program.Code.Length}");
 
+                if (root != null)
+                {
+                    WriteResourceLayout(report, root, program);
+                }
+
+                if (directory != null && program.StageMetadata.Length <= 16384)
+                {
+                    File.WriteAllBytes(Path.Combine(directory, $"stage-{shader.Hash}-{program.Stage}.bin"),
+                        program.StageMetadata);
+                }
+
                 try
                 {
                     var instructions = Rdna2ScalarCompiler.Decode(program.Code);
@@ -346,6 +378,91 @@ public static unsafe partial class ConsoleGraphicsDevice
                                               NotSupportedException or OverflowException)
         {
             report.WriteLine($"  shader inspection refused: {exception.Message}");
+        }
+    }
+
+    // Standard extended DXBC signatures. This is diagnostic parsing, not a
+    // declaration that an arbitrary signature can be translated or bound.
+    private static void WriteExtendedSignatureEvidence(TextWriter report, ShaderPart part)
+    {
+        const int recordSize = 32;
+        const int maximumElements = 128;
+        var data = part.Data.Span;
+
+        if (data.Length < 8)
+        {
+            report.WriteLine($"  {part.FourCC}: truncated signature header.");
+
+            return;
+        }
+
+        var count = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        var start = BinaryPrimitives.ReadUInt32LittleEndian(data[4..]);
+
+        if (count > maximumElements || start != 8 || 8L + count * (long)recordSize > data.Length)
+        {
+            report.WriteLine($"  {part.FourCC}: unsupported signature table (count={count}, start={start}).");
+
+            return;
+        }
+
+        var tableEnd = 8 + (int)count * recordSize;
+
+        report.WriteLine($"  {part.FourCC}: elements={count}.");
+
+        for (var index = 0; index < count; index++)
+        {
+            var entry = data.Slice(8 + index * recordSize, recordSize);
+            var nameOffset = BinaryPrimitives.ReadUInt32LittleEndian(entry[4..]);
+
+            if (nameOffset < tableEnd || nameOffset >= data.Length)
+            {
+                report.WriteLine($"    element[{index}]: invalid semantic offset.");
+
+                continue;
+            }
+
+            var nameBytes = data[(int)nameOffset..];
+            var end = nameBytes.IndexOf((byte)0);
+
+            if (end is < 1 or > 128)
+            {
+                report.WriteLine($"    element[{index}]: invalid semantic name extent.");
+
+                continue;
+            }
+
+            var name = Encoding.ASCII.GetString(nameBytes[..end]);
+
+            if (name.Any(static character => !char.IsAsciiLetterOrDigit(character) && character != '_'))
+            {
+                report.WriteLine($"    element[{index}]: invalid semantic name characters.");
+
+                continue;
+            }
+
+            report.WriteLine($"    element[{index}]: {name}{BinaryPrimitives.ReadUInt32LittleEndian(entry[8..])}; " +
+                $"stream={BinaryPrimitives.ReadUInt32LittleEndian(entry)}; system={BinaryPrimitives.ReadUInt32LittleEndian(entry[12..])}; " +
+                $"component={BinaryPrimitives.ReadUInt32LittleEndian(entry[16..])}; register={BinaryPrimitives.ReadUInt32LittleEndian(entry[20..])}; " +
+                $"mask=0x{entry[24]:X2}; used=0x{entry[25]:X2}; precision={BinaryPrimitives.ReadUInt32LittleEndian(entry[28..])}.");
+        }
+    }
+
+    private static void WriteFixedStateEvidence(TextWriter report, PipelineStateRecord record)
+    {
+        var bytes = record.Bytes.AsSpan();
+
+        if (record.Kind == 16 && bytes.Length == 8)
+        {
+            report.WriteLine($"  DSV pipeline format={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}.");
+        }
+        else if (record.Kind == 21 && bytes.Length == 64)
+        {
+            report.WriteLine($"  depthEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])}; " +
+                $"depthWriteMask={BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..])}; " +
+                $"depthFunc={BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..])}; " +
+                $"stencilEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[16..])}; " +
+                $"depthBoundsEnable={BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..])}.");
         }
     }
 
@@ -382,6 +499,35 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("First-draw shader evidence regression failed.");
         }
 
+        report.GetStringBuilder().Clear();
+
+        var signature = new byte[49];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(signature, 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(4), 8);
+        BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(12), 40);
+        BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(24), 3);
+        signature[32] = 7;
+        signature[33] = 7;
+        "POSITION"u8.CopyTo(signature.AsSpan(40));
+
+        WriteExtendedSignatureEvidence(report, new ShaderPart("ISG1", 0, signature));
+
+        if (!report.ToString().Contains("POSITION0;", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Extended shader signature evidence regression failed.");
+        }
+
+        report.GetStringBuilder().Clear();
+        BinaryPrimitives.WriteUInt32LittleEndian(signature.AsSpan(12), uint.MaxValue);
+        WriteExtendedSignatureEvidence(report, new ShaderPart("ISG1", 0, signature));
+
+        if (!report.ToString().Contains("invalid semantic offset", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Extended shader signature bounds regression failed.");
+        }
+
+        Console.WriteLine("[graphics-probe] R9 extended signature evidence and bounds passed (CPU only).");
         Console.WriteLine("[graphics-probe] R9 blocked-draw metadata and shader classification passed (CPU only).");
 
         VerifyVertexFetchExtent();

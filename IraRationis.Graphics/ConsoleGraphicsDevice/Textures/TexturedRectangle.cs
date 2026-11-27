@@ -12,6 +12,7 @@ using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Drawing.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Textures.Models;
@@ -332,7 +333,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             viewFormat = ReadDescriptorUInt32(bytes, 0);
 
-            if (viewFormat != description.Format && !CompatibleClearFormat(description.Format, viewFormat))
+            if (!HostTextureViewFormats.IsCompatible(description, viewFormat))
             {
                 return false;
             }
@@ -696,11 +697,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             var cpu = ((ID3D12DescriptorHeap*)heap)->GetCPUDescriptorHandleForHeapStart();
             var gpuDescriptor = ((ID3D12DescriptorHeap*)heap)->GetGPUDescriptorHandleForHeapStart();
 
-            fixed (byte* description = texture.Description)
-            {
-                _host->CreateShaderResourceView((ID3D12Resource*)textureHost,
-                    (D3D12_SHADER_RESOURCE_VIEW_DESC*)description, cpu);
-            }
+            WriteHostTextureShaderView(texture, textureHost, cpu);
 
             resultCode = CreateHostResource(HostBufferDescription((ulong)capacity), 2, GenericRead, &upload);
 

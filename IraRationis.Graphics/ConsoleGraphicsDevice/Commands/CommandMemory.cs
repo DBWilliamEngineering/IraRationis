@@ -93,7 +93,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     // The guest allocator owns all host command memory until its normal fence/reset lifecycle.
     private static void SealMemoryBoundary(nint self, RecordedCommandState state, MemoryWrite? write, MemoryWait? wait,
         DeferredCopy? copy = null, VertexFetchDrawBoundary? draw = null, RectangleDrawBoundary? rectangle = null,
-        TexturedDrawBoundary? textured = null, ColorLutComputeBoundary? compute = null)
+        TexturedDrawBoundary? textured = null, ColorLutComputeBoundary? compute = null,
+        PlanarColorDrawBoundary? planarColor = null)
     {
         using var stageTiming = BeginTiming(GraphicsStage.SealBoundary);
 
@@ -101,7 +102,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (current == 0) // Synthetic ABI probe only.
         {
-            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute));
+            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute, planarColor));
 
             return;
         }
@@ -112,7 +113,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (resultCode < 0)
         {
-            var boundary = compute != null ? "compute" :
+            var boundary = planarColor.HasValue ? "planar-color" :
+                compute != null ? "compute" :
                 textured.HasValue ? "textured-rectangle" :
                 rectangle.HasValue ? "rectangle" :
                 draw.HasValue ? "vertex-fetch" :
@@ -138,7 +140,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{resultCode:X8}.");
         }
 
-        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute));
+        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor));
 
         var enhanced = *(nint*)(self + ListEnhancedHost);
 
@@ -338,6 +340,18 @@ public static unsafe partial class ConsoleGraphicsDevice
                     {
                         Environment.FailFast($"[graphics] R17 compute submission failed: {exception.Message}",
                             exception);
+                    }
+                }
+
+                if (boundary.PlanarColor is { } planarColor)
+                {
+                    try
+                    {
+                        ExecutePlanarColorDrawBoundary(queue, planarColor);
+                    }
+                    catch (Exception exception)
+                    {
+                        Environment.FailFast($"[graphics] Planar color submission failed: {exception.Message}", exception);
                     }
                 }
 

@@ -1,13 +1,43 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Security.Cryptography;
 using IraRationis.Graphics.Shaders.Models;
 
 namespace IraRationis.Graphics;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
+    private static void VerifyComputeCaptureBlobs()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"irx-compute-probe-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            using var report = new StringWriter();
+            byte[] bytes = [1, 2, 3, 4];
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            WriteBoundedComputeBlob(report, directory, "shader", ".cdxil", bytes);
+            WriteBoundedComputeBlob(report, directory, "root", ".bin", ReadOnlySpan<byte>.Empty);
+            WriteBoundedComputeBlob(report, directory, "oversize", ".bin", new byte[MaximumComputeCaptureBytes + 1]);
+
+            if (Directory.GetFiles(directory).Length != 1 ||
+                !File.ReadAllBytes(Path.Combine(directory, $"shader-{hash}.cdxil")).AsSpan().SequenceEqual(bytes))
+            {
+                throw new InvalidOperationException("Compute capture bounds or retained blob identity failed.");
+            }
+
+            Console.Error.WriteLine("[graphics-probe] Bounded compute capture identity and rejection passed (CPU only).");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
     internal static void VerifyComputePipelineAbi(nint device)
     {
+        VerifyComputeCaptureBlobs();
         var createRoot = (delegate* unmanaged[Stdcall]<nint, uint, byte*, nuint, Guid*, nint*, int>)Slot(device, 16);
         var create = (delegate* unmanaged[Stdcall]<nint, ComputeDescription*, Guid*, nint*, int>)Slot(device, 11);
         var createX =

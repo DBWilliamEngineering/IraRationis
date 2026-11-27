@@ -23,7 +23,7 @@ Reproduce one action, such as pressing and releasing Y at the Account Picker. Re
 - A reading-callback registration reported as undelivered. [RegisterReading](../IraRationis.HLE/Input/GameInputModule/GameInputModule.cs) currently returns success without delivering those callbacks. This is a possible compatibility blocker, not a confirmed explanation of every stall.
 - Missing imports, exceptions, startup phases, and network activity around the action.
 
-The startup observer's `accountLifecycle=notObserved` field is a fixed observation label, not an authentication result. No account lifecycle implementation was found in the registered HLE modules during the source review; native dependencies may supply additional services. Do not infer a specific failing API from the label alone.
+The startup observer's `accountLifecycle=notObserved` field is a fixed observation label, not an authentication result. It predates the opt-in local-user service and does not track that service's state. Use actual query and local-service operation records; do not infer a specific failing API from the label alone.
 
 The authored media export and diagnostic PCM observation are separate from the title's own media ABI. See [Runtime Integration](RUNTIME-INTEGRATION.md).
 
@@ -81,7 +81,7 @@ Let the Account Picker settle for ten seconds. Hold Y for about two seconds, rel
 | `operation=ExportLookup` begin/end | Runtime export or ordinal requested, resolved/returned addresses, and whether a private observer was installed. |
 | `operation=Initialize`, `InitializeEx`, or `InitializeEx2` begin/end | Full-width original arguments and exact returned HRESULT. The options pointer remains opaque. |
 | `operation=QueryApi` begin/end | Readable provider/interface GUIDs and exact HRESULT; successful output is recorded as a raw object pointer. Returned interfaces are not wrapped. |
-| `phase=limit` / `phase=summary` | First-128-call limits per operation and total counters. A disposal summary is a snapshot; process termination can omit it. |
+| `phase=limit` / `phase=summary` | Current QueryApi sampling is per provider/interface: first eight calls and powers of two, at most 64 keys, plus 32 otherwise unsampled failure pairs. Other operations keep their first-128-call limit. A disposal summary is a snapshot; process termination can omit it. |
 
 Pair begin/end records by operation and ID, and correlate with UTC/native thread or monotonic timestamps. An unmatched begin can identify a call that did not return within the recording, but abrupt termination and logging failure must be considered. IDs are unique within a session, not globally chronological across operation kinds. `caller` is the first registered guest-image return address found in a bounded 32-frame unwind; `unavailable` means no such frame was recovered. It is not an instruction trace. `win32Error` preserves the thread's last-error state; successful calls and HRESULT-returning functions may leave a stale value, so interpret their returned result first.
 
@@ -91,7 +91,40 @@ Callbacks preserve arguments, results, output memory, and both native/managed er
 
 The package probe uses a zero-length [GetCurrentPackageFullName](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getcurrentpackagefullname) query. Its status distinguishes no package identity from a required name-buffer size; this alone is not an account-initialization result or a reason to copy manifests into the host directory.
 
-The [Victory runtime reference](https://github.com/avatarmanz/VIctory-7900XTX/blob/126acb35b509bdbe097d607f198d7a2736de5202/crates/victory-hle/src/modules/xgameruntime.rs) and [Five Star user completion reference](https://github.com/ThatRecompDev/five-star-recomp/blob/9864ac5ee1cf9ab7909b1be427430d87f1c3eb26/src/FiveStar.Loader/Shims/Gdk/UserAddOperation.cs) supply offline runtime/user behavior and asynchronous completion. They help identify required contracts; their gameplay/performance claims were not independently tested, and their implementation was not copied into this observer. A successful host load does not establish an equivalent user lifecycle. If queries succeed, tracing the returned service's operation/completion boundary is the next narrower task.
+The [Victory runtime reference](https://github.com/avatarmanz/VIctory-7900XTX/blob/126acb35b509bdbe097d607f198d7a2736de5202/crates/victory-hle/src/modules/xgameruntime.rs) and [Five Star user completion reference](https://github.com/ThatRecompDev/five-star-recomp/blob/9864ac5ee1cf9ab7909b1be427430d87f1c3eb26/src/FiveStar.Loader/Shims/Gdk/UserAddOperation.cs) supply offline runtime/user behavior and asynchronous completion. They help identify required contracts; their gameplay/performance claims were not independently tested, and their implementation was not copied into this observer. The separate [local service implementation](runtime-services.md) now provides explicit C# user, title-ID, and storage behavior, with its own pending validation.
+
+### Supplied bridge results
+
+`runtime-bridge-20261126-155547.log` records `InitializeEx2` returning success at physical lines 151-154. The storage provider/interface pair `f4faf4d4-2d04-4fce-b3e0-474a713a3e84` / `41a4e10c-5a7e-41d9-8c37-37bde62a07d6` returns `E_FAIL` at lines 227-231. Of the first 128 observed query completions, 127 succeed and one fails. The old global query budget expires at lines 1454-1455, approximately eleven seconds before the first guest Y press at line 6445. Seven complete guest Y press/release pairs and two successful device-registration callback deliveries are visible. Account Picker remained blocked; none of these observations proves its cause.
+
+The initial `NativeCommandError` text is Windows PowerShell 5's stderr formatting. It is not itself a game exception. Wrapped physical lines must be reassembled before counting records. There is no final bridge summary in this recording. The new per-key sampler prevents repeated queries to one interface from exhausting another interface's initial samples. Promoted failures carry `deferredForFailure=True`, original start ticks, and `callerCapture=afterResult`; their caller unwind was captured after the returned result. Suppression and aggregate totals remain visible within the documented budgets.
+
+### Local runtime service capture
+
+The new services are opt-in. Damon reported all tests passed on November 26, 2026; actual title integration remains pending. Publish the current CLI to `artifacts/local-services` using the [build and contract sequence](RELEASING.md#runtime-bridge-diagnostic-validation), then capture the game. The outstanding host-interface review is recorded in the [service handoff](runtime-services.md). Start PowerShell 7 with `pwsh -NoProfile`, then run these commands from the repository root. Direct redirection in PowerShell 7 avoids the Windows PowerShell 5 error-record wrapping seen in the supplied log.
+
+```powershell
+$irx = (Resolve-Path .\artifacts\local-services\irx.exe).Path
+$PSNativeCommandUseErrorActionPreference = $false
+$env:IRX_RUNTIME_LOCAL_SERVICES = '1'
+$env:IRX_RUNTIME_BRIDGE_TRACE = '1'
+$env:IRX_INPUT_TRACE = '1'
+$env:IRX_STARTUP_OBSERVATION = '1'
+$env:IRX_VEH_RESIDENT_PAGE_QUERY = '1'
+$env:IRX_VEH_BATCH_CLZERO = '0'
+$env:IRX_VEH_PROFILE = '1'
+$env:IRX_PROFILE_DETAIL_INTERVAL_MS = '10000'
+New-Item -ItemType Directory -Force artifacts/logs | Out-Null
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$log = ".\artifacts\logs\local-services-$stamp.log"
+& $irx run > $log 2>&1
+$runExitCode = $LASTEXITCODE
+Write-Host "Exit code: $runExitCode; log: $log"
+```
+
+Let the picker settle for ten seconds, hold Y for two seconds, release, and wait ten seconds. If it stays there, repeat once and leave another twenty seconds before closing. If it advances, continue toward the menu and record the next blocker. Report the actual visible screen, audio, and whether the process exited normally. Inspect `Enabled`, `UserAddBegin`, `UserAddCompleted`, `UserAddResult`, storage-query/path records, and explicit unsupported-operation records together. Add entry is logged after argument validation but before host Begin; completion is logged before calling host Complete. Neither record proves callback delivery. Use the [handoff decision table](development-handoff.md#reading-the-next-game-log) before interpreting missing records or differing async-block addresses.
+
+The local route retains the real runtime module and uses the real host async queue; online identity, tokens, and privileges remain unsupported. The exact host provider/interface policy is intentionally limited and still under method-ownership review. For a same-binary host baseline, set `IRX_RUNTIME_LOCAL_SERVICES='0'` and choose another log filename. Keep the remaining switches unchanged. This run tests functionality; it is not a controlled FPS benchmark. The existing independent media/video commands remain useful separate checks.
 
 ## DNS and socket operations
 

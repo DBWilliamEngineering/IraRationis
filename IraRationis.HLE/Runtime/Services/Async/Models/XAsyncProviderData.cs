@@ -7,8 +7,8 @@ namespace IraRationis.HLE.Runtime.Services.Async.Models;
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct XAsyncProviderData
 {
-    internal XAsyncBlock* Async;
-    internal nuint BufferSize;
-    internal nint Buffer;
-    internal nint Context;
+    public XAsyncBlock* Async;
+    public nuint BufferSize;
+    public nint Buffer;
+    public nint Context;
 }

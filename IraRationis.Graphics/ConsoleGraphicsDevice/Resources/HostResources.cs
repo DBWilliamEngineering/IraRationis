@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 
 namespace IraRationis.Graphics;
@@ -92,6 +93,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     return NotImplemented;
                 }
 
+                description.Format = HostTextureViewFormats.BackingFormat(description);
                 description.Alignment = 0;
 
                 description.Layout = 0; // Host-optimal layout, not console swizzle.
@@ -328,6 +330,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 new ReadOnlySpan<byte>(data, bytes));
 
             VerifyHostTextureTransfers(hostQueue);
+
+            VerifyCurveLutGpu(hostQueue);
         }
         finally
         {

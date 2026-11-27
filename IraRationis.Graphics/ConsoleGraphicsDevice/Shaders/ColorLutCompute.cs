@@ -10,6 +10,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.ColorLut;
+using IraRationis.Shaders.Compute;
 
 namespace IraRationis.Graphics;
 
@@ -20,7 +21,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private const int ColorLutLargeOffset = 256;
     private const int ColorLutUploadBytes = 3072;
     private static readonly Lock ColorLutPipelineGate = new();
-    private static byte[]? _colorLutBytecode;
+    private static readonly Dictionary<uint, byte[]> GuestComputeBytecode = new();
     private static int _colorLutExecutionReported;
 
     private static bool RejectColorLutDispatch(string reason)
@@ -166,13 +167,15 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     private static bool TryCreateColorLutPipeline(ComputePipelineState metadata, RecordedCommandState state,
-        out nint root, out nint pipeline)
+        out nint root, out nint pipeline, uint curveFormat = 0)
     {
         root = 0;
 
         pipeline = 0;
 
-        if (SharedColorLutPipelines.Acquire(metadata, state) is { } shared)
+        var key = new GuestComputePipelineKey(metadata, curveFormat);
+
+        if (SharedColorLutPipelines.Acquire(key, state) is { } shared)
         {
             root = shared.Root;
 
@@ -185,24 +188,28 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         lock (ColorLutPipelineGate)
         {
-            if (_colorLutBytecode == null)
+            if (!GuestComputeBytecode.TryGetValue(curveFormat, out code))
             {
                 try
                 {
-                    var hlsl = Rdna2ColorLutCompiler.Translate(metadata.Shader.Bytes);
+                    var hlsl = curveFormat == 0 ? Rdna2ColorLutCompiler.Translate(metadata.Shader.Bytes) :
+                        CurveLutCompiler.Translate(metadata.Shader.Bytes, curveFormat);
 
                     Console.Error.WriteLine(
-                        "[graphics] IRX-GFX-SHADER-R17: recognized captured 3D color transform; compiling cs_5_1.");
+                        $"[graphics] guest compute compiler: format={curveFormat}; compiling cs_5_1.");
 
-                    _colorLutBytecode = CompileHostShader(hlsl, "cs_5_1", Console.Error);
+                    code = CompileHostShader(hlsl, "cs_5_1", Console.Error);
+
+                    if (code != null)
+                    {
+                        GuestComputeBytecode.Add(curveFormat, code);
+                    }
                 }
                 catch (Exception exception)
                 {
                     return RejectColorLutDispatch($"compute translation failed: {exception.GetType().Name}: {exception.Message}");
                 }
             }
-
-            code = _colorLutBytecode;
         }
 
         if (code == null || SerializeColorLutRoot() is not { } rootBytes)
@@ -255,7 +262,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             nativePipeline = null;
 
-            SharedColorLutPipelines.Publish(metadata, new ColorLutPipeline(root, pipeline));
+            SharedColorLutPipelines.Publish(key, new ColorLutPipeline(root, pipeline));
 
             return true;
         }
@@ -295,6 +302,11 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (metadata == null)
         {
             return RejectColorLutDispatch($"no compute metadata for bound pipeline 0x{state.Pipeline:X}");
+        }
+
+        if (CurveLutCompiler.SegmentCount(metadata.Hash) != 0)
+        {
+            return TryRecordCurveLutCompute(self, state, metadata, coordinateX, coordinateY, coordinateZ, flags);
         }
 
         if (metadata.Hash != Rdna2ColorLutCompiler.ContainerHash)
@@ -403,6 +415,13 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         using var stageTiming = BeginTiming(GraphicsStage.ExecuteCompute);
 
+        if (boundary.CurveFormat != 0)
+        {
+            ExecuteCurveLutCompute(queue, boundary);
+
+            return;
+        }
+
         if (!IsTextureSourceCurrent(boundary.Input) || !IsTextureSourceCurrent(boundary.Output) ||
             !TryGetColorLutConstants(boundary.Table + 64, ColorLutSmallBytes, out var small) ||
             !TryGetColorLutConstants(boundary.Table + 96, ColorLutLargeBytes, out var large))
@@ -457,14 +476,12 @@ public static unsafe partial class ConsoleGraphicsDevice
             throw new InvalidOperationException("R17 invalid host binding address.");
         }
 
-        fixed (byte* inputView = boundary.Input.Description)
+        WriteHostTextureShaderView(boundary.Input, boundary.InputHost, cpu);
+
+        cpu.ptr += increment;
+
         fixed (byte* outputView = boundary.Output.Description)
         {
-            _host->CreateShaderResourceView((ID3D12Resource*)boundary.InputHost,
-                (D3D12_SHADER_RESOURCE_VIEW_DESC*)inputView, cpu);
-
-            cpu.ptr += increment;
-
             _host->CreateUnorderedAccessView((ID3D12Resource*)boundary.OutputHost, null,
                 (D3D12_UNORDERED_ACCESS_VIEW_DESC*)outputView, cpu);
         }

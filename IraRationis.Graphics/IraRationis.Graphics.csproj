@@ -14,5 +14,6 @@
         <InternalsVisibleTo Include="StartupEvidence.Contracts" />
         <InternalsVisibleTo Include="VersionedUpload.Contracts" />
         <InternalsVisibleTo Include="DescriptorBindings.Contracts" />
+        <InternalsVisibleTo Include="IraRationis.Runtime.Tests" />
     </ItemGroup>
 </Project>

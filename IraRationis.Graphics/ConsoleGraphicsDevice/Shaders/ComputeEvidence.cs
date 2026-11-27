@@ -3,6 +3,7 @@
 
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Shaders.Models;
@@ -16,10 +17,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 {
     private const int MaximumComputeEvidenceTableEntries = 128;
     private const int MaximumComputeEvidenceCodeBytes = 16384;
+    private const int MaximumComputeCaptureBytes = 8 * 1024 * 1024;
+    private const int MaximumComputeDescriptorEvidenceBytes = 128;
     private static int _computeEvidenceCaptured;
 
     // Capture the first unsupported dispatch, before FailFast. No guest buffer
-    // contents are read and no binary capture directory is created.
+    // contents are read. Optional captures contain retained shader/root blobs
+    // and descriptor metadata, never the buffers or textures they reference.
     private static void CaptureCompute(nint self, uint coordinateX, uint coordinateY, uint coordinateZ, uint? flags = null)
     {
         if (Interlocked.CompareExchange(ref _computeEvidenceCaptured, 1, 0) != 0)
@@ -28,6 +32,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         using var report = new StringWriter(CultureInfo.InvariantCulture);
+        string? captureDirectory = null;
 
         try
         {
@@ -60,11 +65,28 @@ public static unsafe partial class ConsoleGraphicsDevice
                 + $"constants={state.Compute.Constants.Count}; "
                 + $"views={state.Compute.Views.Count}; heaps={state.Heaps.Length}.");
 
-            if (IsRootSignature(pipeline.Root))
-            {
-                var blob = RootSignatureBlob(pipeline.Root);
+            var capturePath = Environment.GetEnvironmentVariable("IRX_COMPUTE_CAPTURE_DIR");
+            var rootBlob = IsRootSignature(pipeline.Root) ? RootSignatureBlob(pipeline.Root) : ReadOnlySpan<byte>.Empty;
 
-                report.WriteLine($"[graphics] R16.1 pipeline root bytes={blob.Length}.");
+            if (!rootBlob.IsEmpty)
+            {
+                report.WriteLine($"[graphics] R16.1 pipeline root bytes={rootBlob.Length}; sha256={Convert.ToHexString(SHA256.HashData(rootBlob))}.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(capturePath))
+            {
+                try
+                {
+                    captureDirectory = Path.Combine(Path.GetFullPath(capturePath), $"compute-{Guid.NewGuid():N}");
+                    Directory.CreateDirectory(captureDirectory);
+                    WriteBoundedComputeBlob(report, captureDirectory, "shader", ".cdxil", pipeline.Shader.Bytes);
+                    WriteBoundedComputeBlob(report, captureDirectory, "root", ".bin", rootBlob);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                                  ArgumentException or NotSupportedException)
+                {
+                    report.WriteLine($"[graphics] compute capture unavailable: {exception.Message}");
+                }
             }
 
             foreach (var (slot, address) in state.Compute.Tables.OrderBy(static entry => entry.Key)
@@ -104,7 +126,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     + $"local={program.LocalBytes}, "
                     + $"threads={(threads == null ? "unknown" : string.Join(",", threads))}, codeBytes={program.Code.Length}.");
 
-                WriteResourceLayout(report, state, program);
+                WriteResourceLayout(report, state.Compute, program, captureDirectory != null);
                 // The instruction dump is opt-in and bounded. The default report
                 // contains only the dispatch and resource ABI metadata.
                 if (Environment.GetEnvironmentVariable("IRX_COMPUTE_INSTRUCTION_TRACE") != "1")
@@ -137,13 +159,43 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             report.WriteLine("[graphics] IRX-GFX-COMPUTE-R16.1: END (diagnostic only; dispatch not executed).");
 
-            Console.Error.Write(report.ToString());
-
+            var evidence = report.ToString();
+            Console.Error.Write(evidence);
             Console.Error.Flush();
+
+            if (captureDirectory != null)
+            {
+                try
+                {
+                    File.WriteAllText(Path.Combine(captureDirectory, "compute.txt"), evidence);
+                    Console.Error.WriteLine($"[graphics] compute local capture: {captureDirectory}");
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                                  ArgumentException or NotSupportedException)
+                {
+                    Console.Error.WriteLine($"[graphics] compute report unavailable: {exception.Message}");
+                }
+            }
         }
     }
 
-    private static void WriteResourceLayout(TextWriter report, RecordedCommandState state, NativeProgram program)
+    private static void WriteBoundedComputeBlob(TextWriter report, string directory, string label, string extension,
+        ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty || bytes.Length > MaximumComputeCaptureBytes)
+        {
+            report.WriteLine($"[graphics] compute capture omitted {label}: bytes={bytes.Length}; limit={MaximumComputeCaptureBytes}.");
+
+            return;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
+        File.WriteAllBytes(Path.Combine(directory, $"{label}-{hash}{extension}"), bytes.ToArray());
+        report.WriteLine($"[graphics] compute capture {label}: bytes={bytes.Length}; sha256={hash}.");
+    }
+
+    private static void WriteResourceLayout(TextWriter report, RecordedRootState root, NativeProgram program,
+        bool includeDescriptorBytes = false)
     {
         const int entrySize = 20;
 
@@ -182,7 +234,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 + $"descriptorDwords={entry[16]}, "
                 + $"userData={entry[17]}, slot={slot}.");
 
-            if (entry[1] != 3 || !state.Compute.Tables.TryGetValue(slot, out var table) || table == 0
+            if (entry[1] != 3 || !root.Tables.TryGetValue(slot, out var table) || table == 0
                 || (ulong)offset * 4 > ulong.MaxValue - table)
             {
                 continue;
@@ -196,6 +248,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     case DescriptorTag:
                         report.WriteLine($"[graphics] R16.1 descriptor[{index}]: token kind={token.Kind}, id={token.Id}.");
+
+                        if (includeDescriptorBytes)
+                        {
+                            WriteComputeDescriptorEvidence(report, index, token);
+                        }
 
                         break;
 
@@ -216,6 +273,40 @@ public static unsafe partial class ConsoleGraphicsDevice
                 report.WriteLine($"[graphics] R16.1 descriptor[{index}]: unreadable at recording time.");
             }
         }
+    }
+
+    private static void WriteComputeDescriptorEvidence(TextWriter report, int index, DescriptorToken token)
+    {
+        DescriptorMetadata? metadata;
+
+        lock (DescriptorGate)
+        {
+            _ = DescriptorRecords.TryGetValue(token.Id, out metadata);
+        }
+
+        if (metadata == null || metadata.Kind != token.Kind)
+        {
+            report.WriteLine($"[graphics] R16.1 descriptor[{index}]: retained metadata unavailable.");
+
+            return;
+        }
+
+        report.WriteLine($"[graphics] R16.1 descriptor[{index}]: resource=0x{(nuint)metadata.Resource:X}; generation={metadata.ResourceGeneration}; counter=0x{(nuint)metadata.Counter:X}.");
+        WriteComputeDescriptorBytes(report, index, "view", metadata.Description);
+        WriteComputeDescriptorBytes(report, index, "extra", metadata.Extra);
+    }
+
+    private static void WriteComputeDescriptorBytes(TextWriter report, int index, string label, byte[]? bytes)
+    {
+        if (bytes == null)
+        {
+            report.WriteLine($"[graphics] R16.1 descriptor[{index}] {label}: default.");
+
+            return;
+        }
+
+        var count = Math.Min(bytes.Length, MaximumComputeDescriptorEvidenceBytes);
+        report.WriteLine($"[graphics] R16.1 descriptor[{index}] {label}: bytes={bytes.Length}; hex={Convert.ToHexString(bytes.AsSpan(0, count))}; truncated={count != bytes.Length}.");
     }
 
     private static uint ReadComputeEvidenceUInt32(ReadOnlySpan<byte> entry, int offset)

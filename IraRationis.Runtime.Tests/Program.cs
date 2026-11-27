@@ -18,6 +18,8 @@ using IraRationis.Runtime.Tests.Instructions;
 using IraRationis.Runtime.Tests.Input;
 using IraRationis.Runtime.Tests.Memory;
 using IraRationis.Runtime.Tests.RuntimeBridge;
+using IraRationis.Runtime.Tests.RuntimeServices;
+using IraRationis.Shaders.Raster;
 
 namespace IraRationis.Runtime.Tests;
 
@@ -25,11 +27,26 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        if (args is ["--srgb-texture-strip-capture", var vertex, var pixel, var root])
+        {
+            var translated = SrgbTextureStripCompiler.Translate(File.ReadAllBytes(vertex), File.ReadAllBytes(pixel),
+                File.ReadAllBytes(root));
+
+            Console.WriteLine($"Captured sRGB texture-strip contract accepted: VS source={translated.VertexSource.Length}; PS source={translated.PixelSource.Length} (CPU only).");
+
+            return 0;
+        }
+
+        if (args is ["--planar-color-only"])
+        {
+            TestPlanarColor();
+
+            return 0;
+        }
+
         if (args is ["--runtime-bridge-only"])
         {
-            InputDiagnosticReportTests.Run();
-
-            RuntimeBridgeDiagnosticsTests.Run();
+            TestRuntimeServices();
 
             Console.WriteLine("Runtime bridge diagnostic contracts passed.");
 
@@ -38,7 +55,7 @@ internal static class Program
 
         if (args.Length != 0)
         {
-            Console.Error.WriteLine("Usage: IraRationis.Runtime.Tests [--runtime-bridge-only]");
+            Console.Error.WriteLine("Usage: IraRationis.Runtime.Tests [--runtime-bridge-only | --planar-color-only]");
 
             return 2;
         }
@@ -59,11 +76,11 @@ internal static class Program
 
         GraphicsCapabilityTests.Run();
 
+        TestPlanarColor();
+
         InstructionEmulationOptionsTests.Run();
 
-        InputDiagnosticReportTests.Run();
-
-        RuntimeBridgeDiagnosticsTests.Run();
+        TestRuntimeServices();
 
         MappedViewIndexTests.Run();
 
@@ -85,6 +102,36 @@ internal static class Program
         Console.WriteLine("Runtime component tests passed.");
 
         return 0;
+    }
+
+    private static void TestPlanarColor()
+    {
+        PlanarColorShaderCompiler.VerifyAuthoredContracts();
+
+        _ = SrgbTextureStripCompiler.VerifyAuthoredContracts();
+
+        TextureStripDepthPolicyTests.Run();
+
+        HostTextureViewFormatTests.Run();
+
+        Console.WriteLine("Planar color shader and resource contracts passed (CPU only).");
+    }
+
+    private static void TestRuntimeServices()
+    {
+        InputDiagnosticReportTests.Run();
+
+        RuntimeBridgeDiagnosticsTests.Run();
+
+        RuntimeBridgeQueryTraceTests.Run();
+
+        HostRuntimeAsyncServiceTests.Run();
+
+        RuntimeServiceRoutingPolicyTests.Run();
+
+        LocalUserServiceTests.Run();
+
+        PersistentLocalStorageServiceTests.Run();
     }
 
     private static void TestInstructions()

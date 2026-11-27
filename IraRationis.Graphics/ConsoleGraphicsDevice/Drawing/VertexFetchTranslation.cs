@@ -10,6 +10,7 @@ using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Shaders.Containers;
+using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
 
@@ -342,10 +343,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     // returns an owned host PSO; the caller must release or transfer that reference.
     private static nint CreatePipelineCandidate(void* root, byte[] vertexShader, byte[] pixelShader,
         GraphicsPipelineMetadata pipeline, TextWriter report, byte[]? geometryShader = null, void* inputElements = null,
-        uint inputCount = 0)
+        uint inputCount = 0, bool allowDepthless = false)
     {
         var rectangle = geometryShader != null;
         var hasInput = inputElements != null && inputCount != 0;
+
+        if (allowDepthless && !HasDisabledDepthStencil(pipeline))
+        {
+            report.WriteLine("[graphics] Depthless pipeline requires disabled depth, stencil, and depth bounds.");
+
+            return 0;
+        }
 
         if (inputElements == null != (inputCount == 0) || (rectangle && !hasInput) ||
             (!hasInput && pipeline.InputLayout is { Length: > 0 }))
@@ -375,7 +383,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (expected == 0 || record.Bytes.Length != expected ||
                 BinaryPrimitives.ReadUInt32LittleEndian(record.Bytes) != record.Kind ||
-                (seen & (1U << (int)record.Kind)) != 0 || !IsPipelineStateCompatible(record, rectangle))
+                (seen & (1U << (int)record.Kind)) != 0 || !IsPipelineStateCompatible(record, rectangle, allowDepthless))
             {
                 report.WriteLine($"[graphics] R10 native PSO validation refused: unsupported state {record.Kind}.");
 
@@ -525,7 +533,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         };
     }
 
-    private static bool IsPipelineStateCompatible(PipelineStateRecord record, bool rectangle = false)
+    private static bool HasDisabledDepthStencil(GraphicsPipelineMetadata pipeline)
+    {
+        var depth = pipeline.State.SingleOrDefault(static record => record.Kind == 21);
+        var format = pipeline.State.SingleOrDefault(static record => record.Kind == 16);
+
+        return depth is { Bytes.Length: 64 } && format is { Bytes.Length: 8 } &&
+               BinaryPrimitives.ReadUInt32LittleEndian(format.Bytes.AsSpan(4)) == 0 &&
+               BinaryPrimitives.ReadUInt32LittleEndian(depth.Bytes.AsSpan(4)) == 0 &&
+               BinaryPrimitives.ReadUInt32LittleEndian(depth.Bytes.AsSpan(16)) == 0 &&
+               BinaryPrimitives.ReadUInt32LittleEndian(depth.Bytes.AsSpan(56)) == 0;
+    }
+
+    private static bool IsPipelineStateCompatible(PipelineStateRecord record, bool rectangle = false,
+        bool allowDepthless = false)
     {
         var bytes = record.Bytes.AsSpan();
 
@@ -538,7 +559,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             15 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 28 &&
                   BinaryPrimitives.ReadUInt32LittleEndian(bytes[36..]) == 1,
             16 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 20 ||
-                  (rectangle && BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 0),
+                  ((rectangle || allowDepthless) && BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 0),
             17 => BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]) == 1 &&
                   BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..]) == 0,
             _ => true
@@ -585,6 +606,38 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             Console.WriteLine(
                 "[graphics-probe] R10 synthetic host shader compilation and root serialization passed (no GPU draw).");
+
+            var strip = SrgbTextureStripCompiler.VerifyAuthoredContracts();
+            var stripVertex = CompileHostShader(strip.VertexSource, "vs_5_1", Console.Out);
+            var stripPixel = CompileHostShader(strip.PixelSource, "ps_5_1", Console.Out);
+            var stripRoot = SerializePlanarColorRoot(Console.Out);
+
+            if (stripVertex == null || stripPixel == null || stripRoot == null)
+            {
+                throw new InvalidOperationException("sRGB texture-strip host shader/root serialization failed.");
+            }
+
+            Console.WriteLine("[graphics-probe] sRGB texture-strip host shader compilation and root serialization passed (no GPU draw).");
+
+            foreach (var format in new uint[] { 41, 56, 58, 16, 35, 37, 2, 28, 31 })
+            {
+                if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(format), "cs_5_1", Console.Out) == null)
+                {
+                    throw new InvalidOperationException($"Curve LUT host shader compilation failed for format {format}.");
+                }
+            }
+
+            if (SerializeColorLutRoot() == null)
+            {
+                throw new InvalidOperationException("Curve LUT shared compute root serialization failed.");
+            }
+
+            if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(41, 3), "cs_5_1", Console.Out) == null)
+            {
+                throw new InvalidOperationException("Three-segment curve LUT host shader compilation failed.");
+            }
+
+            Console.WriteLine("[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
         }
     }
 

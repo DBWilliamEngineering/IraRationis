@@ -14,4 +14,7 @@ public sealed record NativeProgram(
     byte[] RootLayout,
     byte[] UsedResources,
     uint[]? Threads,
-    byte[] Code);
+    byte[] Code)
+{
+    public byte[] StageMetadata { get; init; } = [];
+}

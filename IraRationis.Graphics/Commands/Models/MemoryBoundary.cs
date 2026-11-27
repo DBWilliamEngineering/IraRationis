@@ -15,4 +15,5 @@ internal readonly unsafe record struct MemoryBoundary(
     VertexFetchDrawBoundary? Draw,
     RectangleDrawBoundary? Rectangle,
     TexturedDrawBoundary? Textured,
-    ColorLutComputeBoundary? Compute);
+    ColorLutComputeBoundary? Compute,
+    PlanarColorDrawBoundary? PlanarColor = null);

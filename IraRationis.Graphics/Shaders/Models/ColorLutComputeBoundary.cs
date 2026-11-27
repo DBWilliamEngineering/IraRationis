@@ -11,4 +11,7 @@ internal sealed unsafe record ColorLutComputeBoundary(
     nint InputHost,
     nint OutputHost,
     nint Root,
-    nint Pipeline);
+    nint Pipeline,
+    uint CurveFormat = 0,
+    uint GroupsX = 0,
+    int CurveBytes = 0);
