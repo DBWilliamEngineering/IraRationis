@@ -4,8 +4,4 @@ using IraRationis.Shaders.VertexFetch.Models;
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed record VertexFetchPipeline(
-    VertexFetchShaderPair Pair,
-    nint Root,
-    nint Pipeline,
-    bool DepthBoundsEnabled);
+internal sealed unsafe record VertexFetchPipeline(VertexFetchShaderPair Pair, nint Root, nint Pipeline, bool DepthBoundsEnabled);

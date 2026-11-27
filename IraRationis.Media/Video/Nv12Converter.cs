@@ -42,8 +42,7 @@ public static class Nv12Converter
 
                 output[offset] = Clamp((298 * lumaOffset + 541 * blueChromaOffset + 128) >> 8);
 
-                output[offset + 1] =
-                    Clamp((298 * lumaOffset - 55 * blueChromaOffset - 136 * redChromaOffset + 128) >> 8);
+                output[offset + 1] = Clamp((298 * lumaOffset - 55 * blueChromaOffset - 136 * redChromaOffset + 128) >> 8);
 
                 output[offset + 2] = Clamp((298 * lumaOffset + 459 * redChromaOffset + 128) >> 8);
 

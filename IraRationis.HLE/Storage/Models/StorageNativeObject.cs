@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Storage.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct StorageNativeObject
+internal unsafe struct StorageNativeObject
 {
     public nint Table;
     public nint State;

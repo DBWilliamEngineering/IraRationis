@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Cli.Diagnostics.Network.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct NetworkTraceFilterDescriptor
+internal unsafe struct NetworkTraceFilterDescriptor
 {
     public ulong Pointer;
     public uint Size;

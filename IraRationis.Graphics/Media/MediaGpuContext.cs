@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using TerraFX.Interop.DirectX;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Media;
 
@@ -46,35 +47,34 @@ public sealed unsafe class MediaGpuContext : IDisposable
             else
             {
                 var device = nint.Zero;
-                var deviceId = ConsoleGraphicsDevice.DeviceId;
-                var deviceResult = ConsoleGraphicsDevice.D3D12CreateDevice(0, 0xC000, &deviceId, &device);
+                var deviceId = GraphicsDevice.DeviceId;
+                var deviceResult = GraphicsDevice.D3D12CreateDevice(0, 0xC000, &deviceId, &device);
 
                 _device = device;
 
-                ConsoleGraphicsDevice.CheckHostResult(deviceResult, "R44 device");
+                GraphicsDevice.CheckHostResult(deviceResult, "R44 device");
 
-                ConsoleGraphicsDevice.RequireHostObject(_device, "device");
+                GraphicsDevice.RequireHostObject(_device, "device");
             }
 
             var queue = nint.Zero;
-            var queueId = ConsoleGraphicsDevice.QueueId;
+            var queueId = GraphicsDevice.QueueId;
             var description = default(D3D12_COMMAND_QUEUE_DESC);
             var create =
-                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)ConsoleGraphicsDevice
-                    .Slot(_device, 8);
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
             var result = create(_device, &description, &queueId, &queue);
 
             _queue = queue;
 
-            ConsoleGraphicsDevice.CheckHostResult(result, "R44 queue");
+            GraphicsDevice.CheckHostResult(result, "R44 queue");
 
-            ConsoleGraphicsDevice.RequireHostObject(_queue, "queue");
+            GraphicsDevice.RequireHostObject(_queue, "queue");
         }
         catch
         {
-            ConsoleGraphicsDevice.ReleaseHostObject(_queue);
+            GraphicsDevice.ReleaseHostObject(_queue);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(_device);
+            GraphicsDevice.ReleaseHostObject(_device);
 
             throw;
         }
@@ -94,16 +94,16 @@ public sealed unsafe class MediaGpuContext : IDisposable
         // Only the cache's references are released here.
         foreach (var entry in _pipelines.Values)
         {
-            ConsoleGraphicsDevice.ReleaseHostObject(entry.Pipeline);
+            GraphicsDevice.ReleaseHostObject(entry.Pipeline);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(entry.Root);
+            GraphicsDevice.ReleaseHostObject(entry.Root);
         }
 
         _pipelines.Clear();
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_queue);
+        GraphicsDevice.ReleaseHostObject(_queue);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_device);
+        GraphicsDevice.ReleaseHostObject(_device);
 
         _queue = 0;
 
@@ -123,18 +123,18 @@ public sealed unsafe class MediaGpuContext : IDisposable
     // materialized or made visible by acquiring this host COM reference.
     private static nint AcquireRuntimeHostDevice()
     {
-        var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)ConsoleGraphicsDevice.ExportAddress;
+        var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)GraphicsDevice.ExportAddress;
         var version = 0x00020004U;
-        var id = ConsoleGraphicsDevice.DeviceId;
+        var id = GraphicsDevice.DeviceId;
         var result = create(0, &version, &id, null);
 
-        ConsoleGraphicsDevice.CheckHostResult(result, "R45 runtime device initialization");
+        GraphicsDevice.CheckHostResult(result, "R45 runtime device initialization");
 
-        lock (ConsoleGraphicsDevice.Gate)
+        lock (GraphicsDevice.Gate)
         {
-            var device = (nint)ConsoleGraphicsDevice._host;
+            var device = (nint)GraphicsDevice._host;
 
-            ConsoleGraphicsDevice.RequireHostObject(device, "runtime host device");
+            GraphicsDevice.RequireHostObject(device, "runtime host device");
 
             AddReference(device);
 
@@ -168,8 +168,7 @@ public sealed unsafe class MediaGpuContext : IDisposable
                 throw new InvalidOperationException("R44 host media pipeline cache capacity reached.");
             }
 
-            ConsoleGraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot,
-                out var createdPipeline, shader);
+            GraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out var createdRoot, out var createdPipeline, shader);
 
             entry = (createdRoot, createdPipeline);
 
@@ -179,9 +178,9 @@ public sealed unsafe class MediaGpuContext : IDisposable
             }
             catch
             {
-                ConsoleGraphicsDevice.ReleaseHostObject(createdPipeline);
+                GraphicsDevice.ReleaseHostObject(createdPipeline);
 
-                ConsoleGraphicsDevice.ReleaseHostObject(createdRoot);
+                GraphicsDevice.ReleaseHostObject(createdRoot);
 
                 throw;
             }
@@ -204,7 +203,7 @@ public sealed unsafe class MediaGpuContext : IDisposable
 
     private static void AddReference(nint value)
     {
-        _ = ((delegate* unmanaged[Stdcall]<nint, uint>)ConsoleGraphicsDevice.Slot(value, 1))(value);
+        _ = ((delegate* unmanaged[Stdcall]<nint, uint>)GraphicsDevice.Slot(value, 1))(value);
     }
 
     private void CheckThread()

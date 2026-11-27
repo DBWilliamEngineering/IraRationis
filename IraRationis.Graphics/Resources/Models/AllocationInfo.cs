@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct AllocationInfo
+internal unsafe struct AllocationInfo
 {
     public ulong Size;
     public ulong Alignment;

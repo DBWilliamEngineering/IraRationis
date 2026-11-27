@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Diagnostics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct HostDebugMessage
+internal unsafe struct HostDebugMessage
 {
     public int Category;
     public int Severity;

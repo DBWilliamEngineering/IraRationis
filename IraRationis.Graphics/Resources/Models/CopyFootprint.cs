@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct CopyFootprint
+internal unsafe struct CopyFootprint
 {
     public ulong Offset;
     public uint Format;

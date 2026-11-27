@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Diagnostics.Models;
 
-internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample)
-    : IDisposable
+internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, bool enabled, CpuSample cpuSample) : IDisposable
 {
     public void Dispose()
     {
@@ -16,15 +16,15 @@ internal readonly struct GraphicsTimingScope(GraphicsStage stage, long started, 
 
         var now = Stopwatch.GetTimestamp();
 
-        ConsoleGraphicsDevice.EndCpuSample(stage, cpuSample);
+        GraphicsDevice.EndCpuSample(stage, cpuSample);
 
-        ConsoleGraphicsDevice.RecordTiming(stage, now - started);
+        GraphicsDevice.RecordTiming(stage, now - started);
 
-        Interlocked.Decrement(ref ConsoleGraphicsDevice.GraphicsTimingCounters[(int)stage].Active);
+        Interlocked.Decrement(ref GraphicsDevice.GraphicsTimingCounters[(int)stage].Active);
 
         if (stage == GraphicsStage.PresentX)
         {
-            Interlocked.Exchange(ref ConsoleGraphicsDevice._lastPresentExit, now);
+            Interlocked.Exchange(ref GraphicsDevice._lastPresentExit, now);
         }
     }
 }

@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Loader.Instructions.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal readonly struct ConsoleInstructionHandlerImageRange
+internal readonly unsafe struct ConsoleInstructionHandlerImageRange
 {
     public readonly nuint Start;
     public readonly nuint End;

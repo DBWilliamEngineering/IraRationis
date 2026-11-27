@@ -4,9 +4,9 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
-public static partial class ConsoleGraphicsDevice
+public static unsafe partial class ConsoleGraphicsDevice
 {
     private static Func<(nint Allocate, nint Free)>? _resourceAllocator;
 

@@ -8,7 +8,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

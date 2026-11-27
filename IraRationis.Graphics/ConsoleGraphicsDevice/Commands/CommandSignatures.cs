@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Graphics.Commands.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

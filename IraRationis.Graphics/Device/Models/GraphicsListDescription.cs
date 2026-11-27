@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Device.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct GraphicsListDescription
+public unsafe struct GraphicsListDescription
 {
     public uint Kind;
     public uint Flags;

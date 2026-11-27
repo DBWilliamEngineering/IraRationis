@@ -4,10 +4,5 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal readonly record struct LinearCopyPlan(
-    ulong Source,
-    ulong Destination,
-    ulong SourcePitch,
-    ulong DestinationPitch,
-    int RowBytes,
-    int Rows);
+internal readonly unsafe record struct LinearCopyPlan(ulong Source, ulong Destination, ulong SourcePitch,
+    ulong DestinationPitch, int RowBytes, int Rows);

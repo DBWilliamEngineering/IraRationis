@@ -2,7 +2,7 @@
 
 using IraRationis.HLE.Interop;
 
-namespace IraRationis.HLE.Runtime.Diagnostics;
+namespace IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks;
 
 internal static unsafe partial class RuntimeBridgeCallbacks
 {

@@ -1,5 +1,5 @@
-using System.IO.Compression;
 using IraRationis.HLE.Storage;
+using System.IO.Compression;
 
 static void Require(bool condition, string name)
 {
@@ -41,6 +41,7 @@ Require(DirectStoragePayload.TryInflate(compressed, longer, false, out var short
         && shortWritten == expected.Length, "legacy short zlib accepted");
 
 Require(!DirectStoragePayload.TryInflate(compressed, new byte[expected.Length - 1], true, out _),
+
     "zlib overflow rejected");
 Require(!DirectStoragePayload.TryInflate([255, 255, 255, 255], exact, true, out _), "invalid zlib rejected");
 

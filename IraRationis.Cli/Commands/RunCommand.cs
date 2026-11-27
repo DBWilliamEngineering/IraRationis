@@ -6,12 +6,12 @@ using IraRationis.Cli.Diagnostics.Models;
 using IraRationis.Cli.Media;
 using IraRationis.Core.Configuration;
 using IraRationis.Core.Hardware;
-using IraRationis.Graphics;
 using IraRationis.Graphics.Device;
-using IraRationis.HLE.Audio;
 using IraRationis.HLE.Audio.Acp;
+using IraRationis.HLE.Audio;
 using IraRationis.HLE.Audio.Apu;
 using IraRationis.HLE.Audio.Dsp;
+using IraRationis.HLE.Audio.Movie;
 using IraRationis.HLE.Graphics;
 using IraRationis.HLE.Input;
 using IraRationis.HLE.Kernel;
@@ -26,6 +26,11 @@ using IraRationis.Loader.Images.Models;
 using IraRationis.Loader.Imports.Models;
 using IraRationis.Loader.Instructions;
 using IraRationis.Loader.Threads;
+using IraRationis.Graphics.ConsoleGraphicsDevice;
+using IraRationis.HLE.Audio.Acp.AcpHalModule;
+using IraRationis.HLE.Audio.Apu.XApuModule;
+using IraRationis.HLE.Input.GameInputModule;
+using IraRationis.HLE.Memory.XMemModule;
 
 namespace IraRationis.Cli.Commands;
 
@@ -39,7 +44,6 @@ internal static class RunCommand
             throw new PlatformNotSupportedException("Title execution requires Windows x64.");
         }
 
-        using var logSampling = RuntimeLogSampling.Begin();
         using var startup = RuntimeStartupObservation.Begin();
         using var runtimeBridge = RuntimeBridgeDiagnostics.Begin(Console.Error);
         var runtimeServices = RuntimeServiceHost.CreateFromEnvironment(Console.Error);
@@ -104,14 +108,18 @@ internal static class RunCommand
 
         startup?.Mark(StartupPhase.DependenciesMapped);
 
+        var traceMovieAudio = MovieAudioImportTrace.Requested;
+        LoadedImage? movieLibrary = null;
+
         foreach (var image in dependencies.Ordered)
         {
             var original = dependencies.GetOriginalPath(image);
 
             RuntimeState.SetImagePath(image.BaseAddress, original);
-            if (string.Equals(Path.GetFileName(original), "Bink2Scarlett.dll", StringComparison.OrdinalIgnoreCase))
+            if (traceMovieAudio && string.Equals(Path.GetFileName(original), MovieAudioImportTrace.LibraryName,
+                    StringComparison.OrdinalIgnoreCase))
             {
-                AudioMixerScheduling.ConfigureBinkImage(image.BaseAddress, image.Info.SizeOfImage);
+                movieLibrary = image;
             }
 
             Console.WriteLine($"Mapped {original} at 0x{image.BaseAddress:X}");
@@ -138,9 +146,12 @@ internal static class RunCommand
 
         runtimeBridge?.RegisterImages(dependencies.Ordered.Append(main));
 
+        using var movieAudio = MovieAudioImportTrace.Begin(dependencies, main, movieLibrary);
+
         foreach (var image in dependencies.Ordered.Append(main))
         {
-            var report = image.BindImports(dependencies, policy);
+            var report = image.BindImports(ReferenceEquals(image, main) && movieAudio is not null ? movieAudio : dependencies,
+                policy);
 
             startup?.RecordBinding(report.Missing.Count);
 

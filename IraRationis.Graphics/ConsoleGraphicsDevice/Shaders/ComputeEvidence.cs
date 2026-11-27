@@ -11,7 +11,7 @@ using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Native.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -24,8 +24,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     // Capture the first unsupported dispatch, before FailFast. No guest buffer
     // contents are read. Optional captures contain retained shader/root blobs
     // and descriptor metadata, never the buffers or textures they reference.
-    private static void CaptureCompute(nint self, uint coordinateX, uint coordinateY, uint coordinateZ,
-        uint? flags = null)
+    private static void CaptureCompute(nint self, uint coordinateX, uint coordinateY, uint coordinateZ, uint? flags = null)
     {
         if (Interlocked.CompareExchange(ref _computeEvidenceCaptured, 1, 0) != 0)
         {
@@ -71,8 +70,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             if (!rootBlob.IsEmpty)
             {
-                report.WriteLine(
-                    $"[graphics] R16.1 pipeline root bytes={rootBlob.Length}; sha256={Convert.ToHexString(SHA256.HashData(rootBlob))}.");
+                report.WriteLine($"[graphics] R16.1 pipeline root bytes={rootBlob.Length}; sha256={Convert.ToHexString(SHA256.HashData(rootBlob))}.");
             }
 
             if (!string.IsNullOrWhiteSpace(capturePath))
@@ -85,7 +83,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     WriteBoundedComputeBlob(report, captureDirectory, "root", ".bin", rootBlob);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                                      ArgumentException or NotSupportedException)
+                                                  ArgumentException or NotSupportedException)
                 {
                     report.WriteLine($"[graphics] compute capture unavailable: {exception.Message}");
                 }
@@ -173,7 +171,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     Console.Error.WriteLine($"[graphics] compute local capture: {captureDirectory}");
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                                      ArgumentException or NotSupportedException)
+                                                  ArgumentException or NotSupportedException)
                 {
                     Console.Error.WriteLine($"[graphics] compute report unavailable: {exception.Message}");
                 }
@@ -186,8 +184,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         if (bytes.IsEmpty || bytes.Length > MaximumComputeCaptureBytes)
         {
-            report.WriteLine(
-                $"[graphics] compute capture omitted {label}: bytes={bytes.Length}; limit={MaximumComputeCaptureBytes}.");
+            report.WriteLine($"[graphics] compute capture omitted {label}: bytes={bytes.Length}; limit={MaximumComputeCaptureBytes}.");
 
             return;
         }
@@ -250,8 +247,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 switch (token.Tag)
                 {
                     case DescriptorTag:
-                        report.WriteLine(
-                            $"[graphics] R16.1 descriptor[{index}]: token kind={token.Kind}, id={token.Id}.");
+                        report.WriteLine($"[graphics] R16.1 descriptor[{index}]: token kind={token.Kind}, id={token.Id}.");
 
                         if (includeDescriptorBytes)
                         {
@@ -267,8 +263,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         break;
 
                     default:
-                        report.WriteLine(
-                            $"[graphics] R16.1 descriptor[{index}]: unrecognized token tag=0x{token.Tag:X8}.");
+                        report.WriteLine($"[graphics] R16.1 descriptor[{index}]: unrecognized token tag=0x{token.Tag:X8}.");
 
                         break;
                 }
@@ -296,8 +291,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return;
         }
 
-        report.WriteLine(
-            $"[graphics] R16.1 descriptor[{index}]: resource=0x{(nuint)metadata.Resource:X}; generation={metadata.ResourceGeneration}; counter=0x{(nuint)metadata.Counter:X}.");
+        report.WriteLine($"[graphics] R16.1 descriptor[{index}]: resource=0x{(nuint)metadata.Resource:X}; generation={metadata.ResourceGeneration}; counter=0x{(nuint)metadata.Counter:X}.");
         WriteComputeDescriptorBytes(report, index, "view", metadata.Description);
         WriteComputeDescriptorBytes(report, index, "extra", metadata.Extra);
     }
@@ -312,8 +306,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var count = Math.Min(bytes.Length, MaximumComputeDescriptorEvidenceBytes);
-        report.WriteLine(
-            $"[graphics] R16.1 descriptor[{index}] {label}: bytes={bytes.Length}; hex={Convert.ToHexString(bytes.AsSpan(0, count))}; truncated={count != bytes.Length}.");
+        report.WriteLine($"[graphics] R16.1 descriptor[{index}] {label}: bytes={bytes.Length}; hex={Convert.ToHexString(bytes.AsSpan(0, count))}; truncated={count != bytes.Length}.");
     }
 
     private static uint ReadComputeEvidenceUInt32(ReadOnlySpan<byte> entry, int offset)

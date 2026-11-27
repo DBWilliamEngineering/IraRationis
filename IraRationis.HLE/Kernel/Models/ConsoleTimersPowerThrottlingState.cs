@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Kernel.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct ConsoleTimersPowerThrottlingState
+internal unsafe struct ConsoleTimersPowerThrottlingState
 {
     public uint Version;
     public uint ControlMask;

@@ -24,7 +24,7 @@ internal sealed unsafe class RuntimeServiceObject
     {
         ArgumentNullException.ThrowIfNull(owner);
 
-        if (methods.Length < 3 || methods[3..].Contains(0))
+        if (methods.Length < 3 || methods[3..].Contains((nint)0))
         {
             throw new ArgumentException("Every service method must have an explicit ABI target.", nameof(methods));
         }
@@ -48,10 +48,7 @@ internal sealed unsafe class RuntimeServiceObject
         Address = (nint)header;
     }
 
-    internal nint Address
-    {
-        get;
-    }
+    internal nint Address { get; }
 
     internal nint Retain()
     {

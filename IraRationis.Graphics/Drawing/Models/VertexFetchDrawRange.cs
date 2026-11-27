@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal readonly record struct VertexFetchDrawRange(
+internal readonly unsafe record struct VertexFetchDrawRange(
     bool Indexed,
     uint Count,
     uint Instances,

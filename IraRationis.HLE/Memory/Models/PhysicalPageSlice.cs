@@ -5,4 +5,4 @@ using Microsoft.Win32.SafeHandles;
 
 namespace IraRationis.HLE.Memory.Models;
 
-internal sealed record PhysicalPageSlice(SafeFileHandle Section, ulong Index);
+internal sealed unsafe record PhysicalPageSlice(SafeFileHandle Section, ulong Index);

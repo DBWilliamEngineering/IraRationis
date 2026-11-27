@@ -24,7 +24,7 @@ namespace irx
         }
         const auto attributes = page.VirtualAttributes;
         if (!CanUseResidentPage(true, attributes.Valid != 0, attributes.Bad != 0,
-                                static_cast<std::uint32_t>(attributes.Win32Protection)))
+            static_cast<std::uint32_t>(attributes.Win32Protection)))
         {
             return false;
         }

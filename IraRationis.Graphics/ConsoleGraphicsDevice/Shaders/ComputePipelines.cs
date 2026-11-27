@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using IraRationis.Graphics.Shaders.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

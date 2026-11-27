@@ -4,12 +4,6 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal sealed record LinearTextureTransfer(
-    LinearCopyLocation Source,
-    LinearCopyLocation Destination,
-    LinearSurface SourceSurface,
-    LinearSurface DestinationSurface,
-    LinearCopyBox Region,
-    uint X,
-    uint Y,
+internal sealed unsafe record LinearTextureTransfer(LinearCopyLocation Source, LinearCopyLocation Destination,
+    LinearSurface SourceSurface, LinearSurface DestinationSurface, LinearCopyBox Region, uint X, uint Y,
     LinearCopyPlan Plan);

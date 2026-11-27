@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 320)]
-internal struct GameInputDeviceInfo
+internal unsafe struct GameInputDeviceInfo
 {
     [FieldOffset(0)] public uint Size;
     [FieldOffset(32)] public fixed byte Id[32];

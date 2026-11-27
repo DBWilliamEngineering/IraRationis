@@ -16,8 +16,7 @@ internal static unsafe class RuntimeBridgeMemoryReaderTests
     {
         Require(Marshal.SizeOf<RuntimeBridgeMemoryInformation>() == 48
                 && Marshal.OffsetOf<RuntimeBridgeMemoryInformation>(nameof(RuntimeBridgeMemoryInformation.State)) == 32
-                && Marshal.OffsetOf<RuntimeBridgeMemoryInformation>(nameof(RuntimeBridgeMemoryInformation.Protection))
-                == 36,
+                && Marshal.OffsetOf<RuntimeBridgeMemoryInformation>(nameof(RuntimeBridgeMemoryInformation.Protection)) == 36,
             "The diagnostic memory query must match the Windows x64 MEMORY_BASIC_INFORMATION layout.");
 
         var pageSize = Environment.SystemPageSize;
@@ -140,9 +139,7 @@ internal static unsafe class RuntimeBridgeMemoryReaderTests
 
         Protect(secondPage, pageSize, ReadWrite | Guard);
 
-        Require(
-            !RuntimeBridgeMemoryReader.TryReadGuid(identifierAddress, out _)
-            && Protection(secondPage) == (ReadWrite | Guard),
+        Require(!RuntimeBridgeMemoryReader.TryReadGuid(identifierAddress, out _) && Protection(secondPage) == (ReadWrite | Guard),
             "A GUID's second-page preflight must reject the guard without consuming it.");
 
         Protect(secondPage, pageSize, ReadWrite);
@@ -154,16 +151,12 @@ internal static unsafe class RuntimeBridgeMemoryReaderTests
         var expectedPointer = unchecked((nint)0x123456789ABC);
         MemoryMarshal.Write(new Span<byte>((void*)pointerAddress, sizeof(nint)), in expectedPointer);
 
-        Require(
-            RuntimeBridgeMemoryReader.TryReadPointer(pointerAddress, out var observedPointer)
-            && observedPointer == expectedPointer,
+        Require(RuntimeBridgeMemoryReader.TryReadPointer(pointerAddress, out var observedPointer) && observedPointer == expectedPointer,
             "An unaligned pointer spanning readable pages must be read exactly.");
 
         Protect(secondPage, pageSize, ReadWrite | Guard);
 
-        Require(
-            !RuntimeBridgeMemoryReader.TryReadPointer(pointerAddress, out _)
-            && Protection(secondPage) == (ReadWrite | Guard),
+        Require(!RuntimeBridgeMemoryReader.TryReadPointer(pointerAddress, out _) && Protection(secondPage) == (ReadWrite | Guard),
             "A pointer's second-page preflight must reject the guard without consuming it.");
 
         Protect(secondPage, pageSize, ReadWrite);
@@ -183,9 +176,8 @@ internal static unsafe class RuntimeBridgeMemoryReaderTests
 
         RuntimeBridgeMemoryInformation information;
 
-        Require(RuntimeBridgeMemoryNativeMethods.VirtualQuery(secondPage, &information,
-                (nuint)sizeof(RuntimeBridgeMemoryInformation))
-            == (nuint)sizeof(RuntimeBridgeMemoryInformation) && information.State == 0x2000,
+        Require(RuntimeBridgeMemoryNativeMethods.VirtualQuery(secondPage, &information, (nuint)sizeof(RuntimeBridgeMemoryInformation))
+                == (nuint)sizeof(RuntimeBridgeMemoryInformation) && information.State == 0x2000,
             "The rejected address must still belong to the fixture's reserved page.");
     }
 
@@ -199,8 +191,7 @@ internal static unsafe class RuntimeBridgeMemoryReaderTests
     {
         RuntimeBridgeMemoryInformation information;
 
-        Require(RuntimeBridgeMemoryNativeMethods.VirtualQuery(address, &information,
-                    (nuint)sizeof(RuntimeBridgeMemoryInformation))
+        Require(RuntimeBridgeMemoryNativeMethods.VirtualQuery(address, &information, (nuint)sizeof(RuntimeBridgeMemoryInformation))
                 == (nuint)sizeof(RuntimeBridgeMemoryInformation),
             "The authored fixture must query its owned page protection.");
 

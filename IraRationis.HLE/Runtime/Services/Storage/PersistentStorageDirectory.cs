@@ -25,10 +25,7 @@ internal sealed class PersistentStorageDirectory
         EnsureExists();
     }
 
-    internal string Path
-    {
-        get;
-    }
+    internal string Path { get; }
 
     internal void EnsureExists()
     {

@@ -5,9 +5,9 @@ using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
 using IraRationis.HLE.Runtime.Diagnostics.Models;
 
-namespace IraRationis.HLE.Runtime.Diagnostics;
+namespace IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks;
 
-internal static partial class RuntimeBridgeCallbacks
+internal static unsafe partial class RuntimeBridgeCallbacks
 {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int Initialize(ulong firstVersion, ulong secondVersion)
@@ -91,8 +91,7 @@ internal static partial class RuntimeBridgeCallbacks
 
         incoming.Restore();
 
-        var result =
-            ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)_query)(provider, requestedInterface, output);
+        var result = ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)_query)(provider, requestedInterface, output);
         var outgoing = NativeErrorState.Capture();
 
         try

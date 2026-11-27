@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Graphics.Presentation.Models;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Presentation;
 
@@ -111,7 +112,7 @@ internal static unsafe class GuestPreviewWindow
                 "[graphics] IRX-GFX-PREVIEW-R16: WINDOW READY (readback preview, not a swap chain).");
 
             Console.Error.WriteLine(
-                $"[graphics] IRX-GFX-STATUS-R18.1: owned WM_PAINT window ready; startup overlay enabled={ConsoleGraphicsDevice.EnableStartupStatus}.");
+                $"[graphics] IRX-GFX-STATUS-R18.1: owned WM_PAINT window ready; startup overlay enabled={GraphicsDevice.EnableStartupStatus}.");
 
             string? previousCaption = null;
 
@@ -189,12 +190,12 @@ internal static unsafe class GuestPreviewWindow
 
     private static string BuildCaption(GuestPreviewFrame? frame)
     {
-        if (!ConsoleGraphicsDevice.EnableStartupStatus || Volatile.Read(ref _visibleContentSeen) != 0)
+        if (!GraphicsDevice.EnableStartupStatus || Volatile.Read(ref _visibleContentSeen) != 0)
         {
             return PreviewTitle;
         }
 
-        var status = ConsoleGraphicsDevice.StatusSnapshot();
+        var status = GraphicsDevice.StatusSnapshot();
         var phase = status.Active > 0 ? "Compiling shaders" : "Waiting for visible guest output";
 
         return
@@ -311,8 +312,7 @@ internal static unsafe class GuestPreviewWindow
 
             fixed (byte* pixels = frame.Pixels)
             {
-                displayed = StretchDIBits(deviceContext, coordinateX, coordinateY, width, height, 0, 0, frame.Width,
-                    frame.Height,
+                displayed = StretchDIBits(deviceContext, coordinateX, coordinateY, width, height, 0, 0, frame.Width, frame.Height,
                     pixels, &info, 0, 0x00CC0020) > 0;
             }
 
@@ -325,7 +325,7 @@ internal static unsafe class GuestPreviewWindow
 
         // Host-only decoration. Never mutate the readback or its statistics.
         // Retire permanently after visible content, including later intentional black frames.
-        if (ConsoleGraphicsDevice.EnableStartupStatus && Volatile.Read(ref _visibleContentSeen) == 0 &&
+        if (GraphicsDevice.EnableStartupStatus && Volatile.Read(ref _visibleContentSeen) == 0 &&
             (frame == null || frame.NonBlack == 0))
         {
             DrawStartupStatus(deviceContext, clientWidth, clientHeight, frame);
@@ -336,7 +336,7 @@ internal static unsafe class GuestPreviewWindow
 
     private static void DrawStartupStatus(nint deviceContext, int width, int height, GuestPreviewFrame? frame)
     {
-        var status = ConsoleGraphicsDevice.StatusSnapshot();
+        var status = GraphicsDevice.StatusSnapshot();
         var left = Math.Max(12, width / 12);
         var top = Math.Max(12, height / 3);
         var font = GetStockObject(17); // DEFAULT_GUI_FONT, owned by GDI.
@@ -362,8 +362,7 @@ internal static unsafe class GuestPreviewWindow
                 ? "No guest frame received yet."
                 : $"Preview frame #{frame.Id}: no non-black sampled pixels.");
 
-            WriteStatusLine(deviceContext, left, top + 128,
-                "Guest GPU preview  |  See console for detailed diagnostics.");
+            WriteStatusLine(deviceContext, left, top + 128, "Guest GPU preview  |  See console for detailed diagnostics.");
         }
         finally
         {
@@ -407,8 +406,7 @@ internal static unsafe class GuestPreviewWindow
     private static extern int DestroyWindow(nint window);
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern int PeekMessageW(out PreviewWindowMessage message, nint window, uint min, uint max,
-        uint remove);
+    private static extern int PeekMessageW(out PreviewWindowMessage message, nint window, uint min, uint max, uint remove);
 
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern int TranslateMessage(ref PreviewWindowMessage message);
@@ -462,8 +460,7 @@ internal static unsafe class GuestPreviewWindow
     private static extern int TextOutW(nint deviceContext, int coordinateX, int coordinateY, string text, int count);
 
     [DllImport("gdi32.dll", ExactSpelling = true)]
-    private static extern int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height,
-        uint operation);
+    private static extern int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height, uint operation);
 
     [DllImport("gdi32.dll", ExactSpelling = true)]
     private static extern int SetStretchBltMode(nint deviceContext, int mode);

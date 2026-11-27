@@ -5,6 +5,7 @@ using IraRationis.Media.Audio;
 using IraRationis.Media.Decoding.Models;
 using IraRationis.Media.Playback.Models;
 using IraRationis.Media.Presentation;
+using IraRationis.Media.Presentation.WindowsVideoWindow;
 
 namespace IraRationis.Media.Playback;
 

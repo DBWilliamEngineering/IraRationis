@@ -2,11 +2,10 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Text;
 using IraRationis.Graphics.Diagnostics.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
@@ -29,8 +28,8 @@ public static partial class ConsoleGraphicsDevice
     {
         var value = Environment.GetEnvironmentVariable("IRX_PROFILE_DETAIL_INTERVAL_MS");
 
-        if (!int.TryParse(value, NumberStyles.None,
-                CultureInfo.InvariantCulture, out var milliseconds))
+        if (!int.TryParse(value, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
         {
             return -1;
         }
@@ -45,7 +44,7 @@ public static partial class ConsoleGraphicsDevice
             return -1;
         }
 
-        return Stopwatch.Frequency * milliseconds / 1000;
+        return Stopwatch.Frequency * (long)milliseconds / 1000;
     }
 
     // Called only by the existing report timer under TimingReportGate. This is a
@@ -192,8 +191,7 @@ public static partial class ConsoleGraphicsDevice
 
                 _timingReportTimer = new Timer(static _ => ReportTiming(), null, 2000, 2000);
 
-                LogPerformance(
-                    "[performance] IRX-R25: timing active; inclusive thread-wall timings, not additive; period=2s.");
+                LogPerformance("[performance] IRX-R25: timing active; inclusive thread-wall timings, not additive; period=2s.");
             }
             catch (Exception exception)
             {

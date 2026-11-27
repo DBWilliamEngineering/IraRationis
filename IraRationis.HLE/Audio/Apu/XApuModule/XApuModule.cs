@@ -2,14 +2,13 @@
 // xapu.dll ABI cross-checked against VIctory/victory-fork modules/apu.rs.
 
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Concentus.Structs;
 using IraRationis.HLE.Audio.Apu.Models;
 using IraRationis.HLE.Runtime.Models;
 
-namespace IraRationis.HLE.Audio.Apu;
+namespace IraRationis.HLE.Audio.Apu.XApuModule;
 
 public static unsafe partial class XApuModule
 {
@@ -321,19 +320,17 @@ public static unsafe partial class XApuModule
         }
     }
 
-    private static void Decode(XApuConnection connection, XApuVoice voice, XApuProcessCommand command,
-        ref XApuResult result)
+    private static void Decode(XApuConnection connection, XApuVoice voice, XApuProcessCommand command, ref XApuResult result)
     {
         var observation = Interlocked.Increment(ref _decodeAttempts);
-        var started = Stopwatch.GetTimestamp();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         DecodeCore(connection, voice, command, ref result);
         if (result.Error != 0)
         {
             var failures = Interlocked.Increment(ref _decodeFailures);
             if (failures <= 4 || (failures & (failures - 1)) == 0)
             {
-                Console.Error.WriteLine(
-                    $"[audio] XApu decode rejected: rate={command.TargetPitch}; ramp={command.PitchRamp}; error=0x{result.Error:X8}; failures={failures}.");
+                Console.Error.WriteLine($"[audio] XApu decode rejected: rate={command.TargetPitch}; ramp={command.PitchRamp}; error=0x{result.Error:X8}; failures={failures}.");
             }
         }
         else
@@ -343,13 +340,11 @@ public static unsafe partial class XApuModule
 
         if (TraceAudio && (observation <= 4 || (observation & (observation - 1)) == 0))
         {
-            Console.Error.WriteLine(
-                $"[audio] XApu decode: attempts={observation}; failures={Interlocked.Read(ref _decodeFailures)}; frames={Interlocked.Read(ref _decodedFrames)}; rate={command.TargetPitch}; elapsedMs={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}.");
+            Console.Error.WriteLine($"[audio] XApu decode: attempts={observation}; failures={Interlocked.Read(ref _decodeFailures)}; frames={Interlocked.Read(ref _decodedFrames)}; rate={command.TargetPitch}; elapsedMs={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}.");
         }
     }
 
-    private static void DecodeCore(XApuConnection connection, XApuVoice voice, XApuProcessCommand command,
-        ref XApuResult result)
+    private static void DecodeCore(XApuConnection connection, XApuVoice voice, XApuProcessCommand command, ref XApuResult result)
     {
         result.Input = command.Input;
 

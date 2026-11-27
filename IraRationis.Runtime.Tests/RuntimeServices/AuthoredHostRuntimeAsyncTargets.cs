@@ -80,8 +80,7 @@ internal static unsafe class AuthoredHostRuntimeAsyncTargets
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    internal static int Begin(nint instance, XAsyncBlock* asyncBlock, nint context, nint identity, byte* identityName,
-        nint providerCallback)
+    internal static int Begin(nint instance, XAsyncBlock* asyncBlock, nint context, nint identity, byte* identityName, nint providerCallback)
     {
         RecordCall(instance, asyncBlock);
         Context = context;
@@ -124,8 +123,7 @@ internal static unsafe class AuthoredHostRuntimeAsyncTargets
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    internal static int GetResult(nint instance, XAsyncBlock* asyncBlock, nint identity, nuint bufferSize, nint buffer,
-        nuint* bufferUsed)
+    internal static int GetResult(nint instance, XAsyncBlock* asyncBlock, nint identity, nuint bufferSize, nint buffer, nuint* bufferUsed)
     {
         RecordCall(instance, asyncBlock);
         Identity = identity;

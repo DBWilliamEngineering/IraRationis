@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Media.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct VideoWindowRect
+internal unsafe struct VideoWindowRect
 {
     public int Left, Top, Right, Bottom;
 }

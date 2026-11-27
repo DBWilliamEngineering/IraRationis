@@ -4,84 +4,42 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.HLE.Audio;
 
-/// <summary>Opt-in scheduling of an identified guest mixer, without replacing its PCM or clock.</summary>
 public sealed unsafe partial class AudioMixerScheduling : IDisposable
 {
-    private const string ObservedBuild = "b99f876b74d4a77f03af5f878223b27bd647b5c35a79d5decd9f716504239e93";
+    internal const string ObservedBuild = "b99f876b74d4a77f03af5f878223b27bd647b5c35a79d5decd9f716504239e93";
     private const uint ThreadWrapperRva = 0x2215EA0;
     private const uint MixerThunkRva = 0x5C60800;
     private const uint MixerRva = 0x1E95040;
     private const uint MovieWorkerRva = 0x442FA80;
     private static nuint _image;
-    private static nuint _binkImage;
-    private static uint _binkSize;
     private static bool _mixerEnabled;
     private static bool _movieEnabled;
+    private int _previousPriority = int.MaxValue;
     private nint _mmcss;
     private nuint _previousAffinity;
-    private int _previousPriority = int.MaxValue;
-
-    public void Dispose()
-    {
-        if (_mmcss != 0)
-        {
-            _ = AvRevertMmThreadCharacteristics(_mmcss);
-            _mmcss = 0;
-        }
-
-        if (_previousAffinity != 0)
-        {
-            _ = SetThreadAffinityMask(-2, _previousAffinity);
-            _previousAffinity = 0;
-        }
-
-        if (_previousPriority != int.MaxValue)
-        {
-            _ = SetThreadPriority(-2, _previousPriority);
-            _previousPriority = int.MaxValue;
-        }
-    }
 
     public static void Configure(nuint image, string hash)
     {
         _mixerEnabled = Environment.GetEnvironmentVariable("IRX_AUDIO_MIXER_SCHEDULING") == "1";
         _movieEnabled = Environment.GetEnvironmentVariable("IRX_BINK_WORKER_SCHEDULING") == "1";
-        _image = (_mixerEnabled || _movieEnabled)
-                 && string.Equals(hash, ObservedBuild, StringComparison.OrdinalIgnoreCase)
-            ? image
-            : 0;
-        _binkImage = 0;
-        _binkSize = 0;
+        _image = (_mixerEnabled || _movieEnabled) && string.Equals(hash, ObservedBuild, StringComparison.OrdinalIgnoreCase) ? image : 0;
+
         if (_mixerEnabled || _movieEnabled)
         {
-            Console.Error.WriteLine($"[audio] IRX-R76-MIXER: profileMatched={_image != 0}; optedIn=True.");
+            Console.Error.WriteLine($"[audio-scheduling] profileMatched={_image != 0}; mixer={_mixerEnabled}; movie={_movieEnabled}.");
         }
     }
 
     internal static bool Matches(nuint image, nuint wrapper, nuint entry)
     {
         return image != 0 && wrapper >= image && entry >= image && wrapper - image == ThreadWrapperRva &&
-               (entry - image == MixerThunkRva || entry - image == MixerRva);
-    }
-
-    public static void ConfigureBinkImage(nuint image, uint size)
-    {
-        if (_image != 0 && _movieEnabled && image != 0 && size != 0)
-        {
-            _binkImage = image;
-            _binkSize = size;
-        }
+            (entry - image == MixerThunkRva || entry - image == MixerRva);
     }
 
     internal static bool MatchesMovie(nuint image, nuint wrapper, nuint entry)
     {
         return image != 0 && wrapper >= image && entry >= image && wrapper - image == ThreadWrapperRva &&
-               entry - image == MovieWorkerRva;
-    }
-
-    internal static bool IsBinkWorker(nuint image, uint size, nuint entry)
-    {
-        return image != 0 && entry >= image && entry - image < size;
+            entry - image == MovieWorkerRva;
     }
 
     internal static AudioMixerScheduling? TryEnter(nint routine, nint parameter)
@@ -91,7 +49,6 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         {
             return null;
         }
-
         var start = (nuint)routine;
         var entry = start;
         if (start >= image && start - image == ThreadWrapperRva && parameter != 0)
@@ -103,9 +60,8 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
                 return null;
             }
         }
-
         var mixer = _mixerEnabled && Matches(image, start, entry);
-        var movie = _movieEnabled && (MatchesMovie(image, start, entry) || IsBinkWorker(_binkImage, _binkSize, entry));
+        var movie = _movieEnabled && MatchesMovie(image, start, entry);
         if (!mixer && !movie)
         {
             return null;
@@ -114,10 +70,8 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         var scope = new AudioMixerScheduling();
         try
         {
-            // A guest console affinity mask is not a host CPU topology. Only widen this
-            // identified audio worker, and never cross processor groups or the process mask.
-            if (GetActiveProcessorGroupCount() == 1 && GetProcessAffinityMask(-1, out var processMask, out _) != 0
-                                                    && processMask != 0)
+            if (mixer && GetActiveProcessorGroupCount() == 1 &&
+                GetProcessAffinityMask(-1, out var processMask, out _) != 0 && processMask != 0)
             {
                 scope._previousAffinity = SetThreadAffinityMask(-2, processMask);
             }
@@ -133,25 +87,38 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
                     scope._previousPriority = previous;
                 }
             }
-
             scope._mmcss = AvSetMmThreadCharacteristics(mixer ? "Pro Audio" : "Playback", &taskIndex);
             var priority = scope._mmcss != 0 && AvSetMmThreadPriority(scope._mmcss, mixer ? 1 : 0) != 0;
-            Console.Error.WriteLine(
-                $"[audio] IRX-R77-SCHEDULE: role={(mixer ? "mixer" : "movie")}; thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; relativePrioritySet={priority}; normalPriorityRestored={scope._previousPriority != int.MaxValue}; affinityWidened={scope._previousAffinity != 0}.");
-            if (mixer)
-            {
-                Console.Error.WriteLine(
-                    $"[audio] IRX-R76-MIXER: thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; highPriority={priority}; affinityWidened={scope._previousAffinity != 0}; originalMask=0x{scope._previousAffinity:X}.");
-            }
+            Console.Error.WriteLine($"[audio-scheduling] role={(mixer ? "mixer" : "movie")}; " +
+                $"thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; relativePrioritySet={priority}; " +
+                $"normalPriorityRestored={scope._previousPriority != int.MaxValue}; previousMask=0x{scope._previousAffinity:X}.");
 
             return scope;
         }
         catch (Exception exception)
         {
             scope.Dispose();
-            Console.Error.WriteLine($"[audio] IRX-R76-MIXER: scheduling unavailable ({exception.GetType().Name}).");
-
+            Console.Error.WriteLine($"[audio-scheduling] unavailable ({exception.GetType().Name}).");
             return null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_mmcss != 0)
+        {
+            _ = AvRevertMmThreadCharacteristics(_mmcss);
+            _mmcss = 0;
+        }
+        if (_previousAffinity != 0)
+        {
+            _ = SetThreadAffinityMask(-2, _previousAffinity);
+            _previousAffinity = 0;
+        }
+        if (_previousPriority != int.MaxValue)
+        {
+            _ = SetThreadPriority(-2, _previousPriority);
+            _previousPriority = int.MaxValue;
         }
     }
 
@@ -183,8 +150,7 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint GetCurrentThreadId();
 
-    [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW",
-        StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nint AvSetMmThreadCharacteristics(string taskName, uint* taskIndex);
 

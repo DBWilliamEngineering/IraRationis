@@ -37,8 +37,7 @@ internal ref struct Rdna2VertexFetchCompilerInstructionReader(ReadOnlySpan<byte>
     {
         // VOP3 opcode 0x180 is VOP1 v_nop. The encoded operands can
         // include one literal DWORD, even though v_nop does not use it.
-        while (_offset <= _code.Length - 8
-               && (Rdna2VertexFetchCompiler.Word(_code, _offset) & 0xffff0000U) == 0xd5800000U)
+        while (_offset <= _code.Length - 8 && (Rdna2VertexFetchCompiler.Word(_code, _offset) & 0xffff0000U) == 0xd5800000U)
         {
             _ = Read();
 

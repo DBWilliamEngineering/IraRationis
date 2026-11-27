@@ -4,10 +4,11 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Audio.Apu.Models;
 using IraRationis.Media.Audio;
+using XApu = global::IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
 
 namespace IraRationis.HLE.Audio.Apu;
 
-internal sealed class XApuConnection : IDisposable
+internal sealed unsafe class XApuConnection : IDisposable
 {
     public readonly EventWaitHandle? Event;
     public readonly Lock Gate = new();
@@ -17,7 +18,7 @@ internal sealed class XApuConnection : IDisposable
     public readonly int PerStream;
     public readonly int[] Queued;
     public readonly XApuResult[] Results;
-    public readonly short[] Scratch = new short[XApuModule.MaxFrames * 2];
+    public readonly short[] Scratch = new short[XApu.MaxFrames * 2];
     public readonly XApuVoice?[] Voices;
     public bool Closed;
     public int Count;

@@ -4,6 +4,7 @@ using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Native.Models;
 using IraRationis.Shaders.Raster.Models;
+using IraRationis.Shaders.Raster.NativeInstructions;
 using IraRationis.Shaders.Raster.PlanarColor;
 
 namespace IraRationis.Shaders.Raster;
@@ -32,7 +33,7 @@ public static class PlanarColorShaderCompiler
 
     public static void VerifyAuthoredContracts()
     {
-        PlanarInstructionReader.VerifyAuthoredContracts();
+        RasterInstructionReader.VerifyAuthoredContracts();
         PlanarShaderContract.VerifyAuthoredContracts();
         PlanarNativeMetadata.VerifyAuthoredContracts();
     }

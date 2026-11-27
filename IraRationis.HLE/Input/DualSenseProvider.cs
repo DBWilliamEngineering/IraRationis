@@ -4,6 +4,7 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
+using GameInput = global::IraRationis.HLE.Input.GameInputModule.GameInputModule;
 
 namespace IraRationis.HLE.Input;
 
@@ -29,7 +30,7 @@ internal sealed unsafe class DualSenseProvider
 
     private void Run()
     {
-        for (;;)
+        for(;;)
         {
             try
             {
@@ -63,11 +64,11 @@ internal sealed unsafe class DualSenseProvider
         // A blocking read is isolated on this background thread. No guest thread or hub lock waits on HID.
         fixed (char* name = path)
         {
-            var handle = GameInputModule.HidOpen(name, 0x80000000, 3, 0, 3, 0, 0);
+            var handle = GameInput.HidOpen(name, 0x80000000, 3, 0, 3, 0, 0);
 
             if (handle == -1)
             {
-                if (GameInputModule.TraceInput && GameInputModule.SampleInput(Interlocked.Increment(ref _reports)))
+                if (GameInput.TraceInput && GameInput.SampleInput(Interlocked.Increment(ref _reports)))
                 {
                     Console.Error.WriteLine($"[input] IRX-R30-HID: open failed ({Marshal.GetLastPInvokeError()})");
                 }
@@ -79,7 +80,7 @@ internal sealed unsafe class DualSenseProvider
             {
                 if (!IsUsbReport(handle))
                 {
-                    if (GameInputModule.TraceInput && GameInputModule.SampleInput(Interlocked.Increment(ref _reports)))
+                    if (GameInput.TraceInput && GameInput.SampleInput(Interlocked.Increment(ref _reports)))
                     {
                         Console.Error.WriteLine("[input] IRX-R30-HID: unsupported report length; wired USB only");
                     }
@@ -95,9 +96,9 @@ internal sealed unsafe class DualSenseProvider
 
                 fixed (byte* data = report)
                 {
-                    while (GameInputModule.HidRead(handle, data, 64, out var bytes, 0) != 0)
+                    while (GameInput.HidRead(handle, data, 64, out var bytes, 0) != 0)
                     {
-                        if (bytes != 64 || !GameInputModule.TryDecodeDualSenseUsb(report, out var pad))
+                        if (bytes != 64 || !GameInput.TryDecodeDualSenseUsb(report, out var pad))
                         {
                             Console.Error.WriteLine(
                                 $"[input] IRX-R30-HID: unsupported report bytes={bytes}; id=0x{report[0]:X2}");
@@ -112,7 +113,7 @@ internal sealed unsafe class DualSenseProvider
                             Volatile.Write(ref _latest, new DualSenseReadingState(pad));
                         }
 
-                        if (GameInputModule.TraceInput && previous != pad.Buttons)
+                        if (GameInput.TraceInput && previous != pad.Buttons)
                         {
                             ReportButtons(previous, pad.Buttons);
                         }
@@ -121,14 +122,14 @@ internal sealed unsafe class DualSenseProvider
                     }
                 }
 
-                if (GameInputModule.TraceInput)
+                if (GameInput.TraceInput)
                 {
                     Console.WriteLine($"[input] IRX-R30-HID: read ended ({Marshal.GetLastPInvokeError()})");
                 }
             }
             finally
             {
-                _ = GameInputModule.HidClose(handle);
+                _ = GameInput.HidClose(handle);
             }
         }
     }
@@ -148,7 +149,7 @@ internal sealed unsafe class DualSenseProvider
                 : InputDiagnosticCategory.HidYReleased;
         }
 
-        GameInputModule.InputDiagnostics.Write(category, currentButtons,
+        GameInput.InputDiagnostics.Write(category, currentButtons,
             static buttons => $"buttons=0x{buttons:X8}; Y={(buttons & 32) != 0}");
     }
 
@@ -158,7 +159,7 @@ internal sealed unsafe class DualSenseProvider
 
         var entrySize = (uint)sizeof(GameInputRawDevice);
 
-        if (GameInputModule.RawList(null, ref count, entrySize) == uint.MaxValue || count is 0 or > 4096)
+        if (GameInput.RawList(null, ref count, entrySize) == uint.MaxValue || count is 0 or > 4096)
         {
             return null;
         }
@@ -167,7 +168,7 @@ internal sealed unsafe class DualSenseProvider
 
         fixed (GameInputRawDevice* entries = devices)
         {
-            var found = GameInputModule.RawList(entries, ref count, entrySize);
+            var found = GameInput.RawList(entries, ref count, entrySize);
 
             if (found == uint.MaxValue || found > devices.Length)
             {
@@ -184,8 +185,7 @@ internal sealed unsafe class DualSenseProvider
                 var info = new GameInputRawInfo { Size = (uint)sizeof(GameInputRawInfo) };
                 var bytes = info.Size;
 
-                if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x2000000B, &info, ref bytes) == uint.MaxValue
-                    ||
+                if (GameInput.RawInfoQuery(entries[index].Handle, 0x2000000B, &info, ref bytes) == uint.MaxValue ||
                     info.Type != 2 || info.Vendor != 0x054C || info.Product != 0x0CE6 ||
                     info.UsagePage != 1 || info.Usage is not (4 or 5))
                 {
@@ -194,7 +194,7 @@ internal sealed unsafe class DualSenseProvider
 
                 uint chars = 0;
 
-                if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x20000007, null, ref chars) == uint.MaxValue ||
+                if (GameInput.RawInfoQuery(entries[index].Handle, 0x20000007, null, ref chars) == uint.MaxValue ||
                     chars is 0 or > 4096)
                 {
                     continue;
@@ -204,8 +204,7 @@ internal sealed unsafe class DualSenseProvider
 
                 fixed (char* buffer = name)
                 {
-                    if (GameInputModule.RawInfoQuery(entries[index].Handle, 0x20000007, buffer, ref chars)
-                        == uint.MaxValue)
+                    if (GameInput.RawInfoQuery(entries[index].Handle, 0x20000007, buffer, ref chars) == uint.MaxValue)
                     {
                         continue;
                     }
@@ -225,7 +224,7 @@ internal sealed unsafe class DualSenseProvider
 
     private static bool IsUsbReport(nint handle)
     {
-        if (GameInputModule.HidPreparsed(handle, out var data) == 0 || data == 0)
+        if (GameInput.HidPreparsed(handle, out var data) == 0 || data == 0)
         {
             return false;
         }
@@ -235,12 +234,12 @@ internal sealed unsafe class DualSenseProvider
             // HIDP_CAPS is 64 bytes; its first four USHORT fields are usage, usage page, input and output sizes.
             GameInputHidCaps caps = default;
 
-            return GameInputModule.HidGetCaps(data, &caps) == 0x00110000 && caps.InputReportBytes == 64 &&
+            return GameInput.HidGetCaps(data, &caps) == 0x00110000 && caps.InputReportBytes == 64 &&
                    caps.UsagePage == 1 && caps.Usage is 4 or 5;
         }
         finally
         {
-            _ = GameInputModule.HidFreePreparsed(data);
+            _ = GameInput.HidFreePreparsed(data);
         }
     }
 }

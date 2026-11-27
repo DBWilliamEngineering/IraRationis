@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using IraRationis.Media.Audio;
+using XApu = global::IraRationis.HLE.Audio.Apu.XApuModule.XApuModule;
 
 namespace IraRationis.HLE.Audio.Apu;
 
@@ -19,7 +20,7 @@ internal sealed class XApuPcmObservation(uint stream, IPcmPacketSink sink) : IDi
             _selected = null;
         }
 
-        _ = Interlocked.CompareExchange(ref XApuModule._pcmObservation, null, this);
+        _ = Interlocked.CompareExchange(ref XApu._pcmObservation, null, this);
     }
 
     internal void Observe(XApuConnection connection, uint index, ReadOnlySpan<short> samples, int channels)

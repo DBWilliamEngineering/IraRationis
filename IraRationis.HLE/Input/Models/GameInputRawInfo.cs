@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 32)]
-internal struct GameInputRawInfo
+internal unsafe struct GameInputRawInfo
 {
     [FieldOffset(0)] public uint Size;
     [FieldOffset(4)] public uint Type;

@@ -8,7 +8,7 @@ using IraRationis.HLE.Memory.Models;
 using IraRationis.HLE.Runtime;
 using IraRationis.HLE.Runtime.Models;
 
-namespace IraRationis.HLE.Memory;
+namespace IraRationis.HLE.Memory.XMemModule;
 
 public static unsafe partial class XMemModule
 {
@@ -238,8 +238,7 @@ public static unsafe partial class XMemModule
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int QueryVirtual(nint process, nint address, XMemBasicInformation* output)
     {
-        if (output == null
-            || VirtualQueryEx(process, address, &output->Host, (nuint)sizeof(XMemMemoryInformation)) == 0)
+        if (output == null || VirtualQueryEx(process, address, &output->Host, (nuint)sizeof(XMemMemoryInformation)) == 0)
         {
             return 0;
         }
@@ -300,7 +299,7 @@ public static unsafe partial class XMemModule
         var rounded = (size + granularity - 1) & ~(granularity - 1);
         var standard = ConsoleConfiguration.GetTitleMemory(ConsoleConfiguration.Current).Standard;
 
-        for (;;)
+        for(;;)
         {
             var old = Volatile.Read(ref _transferred);
 
@@ -327,8 +326,7 @@ public static unsafe partial class XMemModule
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nuint
-        VirtualQueryEx(nint process, nint address, XMemMemoryInformation* output, nuint length);
+    private static partial nuint VirtualQueryEx(nint process, nint address, XMemMemoryInformation* output, nuint length);
 
     [LibraryImport("kernel32.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

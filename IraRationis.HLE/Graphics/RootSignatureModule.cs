@@ -22,8 +22,7 @@ public static unsafe partial class RootSignatureModule
             new HleExport("D3D12SerializeRootSignature",
                 (nuint)(delegate* unmanaged[Stdcall]<RootSignatureDescription*, uint, nint*, nint*, int>)&Serialize),
             new HleExport("D3D12SerializeVersionedRootSignature",
-                (nuint)(delegate* unmanaged[Stdcall]<RootSignatureVersionedDescription*, nint*, nint*, int>)
-                &SerializeVersioned),
+                (nuint)(delegate* unmanaged[Stdcall]<RootSignatureVersionedDescription*, nint*, nint*, int>)&SerializeVersioned),
             new HleExport("D3D12CreateRootSignatureDeserializer",
                 (nuint)(delegate* unmanaged[Stdcall]<byte*, nuint, Guid*, nint*, int>)&Deserialize)
         ]);
@@ -128,14 +127,12 @@ public static unsafe partial class RootSignatureModule
 
     [LibraryImport("d3d12.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int D3D12SerializeRootSignature(RootSignatureDescription* description, uint version,
-        nint* blob,
+    private static partial int D3D12SerializeRootSignature(RootSignatureDescription* description, uint version, nint* blob,
         nint* error);
 
     [LibraryImport("d3d12.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int D3D12SerializeVersionedRootSignature(RootSignatureVersionedDescription* description,
-        nint* blob,
+    private static partial int D3D12SerializeVersionedRootSignature(RootSignatureVersionedDescription* description, nint* blob,
         nint* error);
 
     [LibraryImport("d3d12.dll")]

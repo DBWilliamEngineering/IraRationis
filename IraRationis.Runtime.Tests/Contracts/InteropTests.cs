@@ -9,6 +9,9 @@ using IraRationis.HLE.Audio.Dsp.Models;
 using IraRationis.HLE.Memory;
 using IraRationis.HLE.Runtime;
 using IraRationis.HLE.Storage;
+using IraRationis.HLE.Audio.Acp.AcpHalModule;
+using IraRationis.HLE.Audio.Apu.XApuModule;
+using IraRationis.HLE.Memory.XMemModule;
 
 namespace IraRationis.Runtime.Tests.Contracts;
 
@@ -133,37 +136,25 @@ internal static unsafe class InteropTests
 
         try
         {
-            Require(
-                allocate(&firstAllocation, &first, 0x1000, 6, 0) == unchecked((int)0x80070057)
-                && firstAllocation == null && first == 0,
+            Require(allocate(&firstAllocation, &first, 0x1000, 6, 0) == unchecked((int)0x80070057) && firstAllocation == null && first == 0,
                 "APU invalid alignment");
 
-            Require(allocate(&firstAllocation, &first, 0x1000, 0x1000, 1) == 0 && firstAllocation != null,
-                "APU first allocation");
+            Require(allocate(&firstAllocation, &first, 0x1000, 0x1000, 1) == 0 && firstAllocation != null, "APU first allocation");
 
-            Require(allocate(&secondAllocation, &second, 0x1000, 0x1000, 0) == 0 && secondAllocation != null,
-                "APU second allocation");
+            Require(allocate(&secondAllocation, &second, 0x1000, 0x1000, 0) == 0 && secondAllocation != null, "APU second allocation");
 
-            Require(
-                first != 0 && second != 0 && first != second && (first & 0xFFF) == 0
-                && ((nuint)firstAllocation & 0xFFF) == 0,
+            Require(first != 0 && second != 0 && first != second && (first & 0xFFF) == 0 && ((nuint)firstAllocation & 0xFFF) == 0,
                 "APU non-overlap and alignment");
 
-            Require(new ReadOnlySpan<byte>(firstAllocation, 0x1000).IndexOfAnyExcept((byte)0) < 0,
-                "APU zero initialization");
+            Require(new ReadOnlySpan<byte>(firstAllocation, 0x1000).IndexOfAnyExcept((byte)0) < 0, "APU zero initialization");
 
-            Require(
-                mapHost((byte*)firstAllocation + 0x44) == first + 0x44
-                && mapDevice(first + 0x44) == (byte*)firstAllocation + 0x44,
+            Require(mapHost((byte*)firstAllocation + 0x44) == first + 0x44 && mapDevice(first + 0x44) == (byte*)firstAllocation + 0x44,
                 "APU interior bidirectional translation");
 
-            Require(
-                valid(firstAllocation, 0x1000) == 1 && valid((byte*)firstAllocation + 1, 0x1000) == 0
-                                                    && valid(null, 0) == 0,
+            Require(valid(firstAllocation, 0x1000) == 1 && valid((byte*)firstAllocation + 1, 0x1000) == 0 && valid(null, 0) == 0,
                 "APU alignment validation");
 
-            Require(mapHost((byte*)firstAllocation + 0xFFF) == first + 0xFFF && mapDevice(0) == null,
-                "APU range boundary");
+            Require(mapHost((byte*)firstAllocation + 0xFFF) == first + 0xFFF && mapDevice(0) == null, "APU range boundary");
 
             var oldHost = firstAllocation;
 
@@ -478,8 +469,7 @@ internal static unsafe class InteropTests
 
         Require(disconnect(handle) < 0 && count(handle, null) == 0, "XApu stale handle rejected");
 
-        Console.WriteLine(
-            "[audio-probe] XApu ABI, bounded results, shared memory, guest 48 kHz, pre-skip and non-silent Opus PCM passed.");
+        Console.WriteLine("[audio-probe] XApu ABI, bounded results, shared memory, guest 48 kHz, pre-skip and non-silent Opus PCM passed.");
     }
 
     private static void Require(bool condition, string message)

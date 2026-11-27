@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Storage.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 0x20)]
-internal struct StorageQueueDescription
+internal unsafe struct StorageQueueDescription
 {
     [FieldOffset(0)] public ulong SourceType;
     [FieldOffset(8)] public ushort Capacity;

@@ -34,8 +34,7 @@ internal static class PlanarShaderContract
 
     internal static void ValidateRoot(ShaderContainer root)
     {
-        var data = root.Part("RTS0")?.Data
-                   ?? throw new NotSupportedException("Planar-color root signature is missing.");
+        var data = root.Part("RTS0")?.Data ?? throw new NotSupportedException("Planar-color root signature is missing.");
 
         RequireWords(data.Span, [2, 1, 24, 0, 68, 1, 0, 0, 36, 1, 44, 2, 1, 27, 1, 1, uint.MaxValue],
             "root signature envelope");
@@ -77,8 +76,7 @@ internal static class PlanarShaderContract
     private static void ValidateSignature(ShaderContainer container, string tag,
         ReadOnlySpan<(string Name, uint System, uint Register, uint Mask, uint UsedMask)> expected)
     {
-        var data = (container.Part(tag) ?? throw new NotSupportedException($"Planar-color {tag} signature is missing."))
-            .Data.Span;
+        var data = (container.Part(tag) ?? throw new NotSupportedException($"Planar-color {tag} signature is missing.")).Data.Span;
         var tableEnd = 8 + 32 * expected.Length;
 
         if (data.Length < tableEnd || Word(data, 0) != (uint)expected.Length || Word(data, 4) != 8)
@@ -151,7 +149,6 @@ internal static class PlanarShaderContract
         try
         {
             ValidateRoot(root);
-
             throw new InvalidOperationException("Planar root-register mutation was accepted.");
         }
         catch (NotSupportedException)

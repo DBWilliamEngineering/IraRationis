@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
+using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Media.Models;
 using IraRationis.Graphics.Presentation.Models;
 using IraRationis.Graphics.Resources.Models;
-using TerraFX.Interop.DirectX;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Media;
 
@@ -56,10 +57,9 @@ public sealed unsafe class Nv12Presenter : IDisposable
                 throw new ArgumentOutOfRangeException(nameof(width), "Even positive NV12 dimensions required.");
             }
 
-            if (window == 0 || ConsoleGraphicsDevice.IsPresentationWindow(window) == 0
-                            || ConsoleGraphicsDevice.GetWindowThreadProcessId(window, out var process) == 0
-                            ||
-                            process != (uint)Environment.ProcessId)
+            if (window == 0 || GraphicsDevice.IsPresentationWindow(window) == 0 || GraphicsDevice.GetWindowThreadProcessId(window, out var process) == 0
+                ||
+                process != (uint)Environment.ProcessId)
             {
                 throw new ArgumentException("An owned host window is required.", nameof(window));
             }
@@ -124,44 +124,42 @@ public sealed unsafe class Nv12Presenter : IDisposable
         }
         else
         {
-            var deviceId = ConsoleGraphicsDevice.DeviceId;
+            var deviceId = GraphicsDevice.DeviceId;
             var device = nint.Zero;
-            var resultCode = ConsoleGraphicsDevice.D3D12CreateDevice(0, 0xC000, &deviceId, &device);
+            var resultCode = GraphicsDevice.D3D12CreateDevice(0, 0xC000, &deviceId, &device);
 
             _device = device;
 
-            ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 device");
+            GraphicsDevice.CheckHostResult(resultCode, "R43 device");
 
-            ConsoleGraphicsDevice.RequireHostObject(_device, "device");
+            GraphicsDevice.RequireHostObject(_device, "device");
 
             var queueDescription = default(D3D12_COMMAND_QUEUE_DESC);
-            var queueId = ConsoleGraphicsDevice.QueueId;
+            var queueId = GraphicsDevice.QueueId;
             var queue = nint.Zero;
             var createQueue =
-                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)ConsoleGraphicsDevice
-                    .Slot(_device, 8);
+                (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
 
             resultCode = createQueue(_device, &queueDescription, &queueId, &queue);
 
             _queue = queue;
 
-            ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 queue");
+            GraphicsDevice.CheckHostResult(resultCode, "R43 queue");
 
-            ConsoleGraphicsDevice.RequireHostObject(_queue, "queue");
+            GraphicsDevice.RequireHostObject(_queue, "queue");
         }
 
         var nativeDevice = (ID3D12Device*)_device;
-        var fenceId = ConsoleGraphicsDevice.FenceId;
+        var fenceId = GraphicsDevice.FenceId;
         var fence = nint.Zero;
-        var createFence =
-            (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_device, 36);
+        var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
         var fenceResult = createFence(_device, 0, 0, &fenceId, &fence);
 
         _fence = fence;
 
-        ConsoleGraphicsDevice.CheckHostResult(fenceResult, "R43 fence");
+        GraphicsDevice.CheckHostResult(fenceResult, "R43 fence");
 
-        ConsoleGraphicsDevice.RequireHostObject(_fence, "fence");
+        GraphicsDevice.RequireHostObject(_fence, "fence");
 
         if (Environment.GetEnvironmentVariable("IRX_HOST_MEDIA_COPY_QUEUE") == "1")
         {
@@ -187,9 +185,8 @@ public sealed unsafe class Nv12Presenter : IDisposable
         nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&description, 0, 2, 0, layouts, rows, rowBytes,
             &total);
 
-        var yEnd = ConsoleGraphicsDevice.ValidateTextureFootprint(layouts[0], rows[0], rowBytes[0], _width, _height);
-        var uvEnd = ConsoleGraphicsDevice.ValidateTextureFootprint(layouts[1], rows[1], rowBytes[1], _width,
-            _height / 2);
+        var yEnd = GraphicsDevice.ValidateTextureFootprint(layouts[0], rows[0], rowBytes[0], _width, _height);
+        var uvEnd = GraphicsDevice.ValidateTextureFootprint(layouts[1], rows[1], rowBytes[1], _width, _height / 2);
         var upload = Math.Max(total, Math.Max(yEnd, uvEnd));
 
         if (layouts[0].Offset != 0 || layouts[1].Offset < yEnd || upload > 64UL * 1024 * 1024)
@@ -215,9 +212,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         nativeDevice->GetCopyableFootprints((D3D12_RESOURCE_DESC*)&color, 0, 1, 0,
             &colorLayout, &colorRows, &colorRowBytes, &colorTotal);
 
-        var colorEnd =
-            ConsoleGraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4),
-                _height);
+        var colorEnd = GraphicsDevice.ValidateTextureFootprint(colorLayout, colorRows, colorRowBytes, checked(_width * 4), _height);
 
         _colorLayout = colorLayout;
 
@@ -228,7 +223,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
             throw new InvalidDataException("R43 invalid BGRA footprint.");
         }
 
-        var shader = ConsoleGraphicsDevice.Nv12ConversionShader.Replace("(id.y * width + id.x) * 4",
+        var shader = GraphicsDevice.Nv12ConversionShader.Replace("(id.y * width + id.x) * 4",
             FormattableString.Invariant($"id.y * {_colorLayout.Footprint.RowPitch}u + id.x * 4u"),
             StringComparison.Ordinal);
 
@@ -238,7 +233,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         }
         else
         {
-            ConsoleGraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out _root, out _pipeline, shader);
+            GraphicsDevice.CreateNv12ConversionPipeline(_device, _report, out _root, out _pipeline, shader);
         }
 
         if (_sharedContext is not null)
@@ -266,63 +261,58 @@ public sealed unsafe class Nv12Presenter : IDisposable
         var description = default(D3D12_COMMAND_QUEUE_DESC);
 
         description.Type = (D3D12_COMMAND_LIST_TYPE)3; // COPY
-        var queueId = ConsoleGraphicsDevice.QueueId;
+        var queueId = GraphicsDevice.QueueId;
         var queue = nint.Zero;
         var createQueue =
-            (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)
-            ConsoleGraphicsDevice.Slot(_device, 8);
+            (delegate* unmanaged[Stdcall]<nint, D3D12_COMMAND_QUEUE_DESC*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 8);
         var resultCode = createQueue(_device, &description, &queueId, &queue);
 
         _copyQueue = queue;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R49 copy queue");
+        GraphicsDevice.CheckHostResult(resultCode, "R49 copy queue");
 
-        ConsoleGraphicsDevice.RequireHostObject(_copyQueue, "copy queue");
+        GraphicsDevice.RequireHostObject(_copyQueue, "copy queue");
 
-        var fenceId = ConsoleGraphicsDevice.FenceId;
+        var fenceId = GraphicsDevice.FenceId;
         var fence = nint.Zero;
-        var createFence =
-            (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_device, 36);
+        var createFence = (delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 36);
 
         resultCode = createFence(_device, 0, 0, &fenceId, &fence);
 
         _copyFence = fence;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R49 copy fence");
+        GraphicsDevice.CheckHostResult(resultCode, "R49 copy fence");
 
-        ConsoleGraphicsDevice.RequireHostObject(_copyFence, "copy fence");
+        GraphicsDevice.RequireHostObject(_copyFence, "copy fence");
     }
 
     private void InitializeCopyFrame(Nv12Frame frame)
     {
         var allocator = nint.Zero;
-        var allocatorId = ConsoleGraphicsDevice.AllocatorId;
-        var createAllocator =
-            (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_device, 9);
+        var allocatorId = GraphicsDevice.AllocatorId;
+        var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
         var resultCode = createAllocator(_device, 3, &allocatorId, &allocator);
 
         frame.CopyAllocator = allocator;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R49 copy allocator");
+        GraphicsDevice.CheckHostResult(resultCode, "R49 copy allocator");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.CopyAllocator, "copy allocator");
+        GraphicsDevice.RequireHostObject(frame.CopyAllocator, "copy allocator");
 
         var list = nint.Zero;
-        var listId = ConsoleGraphicsDevice.HostListId;
+        var listId = GraphicsDevice.HostListId;
         var createList =
-            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(
-                _device, 12);
+            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 12);
 
         resultCode = createList(_device, 0, 3, frame.CopyAllocator, 0, &listId, &list);
 
         frame.CopyList = list;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R49 copy list");
+        GraphicsDevice.CheckHostResult(resultCode, "R49 copy list");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.CopyList, "copy list");
+        GraphicsDevice.RequireHostObject(frame.CopyList, "copy list");
 
-        ConsoleGraphicsDevice.CheckHostResult(
-            ((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(frame.CopyList, 9))(frame.CopyList),
+        GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.CopyList, 9))(frame.CopyList),
             "R49 initial copy close");
     }
 
@@ -342,15 +332,13 @@ public sealed unsafe class Nv12Presenter : IDisposable
     {
         var commands = (ID3D12GraphicsCommandList*)frame.CopyList;
 
-        ConsoleGraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(),
-            "R49 copy allocator reset");
+        GraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.CopyAllocator)->Reset(), "R49 copy allocator reset");
 
-        ConsoleGraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null),
-            "R49 copy list reset");
+        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.CopyAllocator, null), "R49 copy list reset");
         // COMMON -> COPY_DEST implicit promotion; COPY execution decays to COMMON.
         RecordPlaneCopies(frame, commands);
 
-        ConsoleGraphicsDevice.CheckHostResult(commands->Close(), "R49 copy close");
+        GraphicsDevice.CheckHostResult(commands->Close(), "R49 copy close");
     }
 
     private void SubmitCopyFrame(Nv12Frame frame, ulong value)
@@ -360,22 +348,20 @@ public sealed unsafe class Nv12Presenter : IDisposable
         try
         {
             var list = frame.CopyList;
-            var execute =
-                (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(_copyQueue, 10);
-            var signal =
-                (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(_copyQueue, 14);
-            var wait = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(_queue, 15);
+            var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)GraphicsDevice.Slot(_copyQueue, 10);
+            var signal = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(_copyQueue, 14);
+            var wait = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(_queue, 15);
 
             execute(_copyQueue, 1, &list);
 
-            ConsoleGraphicsDevice.CheckHostResult(signal(_copyQueue, _copyFence, value), "R49 copy signal");
+            GraphicsDevice.CheckHostResult(signal(_copyQueue, _copyFence, value), "R49 copy signal");
 
             _copySubmissions++;
 
             _copyBytes += (ulong)_width * (ulong)_height * 3 / 2;
 
             // GPU-side wait: the CPU does not block for the copy fence.
-            ConsoleGraphicsDevice.CheckHostResult(wait(_queue, _copyFence, value), "R49 direct queue wait");
+            GraphicsDevice.CheckHostResult(wait(_queue, _copyFence, value), "R49 direct queue wait");
 
             _copyWaits++;
         }
@@ -393,12 +379,11 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         try
         {
-            var factoryId = ConsoleGraphicsDevice.FactoryId;
+            var factoryId = GraphicsDevice.FactoryId;
 
-            ConsoleGraphicsDevice.CheckHostResult(ConsoleGraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory),
-                "R43 DXGI factory");
+            GraphicsDevice.CheckHostResult(GraphicsDevice.CreateDxgiFactory(0, &factoryId, &factory), "R43 DXGI factory");
 
-            ConsoleGraphicsDevice.RequireHostObject(factory, "DXGI factory");
+            GraphicsDevice.RequireHostObject(factory, "DXGI factory");
 
             var description = new SwapDescription
             {
@@ -413,54 +398,48 @@ public sealed unsafe class Nv12Presenter : IDisposable
                 AlphaMode = 3
             };
             var create =
-                (delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)
-                ConsoleGraphicsDevice.Slot(
+                (delegate* unmanaged[Stdcall]<nint, nint, nint, SwapDescription*, void*, nint, nint*, int>)GraphicsDevice.Slot(
                     factory, 15);
 
-            ConsoleGraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain),
-                "R43 swapchain");
+            GraphicsDevice.CheckHostResult(create(factory, _queue, window, &description, null, 0, &baseChain), "R43 swapchain");
 
-            ConsoleGraphicsDevice.RequireHostObject(baseChain, "swapchain");
+            GraphicsDevice.RequireHostObject(baseChain, "swapchain");
 
-            var id = ConsoleGraphicsDevice.SwapChainId;
-            var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(baseChain, 0);
+            var id = GraphicsDevice.SwapChainId;
+            var query = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)GraphicsDevice.Slot(baseChain, 0);
             var resultCode = query(baseChain, &id, &chain);
 
             _chain = chain;
 
-            ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 IDXGISwapChain3");
+            GraphicsDevice.CheckHostResult(resultCode, "R43 IDXGISwapChain3");
 
-            ConsoleGraphicsDevice.RequireHostObject(_chain, "IDXGISwapChain3");
+            GraphicsDevice.RequireHostObject(_chain, "IDXGISwapChain3");
         }
         finally
         {
-            ConsoleGraphicsDevice.ReleaseHostObject(baseChain);
+            GraphicsDevice.ReleaseHostObject(baseChain);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(factory);
+            GraphicsDevice.ReleaseHostObject(factory);
         }
     }
 
     private void InitializeFrame(Nv12Frame frame, uint index, ResourceDescription description)
     {
-        frame.Texture = ConsoleGraphicsDevice.CreateHostTransferResource(_device, description, 1,
-            _copyQueue == 0 ? ConsoleGraphicsDevice.CopyDestination : 0);
+        frame.Texture = GraphicsDevice.CreateHostTransferResource(_device, description, 1, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
 
         if (_copyQueue != 0)
         {
             InitializeCopyFrame(frame);
         }
 
-        frame.Upload = ConsoleGraphicsDevice.CreateHostTransferResource(_device,
-            ConsoleGraphicsDevice.HostBufferDescription((ulong)_uploadBytes), 2, ConsoleGraphicsDevice.GenericRead);
+        frame.Upload = GraphicsDevice.CreateHostTransferResource(_device, GraphicsDevice.HostBufferDescription((ulong)_uploadBytes), 2, GraphicsDevice.GenericRead);
         // Upload heaps may remain mapped for their entire lifetime. Each slot
         // is written only after its previous GPU submission has completed.
         var range = default(HostRange);
         var mapped = (void*)null;
-        var map =
-            (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)ConsoleGraphicsDevice.Slot(frame.Upload,
-                8);
+        var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)GraphicsDevice.Slot(frame.Upload, 8);
 
-        ConsoleGraphicsDevice.CheckHostResult(map(frame.Upload, 0, &range, &mapped), "R46 persistent upload map");
+        GraphicsDevice.CheckHostResult(map(frame.Upload, 0, &range, &mapped), "R46 persistent upload map");
 
         frame.UploadMapped = true;
 
@@ -473,38 +452,36 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         new Span<byte>(mapped, _uploadBytes).Clear();
 
-        var outputDescription = ConsoleGraphicsDevice.HostBufferDescription(_colorBytes);
+        var outputDescription = GraphicsDevice.HostBufferDescription(_colorBytes);
 
         outputDescription.Flags = 4;
 
-        frame.Output = ConsoleGraphicsDevice.CreateHostTransferResource(_device, outputDescription, 1, 8);
+        frame.Output = GraphicsDevice.CreateHostTransferResource(_device, outputDescription, 1, 8);
 
-        var resourceId = ConsoleGraphicsDevice.ResourceId;
+        var resourceId = GraphicsDevice.ResourceId;
         var buffer = nint.Zero;
-        var getBuffer =
-            (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_chain, 9);
+        var getBuffer = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_chain, 9);
         var resultCode = getBuffer(_chain, index, &resourceId, &buffer);
 
         frame.Buffer = buffer;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 back buffer");
+        GraphicsDevice.CheckHostResult(resultCode, "R43 back buffer");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.Buffer, "back buffer");
+        GraphicsDevice.RequireHostObject(frame.Buffer, "back buffer");
 
         var heapDescription = new DescriptorHeapDescription { Kind = 0, Count = 2, Flags = 1 };
-        var heapId = ConsoleGraphicsDevice.DescriptorHeapId;
+        var heapId = GraphicsDevice.DescriptorHeapId;
         var heap = nint.Zero;
         var createHeap =
-            (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)ConsoleGraphicsDevice
-                .Slot(_device, 14);
+            (delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 14);
 
         resultCode = createHeap(_device, &heapDescription, &heapId, &heap);
 
         frame.Heap = heap;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 SRV heap");
+        GraphicsDevice.CheckHostResult(resultCode, "R43 SRV heap");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.Heap, "SRV heap");
+        GraphicsDevice.RequireHostObject(frame.Heap, "SRV heap");
 
         var nativeDevice = (ID3D12Device*)_device;
         var nativeHeap = (ID3D12DescriptorHeap*)frame.Heap;
@@ -529,34 +506,31 @@ public sealed unsafe class Nv12Presenter : IDisposable
             (D3D12_SHADER_RESOURCE_VIEW_DESC*)&uvView, cpu);
 
         var allocator = nint.Zero;
-        var allocatorId = ConsoleGraphicsDevice.AllocatorId;
-        var createAllocator =
-            (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(_device, 9);
+        var allocatorId = GraphicsDevice.AllocatorId;
+        var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 9);
 
         resultCode = createAllocator(_device, 0, &allocatorId, &allocator);
 
         frame.Allocator = allocator;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 allocator");
+        GraphicsDevice.CheckHostResult(resultCode, "R43 allocator");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.Allocator, "allocator");
+        GraphicsDevice.RequireHostObject(frame.Allocator, "allocator");
 
         var list = nint.Zero;
-        var listId = ConsoleGraphicsDevice.HostListId;
+        var listId = GraphicsDevice.HostListId;
         var createList =
-            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)ConsoleGraphicsDevice.Slot(
-                _device, 12);
+            (delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)GraphicsDevice.Slot(_device, 12);
 
         resultCode = createList(_device, 0, 0, frame.Allocator, 0, &listId, &list);
 
         frame.List = list;
 
-        ConsoleGraphicsDevice.CheckHostResult(resultCode, "R43 list");
+        GraphicsDevice.CheckHostResult(resultCode, "R43 list");
 
-        ConsoleGraphicsDevice.RequireHostObject(frame.List, "list");
+        GraphicsDevice.RequireHostObject(frame.List, "list");
 
-        ConsoleGraphicsDevice.CheckHostResult(
-            ((delegate* unmanaged[Stdcall]<nint, int>)ConsoleGraphicsDevice.Slot(frame.List, 9))(frame.List),
+        GraphicsDevice.CheckHostResult(((delegate* unmanaged[Stdcall]<nint, int>)GraphicsDevice.Slot(frame.List, 9))(frame.List),
             "R43 initial close");
     }
 
@@ -575,7 +549,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         }
 
         var started = Stopwatch.GetTimestamp();
-        var index = ((delegate* unmanaged[Stdcall]<nint, uint>)ConsoleGraphicsDevice.Slot(_chain, 36))(_chain);
+        var index = ((delegate* unmanaged[Stdcall]<nint, uint>)GraphicsDevice.Slot(_chain, 36))(_chain);
 
         if (index >= BufferCount)
         {
@@ -596,17 +570,15 @@ public sealed unsafe class Nv12Presenter : IDisposable
         // only active pixels, never reading write-combined upload memory.
         var upload = new Span<byte>((void*)frame.UploadAddress, _uploadBytes);
 
-        ConsoleGraphicsDevice.CopyVideoRows(luma, _width, upload, _planes[0], _width, lumaRows);
+        GraphicsDevice.CopyVideoRows(luma, _width, upload, _planes[0], _width, lumaRows);
 
-        ConsoleGraphicsDevice.CopyVideoRows(chroma, _width, upload, _planes[1], _width, chromaRows);
+        GraphicsDevice.CopyVideoRows(chroma, _width, upload, _planes[1], _width, chromaRows);
 
         var commands = (ID3D12GraphicsCommandList*)frame.List;
 
-        ConsoleGraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.Allocator)->Reset(),
-            "R43 allocator reset");
+        GraphicsDevice.CheckHostResult(((ID3D12CommandAllocator*)frame.Allocator)->Reset(), "R43 allocator reset");
 
-        ConsoleGraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null),
-            "R43 command reset");
+        GraphicsDevice.CheckHostResult(commands->Reset((ID3D12CommandAllocator*)frame.Allocator, null), "R43 command reset");
 
         if (_copyQueue == 0)
         {
@@ -617,8 +589,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
             RecordCopyFrame(frame);
         }
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Texture,
-            _copyQueue == 0 ? ConsoleGraphicsDevice.CopyDestination : 0, 0x40);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0, 0x40);
 
         var heap = (ID3D12DescriptorHeap*)frame.Heap;
 
@@ -641,10 +612,9 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         commands->Dispatch((uint)((_width + 7) / 8), (uint)((_height + 7) / 8), 1);
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Output, 8, ConsoleGraphicsDevice.CopySource);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Output, 8, GraphicsDevice.CopySource);
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Buffer, 0,
-            ConsoleGraphicsDevice.CopyDestination);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Buffer, 0, GraphicsDevice.CopyDestination);
 
         var output = new TextureCopyLocation { Resource = frame.Output, Type = 1, Footprint = _colorLayout };
         var target = new TextureCopyLocation { Resource = frame.Buffer };
@@ -652,15 +622,13 @@ public sealed unsafe class Nv12Presenter : IDisposable
         commands->CopyTextureRegion((D3D12_TEXTURE_COPY_LOCATION*)&target, 0, 0, 0,
             (D3D12_TEXTURE_COPY_LOCATION*)&output, null);
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Buffer, ConsoleGraphicsDevice.CopyDestination,
-            0);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Buffer, GraphicsDevice.CopyDestination, 0);
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Output, ConsoleGraphicsDevice.CopySource, 8);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Output, GraphicsDevice.CopySource, 8);
 
-        ConsoleGraphicsDevice.TransitionHostResource(frame.List, frame.Texture, 0x40,
-            _copyQueue == 0 ? ConsoleGraphicsDevice.CopyDestination : 0);
+        GraphicsDevice.TransitionHostResource(frame.List, frame.Texture, 0x40, _copyQueue == 0 ? GraphicsDevice.CopyDestination : 0);
 
-        ConsoleGraphicsDevice.CheckHostResult(commands->Close(), "R43 close");
+        GraphicsDevice.CheckHostResult(commands->Close(), "R43 close");
 
         if (_nextFence >= ulong.MaxValue - 1)
         {
@@ -669,9 +637,9 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
         var list = frame.List;
         var value = _nextFence + 1;
-        var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)ConsoleGraphicsDevice.Slot(_queue, 10);
-        var present = (delegate* unmanaged[Stdcall]<nint, uint, uint, int>)ConsoleGraphicsDevice.Slot(_chain, 8);
-        var signal = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(_queue, 14);
+        var execute = (delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)GraphicsDevice.Slot(_queue, 10);
+        var present = (delegate* unmanaged[Stdcall]<nint, uint, uint, int>)GraphicsDevice.Slot(_chain, 8);
+        var signal = (delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(_queue, 14);
 
         if (_copyQueue != 0)
         {
@@ -703,7 +671,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
             _submitted++;
         }
 
-        ConsoleGraphicsDevice.CheckHostResult(result, "R43 present");
+        GraphicsDevice.CheckHostResult(result, "R43 present");
 
         _submitTicks += Stopwatch.GetTimestamp() - started;
 
@@ -727,7 +695,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
         // Any failure to prove completion is fatal; never release live GPU objects on timeout.
         try
         {
-            var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)ConsoleGraphicsDevice.Slot(_fence, 8);
+            var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)GraphicsDevice.Slot(_fence, 8);
             var completed = getCompleted(_fence);
 
             if (completed == ulong.MaxValue)
@@ -744,7 +712,7 @@ public sealed unsafe class Nv12Presenter : IDisposable
 
             _completion.Reset();
 
-            var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(_fence, 9);
+            var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(_fence, 9);
             var resultCode = setEvent(_fence, value, _completion.SafeWaitHandle.DangerousGetHandle());
 
             if (resultCode < 0 || !_completion.WaitOne(TimeSpan.FromSeconds(15)))
@@ -781,26 +749,24 @@ public sealed unsafe class Nv12Presenter : IDisposable
     {
         foreach (var frame in _frames)
         {
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.CopyList);
+            GraphicsDevice.ReleaseHostObject(frame.CopyList);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.CopyAllocator);
+            GraphicsDevice.ReleaseHostObject(frame.CopyAllocator);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.List);
+            GraphicsDevice.ReleaseHostObject(frame.List);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Allocator);
+            GraphicsDevice.ReleaseHostObject(frame.Allocator);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Heap);
+            GraphicsDevice.ReleaseHostObject(frame.Heap);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Buffer);
+            GraphicsDevice.ReleaseHostObject(frame.Buffer);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Output);
+            GraphicsDevice.ReleaseHostObject(frame.Output);
 
             if (frame.UploadMapped)
             {
                 var range = new HostRange { End = (nuint)_uploadBytes };
-                var unmap =
-                    (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)ConsoleGraphicsDevice.Slot(frame.Upload,
-                        9);
+                var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)GraphicsDevice.Slot(frame.Upload, 9);
 
                 unmap(frame.Upload, 0, &range);
 
@@ -809,25 +775,25 @@ public sealed unsafe class Nv12Presenter : IDisposable
                 frame.UploadAddress = 0;
             }
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Upload);
+            GraphicsDevice.ReleaseHostObject(frame.Upload);
 
-            ConsoleGraphicsDevice.ReleaseHostObject(frame.Texture);
+            GraphicsDevice.ReleaseHostObject(frame.Texture);
         }
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_chain);
+        GraphicsDevice.ReleaseHostObject(_chain);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_pipeline);
+        GraphicsDevice.ReleaseHostObject(_pipeline);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_root);
+        GraphicsDevice.ReleaseHostObject(_root);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_copyFence);
+        GraphicsDevice.ReleaseHostObject(_copyFence);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_copyQueue);
+        GraphicsDevice.ReleaseHostObject(_copyQueue);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_fence);
+        GraphicsDevice.ReleaseHostObject(_fence);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_queue);
+        GraphicsDevice.ReleaseHostObject(_queue);
 
-        ConsoleGraphicsDevice.ReleaseHostObject(_device);
+        GraphicsDevice.ReleaseHostObject(_device);
     }
 }

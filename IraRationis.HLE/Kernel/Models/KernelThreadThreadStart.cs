@@ -4,4 +4,4 @@
 
 namespace IraRationis.HLE.Kernel.Models;
 
-internal sealed record KernelThreadThreadStart(nint Routine, nint Parameter);
+internal sealed unsafe record KernelThreadThreadStart(nint Routine, nint Parameter);

@@ -15,10 +15,7 @@ internal sealed class RuntimeBridgeAbiPolicy
         Fingerprint = fingerprint;
     }
 
-    internal string Fingerprint
-    {
-        get;
-    }
+    internal string Fingerprint { get; }
 
     internal bool Verified
     {

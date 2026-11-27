@@ -5,7 +5,7 @@ using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Textures.Models;
 using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -37,10 +37,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             if (!TryGetTextureSource(state, table + 0x20, out var texture) || texture == null ||
                 !TryGetTextureView(texture, out _) ||
-                !TryGetColorLutConstants(table + 0x40, TextureSecondTransformOffset + TextureTransformBytes, out _))
+                !TryReadConstantDescriptor(table + 0x40, TextureSecondTransformOffset + TextureTransformBytes, out _))
             {
-                return RejectPlanarColorDraw(
-                    "sRGB texture-strip requires Texture2D at table+0x20 and transform CBV at table+0x40");
+                return RejectPlanarColorDraw("sRGB texture-strip requires Texture2D at table+0x20 and transform CBV at table+0x40");
             }
 
             state.RetainObject(texture.Resource);
@@ -121,7 +120,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void WritePlanarColorViews(nint heap, PlanarColorTextureBinding[] textures, bool srgbTexture)
     {
         var handle = ((ID3D12DescriptorHeap*)heap)->GetCPUDescriptorHandleForHeapStart();
-        var increment = _host->GetDescriptorHandleIncrementSize(0);
+        var increment = _host->GetDescriptorHandleIncrementSize((D3D12_DESCRIPTOR_HEAP_TYPE)0);
 
         for (var textureIndex = 0; textureIndex < 4; textureIndex++)
         {

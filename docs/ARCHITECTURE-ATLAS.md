@@ -795,7 +795,7 @@ xychart-beta
 | Command list creations | 625 | 11 |
 | Total of these two categories | 5,226 | 25 |
 
-The first bar series is original, second is predicted retained. The rule retains the first four and subsequent powers of two; other messages pass through. The approximately 99.5% reduction is for these categories only, assuming all messages flow through the wrapper. Original full log: 6,022 lines. No wall-time improvement measured. Current implementation: [RuntimeLogSampling](../IraRationis.Cli/Diagnostics/RuntimeLogSampling.cs).
+The first series shows observed line counts and the second shows projected counts with sampling. The rule retains the first four and subsequent powers of two for each category. Sampling now runs before formatting or writing either success message. Error and evidence logging use their existing paths. The original log contained 6,022 lines, and the projected reduction of about 99.5% applies to the two sampled categories. Wall time still needs measurement. [GraphicsLogSampling](../IraRationis.Graphics/Diagnostics/GraphicsLogSampling.cs).
 
 ### Diagram 37 | Upload and descriptor fixture efficiency targets
 

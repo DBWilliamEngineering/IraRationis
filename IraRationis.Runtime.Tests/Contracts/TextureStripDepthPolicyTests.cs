@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
-using IraRationis.Graphics;
 using IraRationis.Graphics.Shaders.Models;
+using IraRationis.Graphics.Textures;
 
 namespace IraRationis.Runtime.Tests.Contracts;
 
@@ -15,8 +15,7 @@ internal static class TextureStripDepthPolicyTests
         BinaryPrimitives.WriteUInt32LittleEndian(depth, 21);
         BinaryPrimitives.WriteUInt32LittleEndian(format, 16);
         BinaryPrimitives.WriteUInt32LittleEndian(format.AsSpan(4), 20);
-        var metadata = new GraphicsPipelineMetadata(0, [],
-            [new PipelineStateRecord(21, depth), new PipelineStateRecord(16, format)], true, true);
+        var metadata = new GraphicsPipelineMetadata(0, [], [new(21, depth), new(16, format)], true, true);
 
         if (!TextureStripDepthPolicy.TryNormalize(metadata, out var normalized) ||
             BinaryPrimitives.ReadUInt32LittleEndian(normalized.State[1].Bytes.AsSpan(4)) != 0 ||
@@ -41,18 +40,12 @@ internal static class TextureStripDepthPolicyTests
         BinaryPrimitives.WriteUInt32LittleEndian(format.AsSpan(4), 45);
 
         if (TextureStripDepthPolicy.TryNormalize(metadata, out _) ||
-            TextureStripDepthPolicy.TryNormalize(metadata with { State = [new PipelineStateRecord(21, depth)] }, out _)
-            ||
-            TextureStripDepthPolicy.TryNormalize(
-                metadata with
-                {
-                    State = [new PipelineStateRecord(21, depth), new PipelineStateRecord(16, new byte[4])]
-                }, out _))
+            TextureStripDepthPolicy.TryNormalize(metadata with { State = [new(21, depth)] }, out _) ||
+            TextureStripDepthPolicy.TryNormalize(metadata with { State = [new(21, depth), new(16, new byte[4])] }, out _))
         {
             throw new InvalidOperationException("Unsupported DSV format or malformed depth state accepted.");
         }
 
-        Console.WriteLine(
-            "sRGB texture-strip inactive DSV normalization and active-depth rejection passed (CPU only).");
+        Console.WriteLine("sRGB texture-strip inactive DSV normalization and active-depth rejection passed (CPU only).");
     }
 }

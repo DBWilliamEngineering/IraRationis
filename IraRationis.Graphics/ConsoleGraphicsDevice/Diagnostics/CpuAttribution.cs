@@ -5,13 +5,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using IraRationis.Graphics.Diagnostics.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
     private const int CpuSampleStride = 64;
     private static readonly bool EnableCpuSampling = OperatingSystem.IsWindows() &&
-                                                     Environment.GetEnvironmentVariable("IRX_PROFILE_HOST_CPU") == "1";
+        Environment.GetEnvironmentVariable("IRX_PROFILE_HOST_CPU") == "1";
     private static readonly CpuCounter[] CpuCounters = CreateCpuCounters();
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetThreadTimes")]
@@ -40,7 +40,7 @@ public static partial class ConsoleGraphicsDevice
         ticks = 0;
 
         // Windows pseudo-handle for the calling thread. No handle ownership.
-        if (GetThreadTimes(-2, out _, out _, out var kernel, out var user) == 0 ||
+        if (GetThreadTimes((nint)(-2), out _, out _, out var kernel, out var user) == 0 ||
             kernel < 0 || user < 0 || kernel > long.MaxValue - user)
         {
             return false;
@@ -106,9 +106,7 @@ public static partial class ConsoleGraphicsDevice
             return;
         }
 
-        var report =
-            new StringBuilder(
-                "[performance] IRX-R71-HOST-CPU: cumulative=True; inclusive=True; approximate=True; stride=64;");
+        var report = new StringBuilder("[performance] IRX-R71-HOST-CPU: cumulative=True; inclusive=True; approximate=True; stride=64;");
 
         for (var index = 0; index < CpuCounters.Length; index++)
         {

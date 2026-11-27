@@ -52,21 +52,16 @@ public static unsafe class TextureComputer
         table[2] = (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, byte*, int>)&GetLayout;
 
         table[6] =
-            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, uint, uint, ulong, uint, uint, uint, uint*,
-                ulong>)
+            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, uint, uint, ulong, uint, uint, uint, uint*, ulong>)
             &ElementOffset;
 
-        table[8] =
-            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, byte*, uint, uint, byte*, uint, uint, int>)
-            &CopyInto;
+        table[8] = (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, byte*, uint, uint, byte*, uint, uint, int>)&CopyInto;
 
         table[9] =
-            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, byte*, uint, uint, uint, byte*, uint, uint, int
-                >)&CopyFrom;
+            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, byte*, uint, uint, uint, byte*, uint, uint, int>)&CopyFrom;
 
         table[10] =
-            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, uint*, byte*, uint*, uint*, uint, byte*, int>)
-            &Tiling;
+            (nint)(delegate* unmanaged[Stdcall]<NativeTextureComputer*, uint*, byte*, uint*, uint*, uint, byte*, int>)&Tiling;
 
         return (nint)table;
     }
@@ -221,9 +216,7 @@ public static unsafe class TextureComputer
                 var mip = plane + 56 + mipIndex * MipSize;
                 var three = desc.Dimension == 4;
                 var slice = (ulong)mipLayout.Pitch * mipLayout.Rows * planeLayout.Bytes;
-                var sliceSize = mipLayout.InTail
-                    ? planeLayout.Thick ? planeLayout.Alignment / planeLayout.TileDepth : slice
-                    : slice * planeLayout.Samples;
+                var sliceSize = mipLayout.InTail ? planeLayout.Thick ? planeLayout.Alignment / planeLayout.TileDepth : slice : slice * planeLayout.Samples;
 
                 U64(mip, 0, sliceSize * (three ? mipLayout.DepthPitch : 1U));
 
@@ -279,8 +272,7 @@ public static unsafe class TextureComputer
         };
     }
 
-    private static ulong Address(TexturePlane planeLayout, TextureMip mipLayout, uint coordinateX, uint coordinateY,
-        uint coordinateZ, uint[] xAddressPatterns, uint[] yAddressPatterns, uint[] zAddressPatterns)
+    private static ulong Address(TexturePlane planeLayout, TextureMip mipLayout, uint coordinateX, uint coordinateY, uint coordinateZ, uint[] xAddressPatterns, uint[] yAddressPatterns, uint[] zAddressPatterns)
     {
         var offset = coordinateZ / planeLayout.TileDepth * planeLayout.SliceSize + mipLayout.Offset;
 
@@ -293,17 +285,12 @@ public static unsafe class TextureComputer
 
         coordinateY += mipLayout.TailY;
 
-        return offset
-               + ((ulong)(coordinateY / planeLayout.TileHeight) * (mipLayout.Pitch / planeLayout.TileWidth)
-                  + coordinateX / planeLayout.TileWidth) * planeLayout.Alignment
-               + (xAddressPatterns[coordinateX % planeLayout.TileWidth]
-                  | yAddressPatterns[coordinateY % planeLayout.TileHeight]
-                  | zAddressPatterns[coordinateZ % planeLayout.TileDepth]);
+        return offset + ((ulong)(coordinateY / planeLayout.TileHeight) * (mipLayout.Pitch / planeLayout.TileWidth) + coordinateX / planeLayout.TileWidth) * planeLayout.Alignment
+                      + (xAddressPatterns[coordinateX % planeLayout.TileWidth] | yAddressPatterns[coordinateY % planeLayout.TileHeight] | zAddressPatterns[coordinateZ % planeLayout.TileDepth]);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static ulong ElementOffset(NativeTextureComputer* self, uint plane, uint mip, ulong coordinateX,
-        uint coordinateY, uint coordinateZ, uint sample,
+    private static ulong ElementOffset(NativeTextureComputer* self, uint plane, uint mip, ulong coordinateX, uint coordinateY, uint coordinateZ, uint sample,
         uint* bit)
     {
         if (bit != null)
@@ -327,8 +314,7 @@ public static unsafe class TextureComputer
 
         var mipLayout = planeLayout.Mips[mip];
 
-        if (coordinateX >= mipLayout.Width || coordinateY >= mipLayout.Height || coordinateZ
-            >= (textureLayout.Description.Dimension == 4 ? mipLayout.Depth : planeLayout.Slices))
+        if (coordinateX >= mipLayout.Width || coordinateY >= mipLayout.Height || coordinateZ >= (textureLayout.Description.Dimension == 4 ? mipLayout.Depth : planeLayout.Slices))
         {
             return 0;
         }
@@ -336,12 +322,9 @@ public static unsafe class TextureComputer
         try
         {
             var patterns = planeLayout.Patterns();
-            var tiledOffset = Address(planeLayout, mipLayout, (uint)coordinateX, coordinateY, coordinateZ, patterns[0],
-                patterns[1], patterns[2]);
+            var tiledOffset = Address(planeLayout, mipLayout, (uint)coordinateX, coordinateY, coordinateZ, patterns[0], patterns[1], patterns[2]);
 
-            return tiledOffset <= planeLayout.Size && planeLayout.Bytes <= planeLayout.Size - tiledOffset
-                ? planeLayout.Offset + tiledOffset
-                : 0;
+            return tiledOffset <= planeLayout.Size && planeLayout.Bytes <= planeLayout.Size - tiledOffset ? planeLayout.Offset + tiledOffset : 0;
         }
         catch (OutOfMemoryException)
         {
@@ -350,23 +333,20 @@ public static unsafe class TextureComputer
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int CopyInto(NativeTextureComputer* self, byte* tiled, uint plane, uint subresource, byte* linear,
-        uint row,
+    private static int CopyInto(NativeTextureComputer* self, byte* tiled, uint plane, uint subresource, byte* linear, uint row,
         uint depth)
     {
         return Copy(self, tiled, plane, subresource, linear, row, depth, true);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int CopyFrom(NativeTextureComputer* self, byte* linear, uint plane, uint subresource, uint sample,
-        byte* tiled,
+    private static int CopyFrom(NativeTextureComputer* self, byte* linear, uint plane, uint subresource, uint sample, byte* tiled,
         uint row, uint depth)
     {
         return sample == 0 ? Copy(self, tiled, plane, subresource, linear, row, depth, false) : NotImplemented;
     }
 
-    private static int Copy(NativeTextureComputer* self, byte* tiled, uint plane, uint subresource, byte* linear,
-        uint row,
+    private static int Copy(NativeTextureComputer* self, byte* tiled, uint plane, uint subresource, byte* linear, uint row,
         uint depth, bool into)
     {
         var textureLayout = State(self);
@@ -405,13 +385,11 @@ public static unsafe class TextureComputer
 
             while (column < mipLayout.Width)
             {
-                var tiledOffset = Address(planeLayout, mipLayout, column, 0, slice, xAddressPatterns, yAddressPatterns,
-                    zAddressPatterns);
+                var tiledOffset = Address(planeLayout, mipLayout, column, 0, slice, xAddressPatterns, yAddressPatterns, zAddressPatterns);
                 var run = planeLayout.Mode == 0 ? mipLayout.Width - column : 1U;
 
                 while (column + run < mipLayout.Width
-                       && Address(planeLayout, mipLayout, column + run, 0, slice, xAddressPatterns, yAddressPatterns,
-                           zAddressPatterns) == tiledOffset + (ulong)run * planeLayout.Bytes)
+                       && Address(planeLayout, mipLayout, column + run, 0, slice, xAddressPatterns, yAddressPatterns, zAddressPatterns) == tiledOffset + (ulong)run * planeLayout.Bytes)
                 {
                     run++;
                 }
@@ -428,8 +406,7 @@ public static unsafe class TextureComputer
                 {
                     foreach (var (x, run) in runs)
                     {
-                        var tiledOffset = Address(planeLayout, mipLayout, x, coordinateY, slice + coordinateZ,
-                            xAddressPatterns, yAddressPatterns, zAddressPatterns);
+                        var tiledOffset = Address(planeLayout, mipLayout, x, coordinateY, slice + coordinateZ, xAddressPatterns, yAddressPatterns, zAddressPatterns);
                         var length = (ulong)run * planeLayout.Bytes;
 
                         if (tiledOffset > planeLayout.Size || length > planeLayout.Size - tiledOffset)
@@ -438,12 +415,9 @@ public static unsafe class TextureComputer
                         }
 
                         var tiledElement = tiled + checked((nint)(planeLayout.Offset + tiledOffset));
-                        var linearElement = linear + checked((nint)((ulong)coordinateZ * depth
-                                                                    + (ulong)coordinateY * row
-                                                                    + (ulong)x * planeLayout.Bytes));
+                        var linearElement = linear + checked((nint)((ulong)coordinateZ * depth + (ulong)coordinateY * row + (ulong)x * planeLayout.Bytes));
 
-                        Buffer.MemoryCopy(into ? linearElement : tiledElement, into ? tiledElement : linearElement,
-                            length, length);
+                        Buffer.MemoryCopy(into ? linearElement : tiledElement, into ? tiledElement : linearElement, length, length);
                     }
                 }
             }
@@ -461,8 +435,7 @@ public static unsafe class TextureComputer
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int Tiling(NativeTextureComputer* self, uint* tiles, byte* packed, uint* shape, uint* count,
-        uint first,
+    private static int Tiling(NativeTextureComputer* self, uint* tiles, byte* packed, uint* shape, uint* count, uint first,
         byte* output)
     {
         var textureLayout = State(self);
@@ -482,8 +455,7 @@ public static unsafe class TextureComputer
 
         var standard = planeLayout.FirstTail;
         var tail = standard < planeLayout.Mips.Length;
-        var tailTiles = standard == 0 ? planeLayout.SliceSize / tile :
-            tail ? planeLayout.Mips[standard - 1].Offset / tile : 0;
+        var tailTiles = standard == 0 ? planeLayout.SliceSize / tile : tail ? planeLayout.Mips[standard - 1].Offset / tile : 0;
 
         if (tiles != null)
         {

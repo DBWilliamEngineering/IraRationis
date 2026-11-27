@@ -8,7 +8,7 @@
   <p>
     <img alt="Windows x64" src="https://img.shields.io/badge/WINDOWS-x64-333840?style=for-the-badge" />
     <img alt="Experimental" src="https://img.shields.io/badge/STATUS-EXPERIMENTAL-333840?style=for-the-badge" />
-    <img alt="Initial settings UI reached" src="https://img.shields.io/badge/MILESTONE-SETTINGS%20UI-28704a?style=for-the-badge" />
+    <img alt="Past brightness settings" src="https://img.shields.io/badge/MILESTONE-PAST%20BRIGHTNESS-28704a?style=for-the-badge" />
     <img alt="C# first" src="https://img.shields.io/badge/C%23-FIRST-6942b8?style=for-the-badge" />
   </p>
   <p>
@@ -20,8 +20,8 @@
   </p>
   <p>Native console compatibility research<br />
   Windows x64 · C# · Native AOT · Direct3D 12<br />
-  Updated November 26, 2026 · R77 · Initial settings UI reached<br />
-  Next development target: R78 · Main menu transition</p>
+  Updated November 27, 2026 · Past brightness settings<br />
+  Next development target: Main menu transition</p>
   <p><a href="#current-status">Status</a> · <a href="#architecture">Architecture</a> · <a href="#build-and-validate">Build &amp; validate</a> · <a href="#documentation">Documentation</a> · <a href="#distribution-and-releases">Releases</a> · <a href="#licensing-and-attribution">Licensing</a></p>
 </div>
 
@@ -29,30 +29,27 @@
 
 Ira Rationis (IRX) is an experimental native x86-64 Xbox Series X|S compatibility runtime for Windows. It develops its own architecture for loading, platform services, graphics, memory, input, storage, and media. It incorporates attributed upstream foundations; it does not claim that every component was independently authored from inception.
 
-IRX has progressed through local account selection, the animated title introduction, the Continue (A) prompt, and into the initial configuration interface. The next major development revision, R78, targets the remaining transition into the main menu, continuous movie audio, and improved runtime throughput. The longer-term objective is sustained, correct 60+ FPS in demanding titles on suitable hardware. That objective has not been demonstrated.
+IRX has progressed through local account selection, the animated title introduction, the Continue (A) prompt, and the initial configuration screens through brightness. The next milestone is an interactive main menu with continuous intro audio. The longer-term objective is smooth 3840×2160 gameplay at 60 FPS, with correct rendering and continuous audio.
 
 ## Current status
 
-### Vindex milestone: initial settings interface reached (R77)
+### Vindex milestone: past brightness settings
 
-> **Approaching the main menu.** Ira Rationis has advanced beyond the intro logo and Continue (A) screen into the title's initial configuration interface, including minimap and subtitle settings. R78 is our next push toward a stable main menu, with movie audio correction and major performance improvements developed alongside compatibility.
+On November 27, 2026 (US Central time), the maintainer proceeded past the subtitle and brightness screens during native guest execution. The movie audio had improved in this run but still had gaps and choppiness. Main-menu execution and gameplay remain unverified.
 
-On November 26, 2026 (US Central time), the maintainer observed and navigated the initial settings interface during native guest execution. UI navigation audio appeared normal; movie soundtrack playback remained choppy, with intermittent silence, and sounded worse in the R77 run. This is the furthest observed startup progression to date. Main-menu execution and gameplay have not yet been demonstrated, and the number of remaining compatibility boundaries is unknown.
+The local Native AOT run on an NVIDIA GeForce RTX 4090 reported GPU completion for the dual-mask rectangle and passed byte readback of the authored tiled BC3 upload fixture. The next blocked draw is a non-indexed triangle list whose vertex shader fetches from a root SRV and whose pixel shader targets an A8_UNORM render target with no depth buffer bound.
 
-The R77 local Native AOT run on an NVIDIA GeForce RTX 4090 crossed the previous indexed UI blocker. Dithered, plain textured and alpha-mask UI variants report native GPU completion. The runtime subsequently terminated on a new non-indexed draw involving a three-vertex rectangle-list workload (guest topology 17), not the prior indexed UI shader.
-
-| Latest runtime evidence (R77) | Observed |
+| Latest runtime evidence | Observed |
 | --- | ---: |
-| Elapsed time at last startup observation | 74.008 seconds |
+| Elapsed time at last startup observation | 74.001 seconds |
 | Bound images / missing imports | 5 / 0 |
-| Successful presentations / attempts | 832 / 832 |
-| Draw calls observed | 7,823 |
-| Compute dispatches observed | 782 |
-| Last sampled presentation rate | 8.97/s |
-| Prior intro milestone presentations (R73) | 616 |
+| Successful presentations / attempts | 1,426 / 1,426 |
+| Draw calls observed | 21,440 |
+| Compute dispatches observed | 1,357 |
+| Last sampled presentation rate | 16.78/s |
 | Main menu | Not yet reached |
 
-The presentation rate is not a gameplay FPS benchmark. R77 progressed into a more demanding UI workload; its lower late presentation rate is a performance concern, not a controlled same-scene regression measurement. Draw and dispatch counters record observed calls, not a guarantee that each produced correct pixels. Visual progression and audio quality are maintainer observations; automated account/media lifecycle and pixel-content indicators remain unverified or not observed. No commercial title captures are distributed with the project.
+Intro windows with comparable draw and fence counts averaged about 20.8 presentations per second, up from 10.9 in the preceding capture. Scene and timing differences prevent attributing this change to one optimization. The counters measure observed calls and presents. Visual progression and audio quality are maintainer observations. Commercial title captures stay local.
 
 ### Startup progression
 
@@ -61,9 +58,9 @@ flowchart LR
     A[Native launch] --> B[Local account selection]
     B --> C[Intro logo animation]
     C --> D[Continue A prompt]
-    D --> E[Initial settings UI]
-    E --> F[Non-indexed draw blocked]
-    F -. R78 target .-> G[Main menu]
+    D --> E[Selections and brightness]
+    E --> F[Alpha-only triangle draw blocked]
+    F -. next .-> G[Main menu]
     G -. future .-> H[Gameplay]
     C --> I[Movie audio: unresolved]
     E --> J[UI navigation audio observed]
@@ -77,29 +74,27 @@ flowchart LR
 
 | Area | Evidence and current boundary |
 | --- | --- |
-| Native execution | Native entry, five bound images, and zero missing imports in the R77 run. Import resolution does not establish behavioral parity. |
-| Graphics | Title intro, Continue prompt and initial settings UI observed. Planar-color, sRGB texture strips, and dithered/plain/alpha-mask indexed UI workloads report GPU completion. Texture arrays, typed views, dynamic sampler translation and additional texture formats are supported within validated contracts. General shader coverage, resource coherence and command semantics remain incomplete. |
+| Native execution | Native entry, five bound images, and zero missing imports in the latest run. |
+| Graphics | Title intro and settings through brightness observed. Planar color, sRGB strips, indexed UI variants and dual-mask rectangles report GPU completion. The tiled BC3 upload passes readback. General shader coverage, resource coherence and command semantics remain incomplete. |
 | Compute | Existing 3D color transform and two-/three-segment curve LUT dispatches complete on the GPU. Authored 17- and 29-texel numerical readback fixtures pass for both device ABI paths at the existing tolerance. General RDNA2 translation and console-equivalent title output remain unverified. |
 | Input and local account | Guest-consumed wired DualSense input, local profile selection and settings navigation observed; the real host async runtime successfully returns an offline local-user handle. General callback delivery, online identity, privilege and token services remain incomplete or explicitly unsupported. |
 | Storage | Local strict storage contracts and native DirectStorage fixture passed, including raw/Zlib reads, virtual-drive access, physical-page writes and ordered error reporting. BCPack and shared weighted scheduling remain outstanding. |
-| Title audio and media | Guest 48 kHz XApu/Opus and pre-skip contracts pass. Narration and UI navigation audio were reported to sound normal, whereas the movie soundtrack remains severely intermittent and distorted. Experimental mixer/movie scheduling did not resolve the defect. Bink PCM production, buffering, timing and WASAPI delivery require direct investigation. |
-| Memory and performance | Guarded memory publication, ordered same-queue texture uploads, optimized detiling, bounded immutable layout caching and CLZERO batching reduce identified subsystem costs. The ordered-upload GPU readback fixture passes. R77 late presentation throughput remains below the requested rate; overall improvement has not been demonstrated. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
+| Title audio and media | Guest XApu/Opus contracts pass. The Bink trace measures PCM delivery and samples guest voice readiness. The latest intro still has audible gaps. Mixer consumption and endpoint timing remain under investigation. |
+| Memory and performance | Guarded publication, ordered uploads, cached layout and descriptor data, and CLZERO batching address measured subsystem costs. Late settings still use dozens of completion waits per present. See [validation evidence](docs/DIAGNOSTICS.md#resident-page-validation-results). |
 | Runtime services | Host initialization, local-user completion, gamertag reads and persistent storage access observed. Unsupported online/provider requests remain explicit failures. See [service contracts](docs/runtime-services.md). |
-| Diagnostics and validation | R77 local Release build (zero warnings/errors), Native AOT publication, runtime contracts, graphics probes, native entry/thread, GameInput/physical memory and DirectStorage fixtures passed. Bounded captures remain local. GitHub Actions status must be verified for the exact commit. |
-| Post-intro transition | Initial configuration UI reached; strict execution terminates at a new non-indexed raster workload. Main-menu transition is the R78 target. |
+| Diagnostics and validation | The November 27 local Release build (zero warnings/errors), Native AOT publication, component contracts, graphics probes, and native fixtures passed. GitHub Actions validation is separate. |
+| Post-intro transition | Brightness settings passed. The next alpha-only draw is the current compatibility boundary. |
 | Gameplay and sustained FPS | Not demonstrated. No overall completion percentage or competitive performance claim is made. |
 
-### R78: the next major implementation
+### Next development work
 
 | Development front | Objective |
 | --- | --- |
-| **Main menu** | Resolve the captured non-indexed rectangle-list pipeline and subsequent compatibility boundaries. Validate correct resource bindings, fixed-function state and GPU output; establish stable menu rendering and input. |
+| **Main menu** | Support the captured depthless alpha-only triangle and subsequent required draws. Validate resource bindings, fixed-function state and GPU output, then establish stable menu rendering and input. |
 | **Movie audio** | Trace actual Bink PCM producer/consumer timing, buffer occupancy, underruns and endpoint delivery. Correct the identified defect without regressing working narration and UI audio. |
 | **Performance** | Profile comparable scenes, isolate CPU emulation, resource staging, submission and guest worker costs, and reduce the critical path toward sustained requested presentation cadence without weakening synchronization. |
 
-R78 is a development objective, not a promised release or guarantee that the next patch will reach the main menu. The three fronts will be developed together, with consolidated validation and explicit unsupported-operation boundaries.
-
-The R77 local validation logs establish the contracts above; HLSL compiler warnings remain. CI and release validation require separate evidence for the exact commit. See [build and validation](docs/RELEASING.md#local-build-and-component-checks). The [development handoff](docs/development-handoff.md) records an earlier checkpoint; this milestone and blocker supersede its historical status.
+Use the [consolidated validation](docs/RELEASING.md#local-build-and-component-checks) to confirm the next compatibility change and preserve the first new blocked draw or dispatch.
 
 Historical measurements and their limits remain in the [Architecture Atlas](docs/ARCHITECTURE-ATLAS.md). Compare the same scene, settings, capture interval, and matching symbols; inclusive stack percentages are not FPS measurements.
 
@@ -185,14 +180,14 @@ dotnet publish IraRationis.Cli -c Release -r win-x64 -o artifacts/native
 .\artifacts\native\irx.exe --help
 ```
 
-For the consolidated local validation and R77 launch profile, use the reviewed scripts from the repository root:
+To build, validate, and capture a fresh title run, use PowerShell 7 from the repository root.
 
 ```powershell
-.\scripts\Invoke-Validation.ps1 -OutputDirectory "artifacts/validation/R77" -UnblockReviewedFixtures
-.\scripts\Invoke-R77.ps1
+$run = 'artifacts/validation/title-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+.\scripts\Invoke-R77.ps1 -OutputDirectory $run -Validate -TraceMovieAudio
 ```
 
-Only use `-UnblockReviewedFixtures` after reviewing the named native fixtures. The launch profile contains experimental performance and movie scheduling options; `-DisableMovieScheduling` and `-DisableClzeroBatch` permit comparison runs. These options do not establish correct title playback.
+Use `-UnblockReviewedFixtures` if PowerShell blocks a fixture you have reviewed. The launcher samples routine graphics success messages and leaves movie worker scheduling off by default. For a comparison run, set a fresh `-OutputDirectory`, pass `-PublishedHostDirectory` with the first run's `host` directory, and vary one option. See [title capture and comparison](docs/DIAGNOSTICS.md#title-capture-and-comparison).
 
 Console contract projects execute through `dotnet run`; building the solution does not run them. Preserve the exact published EXE/DLL/PDB set when profiling, and use a distinct directory for each build being compared.
 

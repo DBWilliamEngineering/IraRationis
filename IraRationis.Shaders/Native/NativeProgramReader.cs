@@ -141,8 +141,7 @@ public static class NativeProgramReader
             }
 
             if (programs.Sum(program =>
-                    (long)program.Code.Length + program.RootLayout.Length + program.UsedResources.Length
-                    + program.StageMetadata.Length) +
+                    (long)program.Code.Length + program.RootLayout.Length + program.UsedResources.Length + program.StageMetadata.Length) +
                 code.Length + root.Length + used.Length + stageMetadata.Length > MaximumNativeBytes)
             {
                 throw new InvalidDataException("Native program retention budget exceeded.");

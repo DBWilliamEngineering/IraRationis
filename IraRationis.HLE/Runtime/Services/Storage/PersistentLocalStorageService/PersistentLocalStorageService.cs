@@ -4,16 +4,16 @@ using System.ComponentModel;
 using System.Text;
 using IraRationis.HLE.Runtime.Services.Storage.Models;
 
-namespace IraRationis.HLE.Runtime.Services.Storage;
+namespace IraRationis.HLE.Runtime.Services.Storage.PersistentLocalStorageService;
 
 internal sealed unsafe partial class PersistentLocalStorageService
 {
     internal static readonly Guid ProviderId = new("f4faf4d4-2d04-4fce-b3e0-474a713a3e84");
     internal static readonly Guid InterfaceId = new("41a4e10c-5a7e-41d9-8c37-37bde62a07d6");
-    private readonly PersistentStorageDirectory _directory;
     private readonly RuntimeServiceObject _object;
-    private readonly byte[] _pathBytes;
     private readonly RuntimeServiceTrace _trace;
+    private readonly PersistentStorageDirectory _directory;
+    private readonly byte[] _pathBytes;
 
     internal PersistentLocalStorageService(string directory, RuntimeServiceTrace trace, ulong capacityBytes = 0)
     {
@@ -22,8 +22,7 @@ internal sealed unsafe partial class PersistentLocalStorageService
         _trace = trace;
         _directory = new PersistentStorageDirectory(directory, capacityBytes);
         var path = Path.EndsInDirectorySeparator(_directory.Path)
-            ? _directory.Path
-            : _directory.Path + Path.DirectorySeparatorChar;
+            ? _directory.Path : _directory.Path + Path.DirectorySeparatorChar;
         _pathBytes = Encoding.UTF8.GetBytes(path + '\0');
 
         ReadOnlySpan<nint> methods =
@@ -57,9 +56,7 @@ internal sealed unsafe partial class PersistentLocalStorageService
     {
         var result = exception is Win32Exception { NativeErrorCode: > 0 } windowsError
             ? unchecked((int)(0x80070000U | ((uint)windowsError.NativeErrorCode & 0xffff)))
-            : exception.HResult < 0
-                ? exception.HResult
-                : RuntimeServiceResult.Failure;
+            : exception.HResult < 0 ? exception.HResult : RuntimeServiceResult.Failure;
 
         try
         {

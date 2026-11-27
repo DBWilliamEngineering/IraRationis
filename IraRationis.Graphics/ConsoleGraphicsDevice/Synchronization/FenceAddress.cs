@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -101,7 +101,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     private static void RunFenceMirrorObserver()
     {
-        for (;;)
+        for(;;)
         {
             int delay;
 

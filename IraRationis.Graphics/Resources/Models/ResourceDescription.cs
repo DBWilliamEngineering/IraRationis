@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct ResourceDescription
+internal unsafe struct ResourceDescription
 {
     public uint Dimension;
     public ulong Alignment;

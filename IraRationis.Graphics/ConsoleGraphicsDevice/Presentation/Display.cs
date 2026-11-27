@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Presentation.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -168,6 +168,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         return NoInterface;
+
     }
 
     private static int EnumerateDisplay(nint value, uint index, nint* output)

@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using IraRationis.HLE.Runtime.Services.Async;
 using IraRationis.HLE.Runtime.Services.Async.Models;
 using IraRationis.HLE.Runtime.Services.Users.Models;
 
-namespace IraRationis.HLE.Runtime.Services.Users;
+namespace IraRationis.HLE.Runtime.Services.Users.LocalUserService;
 
 internal sealed unsafe partial class LocalUserService
 {
     internal static readonly Guid Provider = new("01acd177-91f9-4763-a38e-ccbb55ce32e0");
     internal static readonly Guid GamertagInterface = new("cef4fac0-7676-4a94-a119-4c43f9eb5b74");
     private readonly HostRuntimeAsyncService _async;
+    private readonly LocalUserDirectory _users;
+    private readonly RuntimeServiceTrace _trace;
     private readonly RuntimeServiceObject _baseObject;
     private readonly RuntimeServiceObject _gamertagObject;
     private readonly Lock _registrationGate = new();
     private readonly Dictionary<ulong, LocalUserChangeRegistration> _registrations = [];
-    private readonly RuntimeServiceTrace _trace;
-    private readonly LocalUserDirectory _users;
     private ulong _nextRegistration;
 
     internal LocalUserService(HostRuntimeAsyncService asyncService, LocalUserProfile profile,
@@ -74,12 +76,10 @@ internal sealed unsafe partial class LocalUserService
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, byte*, uint*, int>)&CheckPrivilege,
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, uint, XAsyncBlock*, int>)&RejectPrivilegeResolution,
             (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int>)&RejectResult,
-            (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, nuint, nint, nuint, nint, XAsyncBlock*,
-                int>)&RejectToken,
+            (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, nuint, nint, nuint, nint, XAsyncBlock*, int>)&RejectToken,
             (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nuint*, int>)&RejectResultSize,
             (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nuint, nint, nint*, nuint*, int>)&RejectTokenResult,
-            (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, nuint, nint, nuint, nint, XAsyncBlock*,
-                int>)&RejectToken,
+            (nint)(delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, nuint, nint, nuint, nint, XAsyncBlock*, int>)&RejectToken,
             (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nuint*, int>)&RejectResultSize,
             (nint)(delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nuint, nint, nint*, nuint*, int>)&RejectTokenResult,
             (nint)(delegate* unmanaged[Stdcall]<nint, nint, nint, XAsyncBlock*, int>)&RejectIssueResolution,

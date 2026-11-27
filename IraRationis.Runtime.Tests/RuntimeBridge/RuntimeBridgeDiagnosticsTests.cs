@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
 using IraRationis.HLE.Runtime.Diagnostics;
 using IraRationis.PE.Models;
+using IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks;
 
 namespace IraRationis.Runtime.Tests.RuntimeBridge;
 
@@ -74,8 +75,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
         {
             try
             {
-                using var unexpected =
-                    RuntimeBridgeDiagnostics.Begin(TextWriter.Null, new RuntimeBridgeOptions(true, limit));
+                using var unexpected = RuntimeBridgeDiagnostics.Begin(TextWriter.Null, new RuntimeBridgeOptions(true, limit));
 
                 throw new InvalidOperationException("An invalid runtime bridge record limit was accepted.");
             }
@@ -117,8 +117,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
         var observed = session.Observe("kernel32.dll", symbol, original);
 
-        Require(observed != original && observed != 0,
-            "An enabled loader diagnostic must return its forwarding callback.");
+        Require(observed != original && observed != 0, "An enabled loader diagnostic must return its forwarding callback.");
         Require(session.Observe("API-MS-WIN-CORE-LIBRARYLOADER-L1-2-0.DLL", symbol, original) == observed,
             "An API-set alias for the same target must reuse the forwarding callback.");
         Require(session.Observe("kernelbase.dll", symbol, observed) == observed,
@@ -148,12 +147,10 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
         using var session = Begin(writer);
         var initialize = (delegate* unmanaged[Stdcall]<ulong, ulong, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
             "InitializeApiImpl", AuthoredRuntimeBridgeTargets.InitializeAddress);
-        var initializeExtended =
-            (delegate* unmanaged[Stdcall]<ulong, ulong, ulong, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
-                "InitializeApiImplEx", AuthoredRuntimeBridgeTargets.InitializeExtendedAddress);
-        var initializeWithOptions =
-            (delegate* unmanaged[Stdcall]<ulong, ulong, ulong, nint, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
-                "InitializeApiImplEx2", AuthoredRuntimeBridgeTargets.InitializeWithOptionsAddress);
+        var initializeExtended = (delegate* unmanaged[Stdcall]<ulong, ulong, ulong, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
+            "InitializeApiImplEx", AuthoredRuntimeBridgeTargets.InitializeExtendedAddress);
+        var initializeWithOptions = (delegate* unmanaged[Stdcall]<ulong, ulong, ulong, nint, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
+            "InitializeApiImplEx2", AuthoredRuntimeBridgeTargets.InitializeWithOptionsAddress);
 
         foreach (var expectedResult in new[] { 0, 1, FailureResult })
         {
@@ -163,7 +160,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
             RequireTargetErrors();
             Require(result == expectedResult && AuthoredRuntimeBridgeTargets.FirstVersion == FirstVersion
-                                             && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion,
+                    && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion,
                 "InitializeApiImpl must forward both complete version values and the exact HRESULT.");
 
             AuthoredRuntimeBridgeTargets.Configure(expectedResult);
@@ -172,8 +169,8 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
             RequireTargetErrors();
             Require(result == expectedResult && AuthoredRuntimeBridgeTargets.FirstVersion == FirstVersion
-                                             && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion
-                                             && AuthoredRuntimeBridgeTargets.Flags == InitializationFlags,
+                    && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion
+                    && AuthoredRuntimeBridgeTargets.Flags == InitializationFlags,
                 "InitializeApiImplEx must preserve all 64 bits of each argument.");
 
             AuthoredRuntimeBridgeTargets.Configure(expectedResult);
@@ -182,9 +179,8 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
             RequireTargetErrors();
             Require(result == expectedResult && AuthoredRuntimeBridgeTargets.FirstVersion == FirstVersion
-                                             && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion
-                                             && AuthoredRuntimeBridgeTargets.Flags == InitializationFlags
-                                             && AuthoredRuntimeBridgeTargets.Options == 1,
+                    && AuthoredRuntimeBridgeTargets.SecondVersion == SecondVersion
+                    && AuthoredRuntimeBridgeTargets.Flags == InitializationFlags && AuthoredRuntimeBridgeTargets.Options == 1,
                 "InitializeApiImplEx2 must preserve its full-width arguments and forward an opaque, unreadable options pointer.");
         }
 
@@ -205,15 +201,14 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
         foreach (var expectedResult in new[] { 0, 1, FailureResult })
         {
             nint output = 0x1234;
-            AuthoredRuntimeBridgeTargets.Configure(expectedResult, expectedObject, expectedResult >= 0);
+            AuthoredRuntimeBridgeTargets.Configure(expectedResult, expectedObject, writeOutput: expectedResult >= 0);
             AuthoredRuntimeBridgeTargets.SetIncomingErrors();
             var result = query((nint)(&provider), (nint)(&requestedInterface), (nint)(&output));
 
             RequireTargetErrors();
             Require(result == expectedResult && AuthoredRuntimeBridgeTargets.Provider == (nint)(&provider)
-                                             && AuthoredRuntimeBridgeTargets.RequestedInterface
-                                             == (nint)(&requestedInterface)
-                                             && AuthoredRuntimeBridgeTargets.Output == (nint)(&output),
+                    && AuthoredRuntimeBridgeTargets.RequestedInterface == (nint)(&requestedInterface)
+                    && AuthoredRuntimeBridgeTargets.Output == (nint)(&output),
                 "QueryApiImpl must forward the original three pointer arguments and exact HRESULT.");
             Require(output == (expectedResult >= 0 ? expectedObject : 0x1234),
                 "QueryApiImpl must preserve the target's output and must not initialize a failed query's untouched output.");
@@ -225,8 +220,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
         RequireTargetErrors();
         Require(nullResult == FailureResult && AuthoredRuntimeBridgeTargets.Provider == 0
-                                            && AuthoredRuntimeBridgeTargets.RequestedInterface == 0
-                                            && AuthoredRuntimeBridgeTargets.Output == 0,
+                && AuthoredRuntimeBridgeTargets.RequestedInterface == 0 && AuthoredRuntimeBridgeTargets.Output == 0,
             "Null query pointers must reach the target unchanged for its own validation.");
         Require(provider == new Guid("daf2c6c2-76ce-4c33-a6d0-c4498ed73762")
                 && requestedInterface == new Guid("641faed9-0552-47cf-8c0d-f679b55d90ab"),
@@ -258,8 +252,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
                 RequireTargetErrors();
                 Require(result == expectedModule && AuthoredRuntimeBridgeTargets.Name == (nint)name
-                                                 && AuthoredRuntimeBridgeTargets.File == file
-                                                 && AuthoredRuntimeBridgeTargets.Flags == flags,
+                        && AuthoredRuntimeBridgeTargets.File == file && AuthoredRuntimeBridgeTargets.Flags == flags,
                     "LoadLibraryExW must forward name, file, flags, and both success and failure results without loading a real runtime.");
             }
         }
@@ -272,7 +265,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
 
             RequireTargetErrors();
             Require(result == 0x12345678 && AuthoredRuntimeBridgeTargets.Module == 0
-                                         && AuthoredRuntimeBridgeTargets.Name == ordinal,
+                    && AuthoredRuntimeBridgeTargets.Name == ordinal,
                 "GetProcAddress must forward ordinal pointers without reading them as strings or replacing the result.");
         }
     }
@@ -285,19 +278,15 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
             {
                 using var writer = new DisruptiveRuntimeBridgeWriter(false);
                 using var session = Begin(writer);
-                var callback = queryOperation
-                    ? RuntimeBridgeCallbacks.ObserveRuntimeExport("QueryApiImpl",
-                        AuthoredRuntimeBridgeTargets.QueryAddress)
-                    : RuntimeBridgeCallbacks.ObserveRuntimeExport("InitializeApiImplEx2",
-                        AuthoredRuntimeBridgeTargets.InitializeWithOptionsAddress);
+                var callback = queryOperation ? RuntimeBridgeCallbacks.ObserveRuntimeExport("QueryApiImpl", AuthoredRuntimeBridgeTargets.QueryAddress)
+                    : RuntimeBridgeCallbacks.ObserveRuntimeExport("InitializeApiImplEx2", AuthoredRuntimeBridgeTargets.InitializeWithOptionsAddress);
                 writer.ThrowOnWrite = throwOnWrite;
                 var previousWrites = writer.Writes;
                 AuthoredRuntimeBridgeTargets.Configure(FailureResult);
                 AuthoredRuntimeBridgeTargets.SetIncomingErrors();
                 var result = queryOperation
                     ? ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)callback)(0, 0, 0)
-                    : ((delegate* unmanaged[Stdcall]<ulong, ulong, ulong, nint, int>)callback)(FirstVersion,
-                        SecondVersion, InitializationFlags, 1);
+                    : ((delegate* unmanaged[Stdcall]<ulong, ulong, ulong, nint, int>)callback)(FirstVersion, SecondVersion, InitializationFlags, 1);
 
                 RequireTargetErrors();
                 Require(result == FailureResult && writer.Writes == previousWrites + 2,
@@ -310,7 +299,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
     {
         using var writer = new StringWriter();
         using var session = RuntimeBridgeDiagnostics.Begin(writer, new RuntimeBridgeOptions(true, 2))
-                            ?? throw new InvalidOperationException("Enabled authored bridge session was not created.");
+            ?? throw new InvalidOperationException("Enabled authored bridge session was not created.");
         var initialize = (delegate* unmanaged[Stdcall]<ulong, ulong, int>)RuntimeBridgeCallbacks.ObserveRuntimeExport(
             "InitializeApiImpl", AuthoredRuntimeBridgeTargets.InitializeAddress);
         AuthoredRuntimeBridgeTargets.Configure();
@@ -325,12 +314,9 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
         var records = writer.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Require(AuthoredRuntimeBridgeTargets.Calls == 40
-                && records.Count(record =>
-                    record.Contains("phase=begin operation=Initialize ", StringComparison.Ordinal)) == 2
-                && records.Count(record => record.Contains("phase=end operation=Initialize ", StringComparison.Ordinal))
-                == 2
-                && records.Any(record =>
-                    record.Contains("phase=summary operation=Initialize ", StringComparison.Ordinal)
+                && records.Count(record => record.Contains("phase=begin operation=Initialize ", StringComparison.Ordinal)) == 2
+                && records.Count(record => record.Contains("phase=end operation=Initialize ", StringComparison.Ordinal)) == 2
+                && records.Any(record => record.Contains("phase=summary operation=Initialize ", StringComparison.Ordinal)
                     && record.Contains("started=40 completed=40 callsBeyondLimit=38", StringComparison.Ordinal)),
             "A diagnostic record limit must bound output while every target call and completion remains counted.");
     }
@@ -339,9 +325,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
     {
         using var writer = new StringWriter();
         using var session = Begin(writer);
-        var callback =
-            RuntimeBridgeCallbacks.ObserveRuntimeExport("InitializeApiImpl",
-                AuthoredRuntimeBridgeTargets.InitializeAddress);
+        var callback = RuntimeBridgeCallbacks.ObserveRuntimeExport("InitializeApiImpl", AuthoredRuntimeBridgeTargets.InitializeAddress);
         session.Dispose();
         var recordsAfterDisposal = writer.ToString();
 
@@ -355,8 +339,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
         Require(result == FailureResult && writer.ToString() == recordsAfterDisposal,
             "Cached callbacks must retain their original target after disposal without emitting further diagnostic records.");
         Require(session.Observe("kernel32.dll", new ImportSymbol("LoadLibraryExW", 0),
-                    (nuint)AuthoredRuntimeBridgeTargets.LoadLibraryAddress)
-                == (nuint)AuthoredRuntimeBridgeTargets.LoadLibraryAddress,
+                    (nuint)AuthoredRuntimeBridgeTargets.LoadLibraryAddress) == (nuint)AuthoredRuntimeBridgeTargets.LoadLibraryAddress,
             "A disposed observer must stop creating or returning diagnostic bindings.");
     }
 
@@ -369,7 +352,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
     private static RuntimeBridgeDiagnostics Begin(TextWriter writer)
     {
         return RuntimeBridgeDiagnostics.Begin(writer, new RuntimeBridgeOptions(true))
-               ?? throw new InvalidOperationException("Enabled authored bridge session was not created.");
+            ?? throw new InvalidOperationException("Enabled authored bridge session was not created.");
     }
 
     private static void RequireTargetErrors()
@@ -382,8 +365,7 @@ internal static unsafe class RuntimeBridgeDiagnosticsTests
             "The observer must preserve the target's native and managed outgoing error states.");
         Require(AuthoredRuntimeBridgeTargets.Calls == 1
                 && AuthoredRuntimeBridgeTargets.ObservedSystemError == AuthoredRuntimeBridgeTargets.IncomingSystemError
-                && AuthoredRuntimeBridgeTargets.ObservedInvocationError
-                == AuthoredRuntimeBridgeTargets.IncomingInvocationError,
+                && AuthoredRuntimeBridgeTargets.ObservedInvocationError == AuthoredRuntimeBridgeTargets.IncomingInvocationError,
             "The observer must call the target exactly once with both incoming error states intact.");
     }
 

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct DescriptorMemoryInformation
+internal unsafe struct DescriptorMemoryInformation
 {
     public nuint BaseAddress;
     public nuint AllocationBase;

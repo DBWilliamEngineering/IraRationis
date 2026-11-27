@@ -5,13 +5,17 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 40)]
-internal struct BufferUnorderedAccessView
+internal unsafe struct BufferUnorderedAccessView
 {
-    [FieldOffset(0)] public uint Format;
+    [FieldOffset(0)]
+    public uint Format;
 
-    [FieldOffset(4)] public uint Dimension;
+    [FieldOffset(4)]
+    public uint Dimension;
 
-    [FieldOffset(8)] public ulong FirstElement;
+    [FieldOffset(8)]
+    public ulong FirstElement;
 
-    [FieldOffset(16)] public uint Elements;
+    [FieldOffset(16)]
+    public uint Elements;
 }

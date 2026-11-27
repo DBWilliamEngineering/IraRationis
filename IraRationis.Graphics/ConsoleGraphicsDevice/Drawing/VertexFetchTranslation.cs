@@ -4,18 +4,17 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders;
 using IraRationis.Graphics.Shaders.Models;
-using IraRationis.Shaders.Compute;
 using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Raster;
 using IraRationis.Shaders.VertexFetch;
 using IraRationis.Shaders.VertexFetch.Models;
-using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -280,22 +279,54 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
     }
 
-    private static byte[]? SerializeHostRoot(VertexFetchShaderPair pair, TextWriter report, bool rectangle = false)
+    private static byte[]? SerializeHostRoot(VertexFetchShaderPair pair, TextWriter report, bool rectangle = false,
+        bool dualMask = false)
     {
         // Rebuild the validated version 1.1 root contract with host structures.
         // Do not rely on the console container checksum or copy guest pointers.
-        var parameter = new D3D12_ROOT_PARAMETER1
+        var parameters = stackalloc D3D12_ROOT_PARAMETER1[2];
+        parameters[0] = new D3D12_ROOT_PARAMETER1
         {
             ParameterType = (D3D12_ROOT_PARAMETER_TYPE)(rectangle ? 2 : 3),
             ShaderVisibility = 0
         };
 
-        parameter.Anonymous.Descriptor = new D3D12_ROOT_DESCRIPTOR1
+        parameters[0].Anonymous.Descriptor = new D3D12_ROOT_DESCRIPTOR1
         {
             ShaderRegister = pair.Register,
             RegisterSpace = pair.Space,
             Flags = 0
         };
+
+        var maskRange = new D3D12_DESCRIPTOR_RANGE1
+        {
+            RangeType = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            NumDescriptors = 2
+        };
+        var maskSampler = new D3D12_STATIC_SAMPLER_DESC
+        {
+            Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT,
+            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            MaxAnisotropy = 1,
+            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
+            ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
+        };
+
+        if (dualMask)
+        {
+            parameters[1] = new D3D12_ROOT_PARAMETER1
+            {
+                ParameterType = D3D12_ROOT_PARAMETER_TYPE.D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
+            };
+            parameters[1].Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE1
+            {
+                NumDescriptorRanges = 1,
+                pDescriptorRanges = &maskRange
+            };
+        }
 
         var description = new D3D12_VERSIONED_ROOT_SIGNATURE_DESC
         {
@@ -304,8 +335,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         description.Anonymous.Desc_1_1 = new D3D12_ROOT_SIGNATURE_DESC1
         {
-            NumParameters = 1,
-            pParameters = &parameter,
+            NumParameters = dualMask ? 2U : 1U,
+            pParameters = parameters,
+            NumStaticSamplers = dualMask ? 1U : 0U,
+            pStaticSamplers = dualMask ? &maskSampler : null,
             Flags = (D3D12_ROOT_SIGNATURE_FLAGS)(rectangle ? 1 : 0)
         };
 
@@ -618,15 +651,13 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("sRGB texture-strip host shader/root serialization failed.");
             }
 
-            Console.WriteLine(
-                "[graphics-probe] sRGB texture-strip host shader compilation and root serialization passed (no GPU draw).");
+            Console.WriteLine("[graphics-probe] sRGB texture-strip host shader compilation and root serialization passed (no GPU draw).");
 
             foreach (var format in new uint[] { 41, 56, 58, 16, 35, 37, 2, 28, 31 })
             {
-                if (CompileHostShader(CurveLutCompiler.CreateHostSource(format), "cs_5_1", Console.Out) == null)
+                if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(format), "cs_5_1", Console.Out) == null)
                 {
-                    throw new InvalidOperationException(
-                        $"Curve LUT host shader compilation failed for format {format}.");
+                    throw new InvalidOperationException($"Curve LUT host shader compilation failed for format {format}.");
                 }
             }
 
@@ -635,38 +666,30 @@ public static unsafe partial class ConsoleGraphicsDevice
                 throw new InvalidOperationException("Curve LUT shared compute root serialization failed.");
             }
 
-            if (CompileHostShader(CurveLutCompiler.CreateHostSource(41, 3), "cs_5_1", Console.Out) == null)
+            if (CompileHostShader(IraRationis.Shaders.Compute.CurveLutCompiler.CreateHostSource(41, 3), "cs_5_1", Console.Out) == null)
             {
                 throw new InvalidOperationException("Three-segment curve LUT host shader compilation failed.");
             }
 
-            Console.WriteLine(
-                "[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
+            Console.WriteLine("[graphics-probe] Curve LUT host shader variants and root serialization passed (no GPU dispatch).");
 
             VerifyIndexedUiSampler();
 
             if (CompileHostShader(IndexedUiCompiler.VertexSource, "vs_5_1", Console.Out) == null ||
-                CompileHostShader(IndexedUiCompiler.PixelSource, "ps_5_1", Console.Out) == null
-                || SerializeIndexedUiRoot() == null ||
-                CompileHostShader(IndexedUiCompiler.PlainPixelSource, "ps_5_1", Console.Out) == null
-                || SerializeIndexedUiRoot(false) == null ||
-                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.VertexHash, IndexedUiCompiler.PixelHash,
-                    out var dither) || dither != IndexedUiVariant.Dithered ||
-                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.PlainVertexHash, IndexedUiCompiler.PlainPixelHash,
-                    out var plainVariant) || plainVariant != IndexedUiVariant.Plain ||
+                CompileHostShader(IndexedUiCompiler.PixelSource, "ps_5_1", Console.Out) == null || SerializeIndexedUiRoot() == null ||
+                CompileHostShader(IndexedUiCompiler.PlainPixelSource, "ps_5_1", Console.Out) == null || SerializeIndexedUiRoot(false) == null ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.VertexHash, IndexedUiCompiler.PixelHash, out var dither) || dither != IndexedUiVariant.Dithered ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.PlainVertexHash, IndexedUiCompiler.PlainPixelHash, out var plainVariant) || plainVariant != IndexedUiVariant.Plain ||
                 CompileHostShader(IndexedUiCompiler.AlphaVertexSource, "vs_5_1", Console.Out) == null ||
                 CompileHostShader(IndexedUiCompiler.AlphaPixelSource, "ps_5_1", Console.Out) == null ||
-                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.AlphaPixelHash,
-                    out var alphaVariant) || alphaVariant != IndexedUiVariant.AlphaMask ||
+                !IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.AlphaPixelHash, out var alphaVariant) || alphaVariant != IndexedUiVariant.AlphaMask ||
                 IndexedUiCompiler.TryClassify(IndexedUiCompiler.VertexHash, IndexedUiCompiler.PlainPixelHash, out _) ||
-                IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.PlainPixelHash,
-                    out _))
+                IndexedUiCompiler.TryClassify(IndexedUiCompiler.AlphaVertexHash, IndexedUiCompiler.PlainPixelHash, out _))
             {
                 throw new InvalidOperationException("Indexed UI host shader/root serialization failed.");
             }
 
-            Console.WriteLine(
-                "[graphics-probe] Indexed UI host shader compilation and root serialization passed (no GPU draw).");
+            Console.WriteLine("[graphics-probe] Indexed UI host shader compilation and root serialization passed (no GPU draw).");
         }
     }
 

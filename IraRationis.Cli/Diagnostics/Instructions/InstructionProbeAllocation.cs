@@ -7,6 +7,8 @@ namespace IraRationis.Cli.Diagnostics.Instructions;
 
 internal sealed class InstructionProbeAllocation : IDisposable
 {
+    internal nuint Address { get; private set; }
+
     internal InstructionProbeAllocation(nuint size, bool commit = true)
     {
         var allocationType = InstructionProbeNativeMethods.Reserve
@@ -20,12 +22,6 @@ internal sealed class InstructionProbeAllocation : IDisposable
         }
 
         Address = (nuint)address;
-    }
-
-    internal nuint Address
-    {
-        get;
-        private set;
     }
 
     public void Dispose()

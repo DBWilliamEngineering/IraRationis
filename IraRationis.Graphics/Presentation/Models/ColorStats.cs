@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Presentation.Models;
 
-internal readonly record struct ColorStats(
+internal readonly unsafe record struct ColorStats(
     int NonBlack,
     int NonZeroAlpha,
     byte MaxRgb,

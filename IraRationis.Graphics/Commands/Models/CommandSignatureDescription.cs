@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Commands.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct CommandSignatureDescription
+internal unsafe struct CommandSignatureDescription
 {
     public uint Stride;
     public uint Count;

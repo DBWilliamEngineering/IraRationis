@@ -3,7 +3,7 @@
 using IraRationis.Graphics.Descriptors;
 using IraRationis.Graphics.Descriptors.Models;
 
-namespace IraRationis.DescriptorBindings.Contracts;
+namespace DescriptorBindings.Contracts;
 
 internal static class Program
 {

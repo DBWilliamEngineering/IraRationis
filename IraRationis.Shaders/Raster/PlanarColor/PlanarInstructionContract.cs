@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using IraRationis.Shaders.Raster.NativeInstructions;
+
 namespace IraRationis.Shaders.Raster.PlanarColor;
 
 internal static class PlanarInstructionContract
 {
     internal static void ValidateVertex(ReadOnlySpan<byte> code)
     {
-        var reader = new PlanarInstructionReader(code);
+        var reader = new RasterInstructionReader(code);
 
         reader.IdentityHeader();
         reader.SwapProgramCounter(4, 4);
@@ -27,7 +29,7 @@ internal static class PlanarInstructionContract
 
         for (uint component = 0; component < 3; component++)
         {
-            reader.FusedMultiplyAdd(component, 20 + component, PlanarInstructionReader.Vector(4), 32 + component);
+            reader.FusedMultiplyAdd(component, 20 + component, RasterInstructionReader.Vector(4), 32 + component);
         }
 
         for (uint component = 0; component < 3; component++)
@@ -61,7 +63,7 @@ internal static class PlanarInstructionContract
         reader.Add(10, 13, 4);
         reader.Add(5, 14, 7);
         reader.Add(0, 15, 0);
-        reader.Export(12, 3, 10, 5, 0, true);
+        reader.Export(12, 3, 10, 5, 0, done: true);
         reader.Wait(0xc07f);
         reader.MultiplyLegacy(1, 0, 8);
         reader.MultiplyLegacy(4, 1, 9);
@@ -75,7 +77,7 @@ internal static class PlanarInstructionContract
 
     internal static void ValidatePixel(ReadOnlySpan<byte> code)
     {
-        var reader = new PlanarInstructionReader(code);
+        var reader = new RasterInstructionReader(code);
 
         reader.IdentityHeader();
         reader.Prefetch(3);
@@ -136,9 +138,9 @@ internal static class PlanarInstructionContract
         reader.Add(5, 22, 2);
         reader.Wait(0xc07f);
         reader.CompareEqual(0, 128);
-        reader.MultiplyLegacy(2, PlanarInstructionReader.Vector(10), 7);
-        reader.MultiplyLegacy(3, PlanarInstructionReader.Vector(3), 8);
-        reader.MultiplyLegacy(4, PlanarInstructionReader.Vector(5), 11);
+        reader.MultiplyLegacy(2, RasterInstructionReader.Vector(10), 7);
+        reader.MultiplyLegacy(3, RasterInstructionReader.Vector(3), 8);
+        reader.MultiplyLegacy(4, RasterInstructionReader.Vector(5), 11);
         reader.BranchIfEqual(5);
         reader.LoadDescriptor(4, 8, 8, 0x80);
         reader.Wait(0xc07f);
@@ -149,9 +151,9 @@ internal static class PlanarInstructionContract
         reader.Wait(0x3f70);
         reader.ScalarNoOperation();
         reader.ScalarNoOperation();
-        reader.PackHalfTowardZero(0, PlanarInstructionReader.Vector(2), 3);
-        reader.PackHalfTowardZero(1, PlanarInstructionReader.Vector(4), 5);
-        reader.Export(0, 0, 1, 0, 0, true, true, true);
+        reader.PackHalfTowardZero(0, RasterInstructionReader.Vector(2), 3);
+        reader.PackHalfTowardZero(1, RasterInstructionReader.Vector(4), 5);
+        reader.Export(0, 0, 1, 0, 0, done: true, compressed: true, validMask: true);
         reader.End();
         reader.Padding();
     }

@@ -8,8 +8,8 @@ namespace IraRationis.HLE.Runtime.Services;
 internal sealed class RuntimeServiceTrace(TextWriter writer)
 {
     private const int MaximumOperations = 64;
-    private readonly Dictionary<string, long> _counts = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
+    private readonly Dictionary<string, long> _counts = new(StringComparer.Ordinal);
     private int _writerFailures;
 
     internal void Write(string operation, string details)
@@ -37,7 +37,7 @@ internal sealed class RuntimeServiceTrace(TextWriter writer)
                 try
                 {
                     writer.WriteLine($"[runtime-services] utc={DateTime.UtcNow:O}; ticks={Stopwatch.GetTimestamp()}; "
-                                     + $"operation={operation}; count={count}; {details}");
+                        + $"operation={operation}; count={count}; {details}");
                 }
                 catch
                 {

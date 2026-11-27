@@ -3,6 +3,7 @@
 using System.Globalization;
 using IraRationis.HLE.Audio.Apu;
 using IraRationis.Media.Audio;
+using IraRationis.HLE.Audio.Apu.XApuModule;
 
 namespace IraRationis.Cli.Diagnostics;
 

@@ -6,7 +6,7 @@ using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Compute;
 using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -29,8 +29,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var code = CompileHostShader(CurveLutCompiler.CreateHostSource(41, segments), "cs_5_1", Console.Out)
                        ?? throw new InvalidOperationException("Curve LUT probe shader failed.");
-            var rootBytes = SerializeColorLutRoot()
-                            ?? throw new InvalidOperationException("Curve LUT probe root failed.");
+            var rootBytes = SerializeColorLutRoot() ?? throw new InvalidOperationException("Curve LUT probe root failed.");
             var rootId = RootSignatureId;
             var pipelineId = PipelineId;
             void* native = null;
@@ -64,12 +63,11 @@ public static unsafe partial class ConsoleGraphicsDevice
                 MipLevels = 1, Format = 41, SampleCount = 1, Flags = 4
             };
             CheckHostResult(CreateHostResource(output, 1, 0, &texture), "Curve LUT probe Texture1D");
-            CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback),
-                "Curve LUT probe readback");
+            CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback), "Curve LUT probe readback");
             RequireHostObject(texture, "Curve LUT probe Texture1D");
             RequireHostObject(readback, "Curve LUT probe readback");
 
-            using var utility = AcquireUtilityContext(CurveUploadBytes, 2, true);
+            using var utility = AcquireUtilityContext(CurveUploadBytes, 2, versioned: true);
             var data = new byte[CurveUploadBytes];
             var parameters = MemoryMarshal.Cast<byte, uint>(data.AsSpan(0, 16));
             parameters[0] = BitConverter.SingleToUInt32Bits(0.25f);
@@ -82,8 +80,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             utility.PrepareVersionedUpload(data);
             RecordCurveLutDispatch(utility, texture, root, pipeline, 41, 1);
             TransitionHostResource(utility.List, texture, 0, CopySource);
-            RecordHostTextureTransfer(utility.List, texture, readback, bytes,
-                new HostTextureTransferFootprint(0, 41, width, 1, bytes, 0), false);
+            RecordHostTextureTransfer(utility.List, texture, readback, bytes, new HostTextureTransferFootprint(0, 41, width, 1, bytes, 0), upload: false);
             TransitionHostResource(utility.List, texture, CopySource, 0);
             utility.SubmitAndWait(queue);
 
@@ -111,8 +108,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     if (!float.IsFinite(result[index]) || Math.Abs(result[index] - expected) > 0.0002)
                     {
-                        throw new InvalidOperationException(
-                            $"Curve LUT probe ({segments} segments) texel {index}: expected {expected:R}; actual {result[index]:R}.");
+                        throw new InvalidOperationException($"Curve LUT probe ({segments} segments) texel {index}: expected {expected:R}; actual {result[index]:R}.");
                     }
                 }
             }

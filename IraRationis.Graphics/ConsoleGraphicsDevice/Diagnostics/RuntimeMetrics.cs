@@ -3,16 +3,15 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using IraRationis.Graphics.Diagnostics;
 using IraRationis.Graphics.Diagnostics.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
-    internal static readonly bool EnableVerboseGraphics =
-        Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
-    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts =
-        new();
+    internal static readonly bool EnableVerboseGraphics = Environment.GetEnvironmentVariable("IRX_VERBOSE_GRAPHICS") == "1";
+    private static readonly ConcurrentDictionary<(string File, int Line), GraphicsTraceCounter> GraphicsTraceCounts = new();
     private static readonly object RuntimeMetricsGate = new();
     private static Timer? _runtimeMetricsTimer;
     internal static long _fenceCreations, _fenceReuses, _fenceWaits, _fenceTicks;
@@ -22,31 +21,26 @@ public static partial class ConsoleGraphicsDevice
     private static long _previousWaits, _previousTicks, _previousDraws, _previousDispatches;
     private static long _previousAttempts, _previousSuccesses, _previousPresentTicks;
 
-    private static readonly bool EnableCommandListSampling =
-        Environment.GetEnvironmentVariable("IRX_SOURCE_LIST_SAMPLING") == "1";
-    private static readonly long[] CommandListCreationCounts = new long[8];
+    private static readonly GraphicsLogSampling SuccessLogSampling = new(
+        Environment.GetEnvironmentVariable("IRX_SAMPLE_GRAPHICS_LOGS") == "1",
+        Environment.GetEnvironmentVariable("IRX_SOURCE_LIST_SAMPLING") == "1",
+        EnableVerboseGraphics);
 
     private static void TraceListCreation(uint kind)
     {
-        if (!EnableCommandListSampling || EnableVerboseGraphics || kind >= (uint)CommandListCreationCounts.Length)
+        if (!SuccessLogSampling.ShouldEmitCommandList(kind, out var sampledKindCount))
         {
-            Console.Error.WriteLine($"[graphics] Command list type {kind} created.");
-
             return;
         }
 
-        var count = Interlocked.Increment(ref CommandListCreationCounts[(int)kind]);
-
-        if (count <= 4 || (count & (count - 1)) == 0)
-        {
-            Console.Error.WriteLine($"[graphics] IRX-R69-LIST: kind={kind}; created={count}.");
-        }
+        Console.Error.WriteLine(sampledKindCount == 0
+            ? $"[graphics] Command list type {kind} created."
+            : $"[graphics] IRX-R69-LIST: kind={kind}; created={sampledKindCount}.");
     }
 
     // Only repetitive success messages use this method. Failures, first-use
     // markers and correctness evidence retain their original logging paths.
-    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "",
-        [CallerLineNumber] int line = 0)
+    private static void TraceGraphicsSuccess(string message, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         if (EnableVerboseGraphics)
         {
@@ -58,7 +52,7 @@ public static partial class ConsoleGraphicsDevice
         var counter = GraphicsTraceCounts.GetOrAdd((file, line), static _ => new GraphicsTraceCounter());
         var count = Interlocked.Increment(ref counter.Count);
 
-        if (count <= 4 || (count & (count - 1)) == 0)
+        if (GraphicsLogSampling.IsSample(count))
         {
             Console.Error.WriteLine(message);
         }
@@ -109,8 +103,7 @@ public static partial class ConsoleGraphicsDevice
             {
                 _lastRuntimeMetricsReport = Stopwatch.GetTimestamp();
 
-                Volatile.Write(ref _runtimeMetricsTimer,
-                    new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
+                Volatile.Write(ref _runtimeMetricsTimer, new Timer(static _ => ReportRuntimeMetrics(), null, 2000, 2000));
             }
         }
     }
@@ -119,8 +112,7 @@ public static partial class ConsoleGraphicsDevice
     {
         var now = Stopwatch.GetTimestamp();
 
-        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency
-            || !Monitor.TryEnter(RuntimeMetricsGate))
+        if (now - Volatile.Read(ref _lastRuntimeMetricsReport) < 2 * Stopwatch.Frequency || !Monitor.TryEnter(RuntimeMetricsGate))
         {
             return;
         }
@@ -153,6 +145,11 @@ public static partial class ConsoleGraphicsDevice
 
             Console.Error.WriteLine(FormattableString.Invariant(
                 $"[performance] IRX-R24: interval={elapsed:F2}s; presentRate={(successes - _previousSuccesses) / elapsed:F2}/s; presents={successes}; attempts={attemptDelta}; draws={draws - _previousDraws}; dispatches={dispatches - _previousDispatches}; fenceWaits={waitDelta}; fenceMsTotal={waitMs:F1}; fenceMsAvg={(waitDelta == 0 ? 0 : waitMs / waitDelta):F3}; guestWaits={guestWaits - _previousGuestWaits}; guestWaitMsTotal={guestWaitMs:F1}; presentMsAvg={(attemptDelta == 0 ? 0 : presentMs / attemptDelta):F3}; fencesCreated={Interlocked.Read(ref _fenceCreations)}; fenceReuses={Interlocked.Read(ref _fenceReuses)}."));
+
+            if (SuccessLogSampling.Enabled)
+            {
+                Console.Error.WriteLine(SuccessLogSampling.FormatSummary());
+            }
 
             _previousGuestWaits = guestWaits;
 

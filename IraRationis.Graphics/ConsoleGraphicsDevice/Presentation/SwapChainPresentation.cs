@@ -11,7 +11,7 @@ using IraRationis.Graphics.Presentation;
 using IraRationis.Graphics.Presentation.Models;
 using IraRationis.Graphics.Resources.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -19,8 +19,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     private const int WindowClientHeight = 1080;
     internal const int SwapChainBufferCount = 3;
     private static readonly Lock SwapChainPresentGate = new();
-    private static readonly string? GuestWindowClassName =
-        Environment.GetEnvironmentVariable("IRX_PRESENT_WINDOW_CLASS");
+    private static readonly string? GuestWindowClassName = Environment.GetEnvironmentVariable("IRX_PRESENT_WINDOW_CLASS");
     private static readonly bool EnableSwapChain =
         Environment.GetEnvironmentVariable("IRX_PRESENT_SWAPCHAIN") != "0";
     private static readonly bool EnableWindowed1080 =
@@ -381,7 +380,6 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static extern int GetMonitorInfo(nint monitor, ref PresentationMonitorInfo info);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowPos", ExactSpelling = true)]
-    private static extern int SetWindowPos(nint window, nint after, int coordinateX, int coordinateY, int width,
-        int height,
+    private static extern int SetWindowPos(nint window, nint after, int coordinateX, int coordinateY, int width, int height,
         uint flags);
 }

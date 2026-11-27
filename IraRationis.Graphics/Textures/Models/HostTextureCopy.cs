@@ -2,9 +2,4 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal sealed record HostTextureCopy(
-    TextureLayout Layout,
-    ulong Bytes,
-    uint[] Pitches,
-    ulong[] Offsets,
-    ulong[][] Columns);
+internal sealed unsafe record HostTextureCopy(TextureLayout Layout, ulong Bytes, uint[] Pitches, ulong[] Offsets, ulong[][] Columns);

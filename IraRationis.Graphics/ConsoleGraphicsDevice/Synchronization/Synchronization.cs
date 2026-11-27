@@ -3,11 +3,11 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Synchronization.Models;
-using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

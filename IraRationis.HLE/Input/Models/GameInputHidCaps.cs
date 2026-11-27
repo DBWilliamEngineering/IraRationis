@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 64)]
-internal struct GameInputHidCaps
+internal unsafe struct GameInputHidCaps
 {
     [FieldOffset(0)] public ushort Usage;
     [FieldOffset(2)] public ushort UsagePage;

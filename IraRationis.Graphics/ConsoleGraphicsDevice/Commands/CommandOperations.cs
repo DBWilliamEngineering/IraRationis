@@ -5,20 +5,21 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
     private const ulong UploadBudget = 128UL << 20;
     private const ulong MaximumDeferredCopy = 1UL << 30;
+    private const int MaximumRecordedTargetViews = 64;
     private static readonly ConcurrentDictionary<string, long> IncompleteOperations = new();
     private static readonly bool AllowIncompleteOperations =
         Environment.GetEnvironmentVariable("IRX_ALLOW_INCOMPLETE_RENDERING") == "1";
@@ -52,9 +53,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var state = StateFor(self);
 
-        if (Host(self) == 0 || *(uint*)(self + 0x10) != 0 || handle == 0 || state.HostViews.Count >= 16384)
+        if (Host(self) == 0 || *(uint*)(self + 0x10) != 0 || handle == 0)
         {
-            return RejectClearView(reportFailure, "invalid command list, handle or descriptor heap budget");
+            return RejectClearView(reportFailure, "invalid command list or target handle");
         }
 
         DescriptorToken token = default;
@@ -65,6 +66,30 @@ public static unsafe partial class ConsoleGraphicsDevice
             transferred != (nuint)sizeof(DescriptorToken) || token.Tag != DescriptorTag || token.Kind != kind)
         {
             return RejectClearView(reportFailure, "unreadable or wrong-kind descriptor token");
+        }
+
+        // IDs intern the descriptor bytes and resource generation. Re-read the guest slot even on a cache hit.
+        var key = (kind, token.Id);
+
+        if (state.TargetViews is { } targetViews && targetViews.TryGetValue(key, out var cached))
+        {
+            if (!IsResource(cached.Resource) ||
+                ((ResourceObject*)cached.Resource)->Generation != cached.ResourceGeneration ||
+                ((ResourceObject*)cached.Resource)->HostResource != cached.HostResource)
+            {
+                return RejectClearView(reportFailure, "cached target resource changed");
+            }
+
+            host = cached.HostResource;
+            cpuHandle = cached.CpuHandle;
+            viewFormat = cached.Format;
+
+            return true;
+        }
+
+        if (state.HostViews.Count >= MaximumCommandHostViews)
+        {
+            return RejectClearView(reportFailure, "descriptor heap budget exhausted");
         }
 
         DescriptorMetadata? metadata;
@@ -93,11 +118,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             if (reportFailure)
             {
                 Console.Error.WriteLine($"[graphics] target view REFUSED: guestFormat={description.Format}; " +
-                                        $"hostFormat={HostTextureViewFormats.BackingFormat(description)}; viewFormat={viewFormat}; "
-                                        +
-                                        $"dimension={description.Dimension}; slices={description.DepthOrArraySize}; mips={description.MipLevels}; "
-                                        +
-                                        $"samples={description.SampleCount}; flags=0x{description.Flags:X}; descriptorBytes={metadata.Description?.Length ?? 0}.");
+                    $"hostFormat={HostTextureViewFormats.BackingFormat(description)}; viewFormat={viewFormat}; " +
+                    $"dimension={description.Dimension}; slices={description.DepthOrArraySize}; mips={description.MipLevels}; " +
+                    $"samples={description.SampleCount}; flags=0x{description.Flags:X}; descriptorBytes={metadata.Description?.Length ?? 0}.");
             }
 
             return false;
@@ -116,26 +139,34 @@ public static unsafe partial class ConsoleGraphicsDevice
         var iid = DescriptorHeapId;
         var device = (nint)_host;
 
+        _ = state.HostViews.EnsureCapacity(state.HostViews.Count + 1);
+
         nint heap = 0;
 
-        var resultCode =
-            ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, DescriptorHeapDescription*, Guid*, nint*, int>)Slot(device, 14))
             (device, &heapDescription, &iid, &heap);
 
         if (resultCode < 0 || heap == 0)
         {
+            if (heap != 0)
+            {
+                _ = HostRelease(heap);
+            }
+
             return RejectClearView(reportFailure, $"host view heap HRESULT=0x{resultCode:X8}");
         }
 
         // TerraFX handles the Windows COM structure-return ABI.
         cpuHandle = ((ID3D12DescriptorHeap*)heap)->GetCPUDescriptorHandleForHeapStart().ptr;
 
-        state.HostViews.Add(heap);
-
         if (cpuHandle == 0)
         {
+            _ = HostRelease(heap);
+
             return RejectClearView(reportFailure, "host CPU descriptor handle is null");
         }
+
+        state.HostViews.Add(heap);
 
         // Host descriptors are Windows structures, not console descriptor bytes.
         var descriptorHandle = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = cpuHandle };
@@ -161,6 +192,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             ((ID3D12Device*)device)->CreateRenderTargetView((ID3D12Resource*)host,
                 &viewDescription, descriptorHandle);
+        }
+
+        state.TargetViews ??= new();
+
+        if (state.TargetViews.Count < MaximumRecordedTargetViews)
+        {
+            state.TargetViews.Add(key, new RecordedTargetView(metadata.Resource, metadata.ResourceGeneration, host,
+                cpuHandle, viewFormat));
         }
 
         return true;
@@ -509,11 +548,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void CopyTextureGuest(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ,
-        nint src, nint box)
+    private static void CopyTextureGuest(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ, nint src, nint box)
     {
-        if (LinearTextureTransferEnabled
-            && TryRecordLinearTextureTransfer(self, dst, coordinateX, coordinateY, coordinateZ, src, box))
+        if (LinearTextureTransferEnabled && TryRecordLinearTextureTransfer(self, dst, coordinateX, coordinateY, coordinateZ, src, box))
         {
             return;
         }
@@ -567,8 +604,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static void CopyTextureGuestX(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ,
-        nint src, nint box, uint flags)
+    private static void CopyTextureGuestX(nint self, nint dst, uint coordinateX, uint coordinateY, uint coordinateZ, nint src, nint box, uint flags)
     {
         IncompleteOperation(self, "CopyTextureRegionX", "texture upload/readback and resource coherence");
     }
@@ -707,10 +743,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             case 142:
                 return "registered-optional-noop";
-
             case 148:
                 return "registered-cpu-only";
-
             case >= 61:
                 slot -= 2;
 
@@ -779,6 +813,34 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             rtv(device, guest, viewFormat == 0 ? null : view, (ulong)descriptor);
 
+            if (!TryResolveClear(list, (ulong)descriptor, 20, out var firstHost, out var firstHandle, out _) ||
+                firstHost != initialHost)
+            {
+                throw new InvalidOperationException("Clear probe failed to resolve a target descriptor.");
+            }
+
+            var viewsBeforeClear = state.HostViews.Count;
+
+            if (resourceFormat == 29 && viewFormat == 28)
+            {
+                view[0] = 29;
+
+                rtv(device, guest, view, (ulong)descriptor);
+
+                if (!TryResolveClear(list, (ulong)descriptor, 20, out var rewrittenHost, out var rewrittenHandle,
+                        out var rewrittenFormat) || rewrittenHost != firstHost || rewrittenHandle == firstHandle ||
+                    rewrittenFormat != 29 || state.HostViews.Count != viewsBeforeClear + 1)
+                {
+                    throw new InvalidOperationException("Clear probe reused a stale descriptor after a guest slot rewrite.");
+                }
+
+                view[0] = viewFormat;
+
+                rtv(device, guest, view, (ulong)descriptor);
+
+                viewsBeforeClear = state.HostViews.Count;
+            }
+
             var color = stackalloc float[4] { red, 0, 1, 1 };
             var clear = (delegate* unmanaged[Stdcall]<nint, ulong, float*, uint, RECT*, void>)Slot(list, 52);
 
@@ -786,10 +848,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             var host = ((ResourceObject*)guest)->HostResource;
 
-            if (host == 0 || host != initialHost || state.HostViews.Count == 0 ||
+            if (host == 0 || host != initialHost || state.HostViews.Count != viewsBeforeClear ||
                 ((ResourceObject*)guest)->Description.Format != resourceFormat)
             {
-                throw new InvalidOperationException("Clear probe failed to materialize a host RTV.");
+                throw new InvalidOperationException("Clear probe did not reuse the original host RTV.");
             }
 
             nint readback = 0;
@@ -859,8 +921,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                         pixel[2] != 255 || pixel[3] != 255)
                     {
                         throw new InvalidOperationException(
-                            $"GPU clear readback differs: expected R={expectedRed} +/- {tolerance}, G=0, B=255, A=255; "
-                            +
+                            $"GPU clear readback differs: expected R={expectedRed} +/- {tolerance}, G=0, B=255, A=255; " +
                             $"actual={pixel[0]},{pixel[1]},{pixel[2]},{pixel[3]}.");
                     }
                 }
@@ -873,8 +934,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             ((delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9))(readback, 0, &written);
         }
 
-        Console.WriteLine(
-            $"[graphics-probe] Native RTV clear and readback passed (16 RGBA8 pixels; R={expectedRed} +/- {tolerance}).");
+        Console.WriteLine($"[graphics-probe] Native RTV clear and readback passed (16 RGBA8 pixels; R={expectedRed} +/- {tolerance}).");
     }
 
     private static void VerifyKnownListOperations()

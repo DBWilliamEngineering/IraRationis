@@ -46,7 +46,6 @@ internal static class Program
             {
                 case > 0 when args[0] == "present-probe":
                     return PresentationProbe.Execute(args[1..], Console.Out);
-
                 case > 0 when args[0] == "memory-probe":
                     return MemoryProbe.Execute(args[1..], Console.Out);
             }

@@ -4,12 +4,7 @@ using IraRationis.Shaders.VertexFetch.Models;
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed class VertexFetchVertexUpload(
-    VertexFetchShaderPair pair,
-    ulong address,
-    uint first,
-    uint count,
-    nint host)
+internal sealed unsafe class VertexFetchVertexUpload(VertexFetchShaderPair pair, ulong address, uint first, uint count, nint host)
 {
     public readonly ulong Address = address;
     public readonly uint Count = count;

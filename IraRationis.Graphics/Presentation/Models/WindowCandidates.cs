@@ -6,7 +6,7 @@
 
 namespace IraRationis.Graphics.Presentation.Models;
 
-internal struct WindowCandidates
+internal unsafe struct WindowCandidates
 {
     public nint Window;
     public int Count;

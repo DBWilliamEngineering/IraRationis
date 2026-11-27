@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Queries.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct QueryHeapDescription
+internal unsafe struct QueryHeapDescription
 {
     public uint Kind;
     public uint Count;

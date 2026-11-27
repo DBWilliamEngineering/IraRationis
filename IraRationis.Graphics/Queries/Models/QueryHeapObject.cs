@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.Queries.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct QueryHeapObject
+internal unsafe struct QueryHeapObject
 {
     public GraphicsObjectHeader Header;
     public QueryHeapDescription Description;

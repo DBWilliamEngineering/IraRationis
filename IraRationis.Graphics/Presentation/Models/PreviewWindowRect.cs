@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct PreviewWindowRect
+internal unsafe struct PreviewWindowRect
 {
     public int Left, Top, Right, Bottom;
 }

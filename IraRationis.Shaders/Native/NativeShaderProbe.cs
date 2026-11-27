@@ -10,6 +10,7 @@ namespace IraRationis.Shaders.Native;
 
 public static class NativeShaderProbe
 {
+
     public static void Verify()
     {
         uint[] words = [0xbe800385, 0x80018100, 0xb002fffe, 0x8003ff01, 0x12345678, 0xbf810000];

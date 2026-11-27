@@ -9,8 +9,8 @@ namespace IraRationis.Cli.Diagnostics.Instructions;
 internal sealed class InstructionProbeMapping : IDisposable
 {
     private readonly SafeFileHandle _section;
-    private readonly nuint _size;
     private readonly List<nint> _views = [];
+    private readonly nuint _size;
 
     internal InstructionProbeMapping(nuint size)
     {
@@ -24,27 +24,6 @@ internal sealed class InstructionProbeMapping : IDisposable
 
         _section = new SafeFileHandle(section, true);
         _size = size;
-    }
-
-    public void Dispose()
-    {
-        var firstError = 0;
-
-        foreach (var view in _views)
-        {
-            if (InstructionProbeNativeMethods.UnmapViewOfFile(view) == 0 && firstError == 0)
-            {
-                firstError = Marshal.GetLastPInvokeError();
-            }
-        }
-
-        _views.Clear();
-        _section.Dispose();
-
-        if (firstError != 0)
-        {
-            throw new Win32Exception(firstError, "Cannot unmap instruction probe section.");
-        }
     }
 
     internal nuint Map(uint access)
@@ -70,5 +49,26 @@ internal sealed class InstructionProbeMapping : IDisposable
         }
 
         return (nuint)view;
+    }
+
+    public void Dispose()
+    {
+        var firstError = 0;
+
+        foreach (var view in _views)
+        {
+            if (InstructionProbeNativeMethods.UnmapViewOfFile(view) == 0 && firstError == 0)
+            {
+                firstError = Marshal.GetLastPInvokeError();
+            }
+        }
+
+        _views.Clear();
+        _section.Dispose();
+
+        if (firstError != 0)
+        {
+            throw new Win32Exception(firstError, "Cannot unmap instruction probe section.");
+        }
     }
 }

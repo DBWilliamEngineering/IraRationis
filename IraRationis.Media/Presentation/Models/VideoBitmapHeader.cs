@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Media.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct VideoBitmapHeader
+internal unsafe struct VideoBitmapHeader
 {
     public uint Size;
     public int Width, Height;

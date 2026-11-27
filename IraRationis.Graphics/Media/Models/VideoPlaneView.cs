@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Media.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 40)]
-internal struct VideoPlaneView
+internal unsafe struct VideoPlaneView
 {
     [FieldOffset(0)] public uint Format;
     [FieldOffset(4)] public uint Dimension;

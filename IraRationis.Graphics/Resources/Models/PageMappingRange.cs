@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct PageMappingRange
+internal unsafe struct PageMappingRange
 {
     public uint Kind;
     public uint Start;

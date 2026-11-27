@@ -2,7 +2,7 @@
 
 using IraRationis.Graphics.Media.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {
@@ -12,8 +12,7 @@ public static partial class ConsoleGraphicsDevice
     private const int MaximumHostMediaShaderBytes = 8 * 1024 * 1024;
     private const int MaximumHostMediaSourceCharacters = 64 * 1024;
     private static readonly Lock HostMediaShaderCacheGate = new();
-    private static readonly Dictionary<string, HostMediaShaderEntry> HostMediaShaderEntries =
-        new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, HostMediaShaderEntry> HostMediaShaderEntries = new(StringComparer.Ordinal);
     private static readonly bool HostMediaShaderCacheEnabled =
         Environment.GetEnvironmentVariable("IRX_HOST_MEDIA_SHADER_CACHE") != "0";
     private static long _hostMediaShaderUse;
@@ -90,8 +89,7 @@ public static partial class ConsoleGraphicsDevice
                 {
                     // Account exactly once even if multiple waiters observed the result.
                     while (bytes.Length <= MaximumHostMediaShaderBytes &&
-                           _hostMediaShaderBytes > MaximumHostMediaShaderBytes - bytes.Length
-                           && EvictHostMediaShader(entry))
+                           _hostMediaShaderBytes > MaximumHostMediaShaderBytes - bytes.Length && EvictHostMediaShader(entry))
                     {
                     }
 

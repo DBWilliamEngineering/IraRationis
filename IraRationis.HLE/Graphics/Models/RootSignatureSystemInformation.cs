@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Graphics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct RootSignatureSystemInformation
+internal unsafe struct RootSignatureSystemInformation
 {
     public uint ProcessorArchitecture;
     public uint PageSize;

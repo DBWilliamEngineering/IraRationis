@@ -5,7 +5,7 @@ using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Scalar;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {

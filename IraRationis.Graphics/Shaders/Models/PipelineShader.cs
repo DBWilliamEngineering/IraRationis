@@ -4,4 +4,4 @@
 
 namespace IraRationis.Graphics.Shaders.Models;
 
-internal sealed record PipelineShader(uint Stage, string Hash, ComputeShaderContainer Container);
+internal sealed unsafe record PipelineShader(uint Stage, string Hash, ComputeShaderContainer Container);

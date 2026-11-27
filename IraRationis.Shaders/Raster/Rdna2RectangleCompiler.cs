@@ -6,6 +6,7 @@ using System.Text;
 using IraRationis.Shaders.Containers;
 using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Native.Models;
+using IraRationis.Shaders.Raster.DualMask;
 using IraRationis.Shaders.Raster.Models;
 
 namespace IraRationis.Shaders.Raster;
@@ -87,6 +88,17 @@ public static class Rdna2RectangleCompiler
                                      float4 Unused1;
                                      float4 Multiplier;
                                  };
+                                 """ + "\n" + PixelArithmetic + "\n" + """
+                                 float4 main(Varyings input) : SV_Target0
+                                 {
+                                     return float4(HalfRtz(LegacyMul(input.Color.x, Multiplier.x)),
+                                                   HalfRtz(LegacyMul(input.Color.y, Multiplier.y)),
+                                                   HalfRtz(LegacyMul(input.Color.z, Multiplier.z)),
+                                                   HalfRtz(LegacyMul(input.Color.w, Multiplier.w)));
+                                 }
+                                 """;
+
+    private const string PixelArithmetic = """
                                  float HalfRtz(float value)
                                  {
                                      uint bits = asuint(value);
@@ -115,13 +127,6 @@ public static class Rdna2RectangleCompiler
                                  float LegacyMul(float a, float b)
                                  {
                                      return a == 0.0f || b == 0.0f ? 0.0f : a * b;
-                                 }
-                                 float4 main(Varyings input) : SV_Target0
-                                 {
-                                     return float4(HalfRtz(LegacyMul(input.Color.x, Multiplier.x)),
-                                                   HalfRtz(LegacyMul(input.Color.y, Multiplier.y)),
-                                                   HalfRtz(LegacyMul(input.Color.z, Multiplier.z)),
-                                                   HalfRtz(LegacyMul(input.Color.w, Multiplier.w)));
                                  }
                                  """;
 
@@ -274,38 +279,37 @@ public static class Rdna2RectangleCompiler
     // It is already a triangle strip, so no geometry expansion is necessary.
     internal static PlanarColorShaderPair BuildSrgbTextureStrip()
     {
-        var helpers = Pixel[Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..
-            Pixel.IndexOf("float4 main", StringComparison.Ordinal)];
+        var helpers = PixelArithmetic + "\n";
         const string transfer = """
-                                Texture2D<float4> GuestTexture : register(t0);
-                                SamplerState GuestSampler : register(s0);
+            Texture2D<float4> GuestTexture : register(t0);
+            SamplerState GuestSampler : register(s0);
 
-                                float EncodeRgb(float value)
-                                {
-                                    precise float result = 0.0f;
-                                    if (value > asfloat(0x3b4d2e1cu))
-                                    {
-                                        precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
-                                        result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
-                                    }
-                                    else
-                                    {
-                                        result = LegacyMul(value, asfloat(0x414eb852u));
-                                    }
+            float EncodeRgb(float value)
+            {
+                precise float result = 0.0f;
+                if (value > asfloat(0x3b4d2e1cu))
+                {
+                    precise float exponent = LegacyMul(log2(value), asfloat(0x3ed55555u));
+                    result = mad(exp2(exponent), asfloat(0x3f870a3du), asfloat(0xbd6147aeu));
+                }
+                else
+                {
+                    result = LegacyMul(value, asfloat(0x414eb852u));
+                }
 
-                                    return result;
-                                }
+                return result;
+            }
 
-                                float4 main(Varyings input) : SV_Target0
-                                {
-                                    float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
-                                    precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
-                                        LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
-                                        LegacyMul(texel.w, input.Color.w));
-                                    return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
-                                        HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
-                                }
-                                """;
+            float4 main(Varyings input) : SV_Target0
+            {
+                float4 texel = GuestTexture.Sample(GuestSampler, input.Texcoord);
+                precise float4 color = float4(LegacyMul(texel.x, input.Color.x),
+                    LegacyMul(texel.y, input.Color.y), LegacyMul(texel.z, input.Color.z),
+                    LegacyMul(texel.w, input.Color.w));
+                return float4(HalfRtz(EncodeRgb(color.x)), HalfRtz(EncodeRgb(color.y)),
+                    HalfRtz(EncodeRgb(color.z)), HalfRtz(color.w));
+            }
+            """;
 
         return new PlanarColorShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + helpers + transfer);
     }
@@ -355,6 +359,41 @@ public static class Rdna2RectangleCompiler
         var vertexShader = ShaderContainer.Parse(vertex);
         var pixelShader = ShaderContainer.Parse(pixel);
 
+        ValidateRectangleSignatures(vertexShader, pixelShader);
+
+        var rootData = (ShaderContainer.Parse(root).Part("RTS0") ??
+                        throw new NotSupportedException("R14 missing root signature.")).Data.Span;
+
+        RequireWords(rootData, [2, 1, 24, 0, 68, 1, 0, 0, 36, 1, 44, 2, 1, 27, 1, 1, uint.MaxValue],
+            "root CBV table");
+
+        var vertexProgram = ReadProgram(vertexShader, NativeShaderStage.Vertex);
+        var pixelProgram = ReadProgram(pixelShader, NativeShaderStage.Pixel);
+
+        if (DualMaskNativeContract.HasBindingShape(pixelProgram))
+        {
+            DualMaskNativeContract.Validate(vertexProgram, pixelProgram);
+            RecognizeVertex(vertexProgram.Code);
+
+            return new RectangleShaderPair(Varyings + "\n" + Vertex, Varyings + "\n" + Geometry,
+                Varyings + "\n" + PixelArithmetic + "\n" + DualMaskRectangleShader.PixelSource, 27, 1,
+                SamplesDualMasks: true);
+        }
+
+        RequireWords(vertexProgram.RootLayout, [3, 0, 1, 27, 8], "vertex root layout");
+        RequireWords(pixelProgram.RootLayout, [3, 0, 1, 27, 8], "pixel root layout");
+        RequireWords(vertexProgram.UsedResources, [], "vertex resources");
+        RequireWords(pixelProgram.UsedResources, [0x302, 0, 27, 0, 0x804], "pixel resources");
+
+        RecognizeVertex(vertexProgram.Code);
+        RecognizePixel(pixelProgram.Code);
+
+        return new RectangleShaderPair(Varyings + "\n" + Vertex, Varyings + "\n" + Geometry,
+            Varyings + "\n" + Pixel, 27, 1);
+    }
+
+    private static void ValidateRectangleSignatures(ShaderContainer vertexShader, ShaderContainer pixelShader)
+    {
         ValidateSignature(vertexShader, "ISG1", [
             ("POSITION", 0U, 0U, 7U), ("COLOR", 0U, 1U, 15U),
             ("TEXCOORD", 0U, 2U, 3U)
@@ -372,26 +411,6 @@ public static class Rdna2RectangleCompiler
 
         ValidateSignature(pixelShader, "OSG1", [("SV_Target", 64U, 0U, 15U)]);
 
-        var rootData = (ShaderContainer.Parse(root).Part("RTS0") ??
-                        throw new NotSupportedException("R14 missing root signature.")).Data.Span;
-
-        RequireWords(rootData, [2, 1, 24, 0, 68, 1, 0, 0, 36, 1, 44, 2, 1, 27, 1, 1, uint.MaxValue],
-            "root CBV table");
-
-        var vertexProgram = ReadProgram(vertexShader, NativeShaderStage.Vertex);
-        var pp = ReadProgram(pixelShader, NativeShaderStage.Pixel);
-
-        RequireWords(vertexProgram.RootLayout, [3, 0, 1, 27, 8], "vertex root layout");
-        RequireWords(pp.RootLayout, [3, 0, 1, 27, 8], "pixel root layout");
-        RequireWords(vertexProgram.UsedResources, [], "vertex resources");
-        RequireWords(pp.UsedResources, [0x302, 0, 27, 0, 0x804], "pixel resources");
-
-        RecognizeVertex(vertexProgram.Code);
-
-        RecognizePixel(pp.Code);
-
-        return new RectangleShaderPair(Varyings + "\n" + Vertex, Varyings + "\n" + Geometry,
-            Varyings + "\n" + Pixel, 27, 1);
     }
 
     private static NativeProgram ReadProgram(ShaderContainer container, NativeShaderStage stage)
@@ -431,10 +450,8 @@ public static class Rdna2RectangleCompiler
             var end = name.IndexOf((byte)0);
 
             if (end < 0 || !name[..end].SequenceEqual(Encoding.ASCII.GetBytes(expectedElement.Name)) ||
-                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0
-                || Word(data, byteOffset + 12) != expectedElement.System ||
-                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register
-                || data[byteOffset + 24] != expectedElement.Mask ||
+                Word(data, byteOffset) != 0 || Word(data, byteOffset + 8) != 0 || Word(data, byteOffset + 12) != expectedElement.System ||
+                Word(data, byteOffset + 16) != 3 || Word(data, byteOffset + 20) != expectedElement.Register || data[byteOffset + 24] != expectedElement.Mask ||
                 Word(data, byteOffset + 28) != 0)
             {
                 throw new NotSupportedException($"R14 unsupported {tag} semantic {index}.");
@@ -529,22 +546,7 @@ public static class Rdna2RectangleCompiler
         var vertexShader = ShaderContainer.Parse(vertex);
         var pixelShader = ShaderContainer.Parse(pixel);
 
-        ValidateSignature(vertexShader, "ISG1", [
-            ("POSITION", 0U, 0U, 7U), ("COLOR", 0U, 1U, 15U),
-            ("TEXCOORD", 0U, 2U, 3U)
-        ]);
-
-        ValidateSignature(vertexShader, "OSG1", [
-            ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
-            ("TEXCOORD", 0U, 2U, 3U)
-        ]);
-
-        ValidateSignature(pixelShader, "ISG1", [
-            ("SV_Position", 1U, 0U, 15U), ("COLOR", 0U, 1U, 15U),
-            ("TEXCOORD", 0U, 2U, 3U)
-        ]);
-
-        ValidateSignature(pixelShader, "OSG1", [("SV_Target", 64U, 0U, 15U)]);
+        ValidateRectangleSignatures(vertexShader, pixelShader);
 
         var rootData = (ShaderContainer.Parse(root).Part("RTS0") ??
                         throw new NotSupportedException("R16 missing root signature.")).Data.Span;
@@ -600,12 +602,7 @@ public static class Rdna2RectangleCompiler
         var geometry = Geometry.Replace("if (corner == 3u)",
             "if (corner == 3u || input[0].Position.w != input[1].Position.w || input[0].Position.w != input[2].Position.w)",
             StringComparison.Ordinal);
-        var helpers =
-            Pixel[
-                Pixel.IndexOf("float HalfRtz", StringComparison.Ordinal)..Pixel.IndexOf("float4 main",
-                    StringComparison.Ordinal)];
-
         return new RectangleShaderPair(Varyings + "\n" + TexturedVertex, Varyings + "\n" + geometry,
-            Varyings + "\n" + helpers + TexturedPixel, 0, 0);
+            Varyings + "\n" + PixelArithmetic + "\n" + TexturedPixel, 0, 0);
     }
 }

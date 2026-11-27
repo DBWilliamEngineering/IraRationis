@@ -7,8 +7,9 @@ using IraRationis.Graphics.Drawing.Models;
 using IraRationis.Graphics.Shaders.Models;
 using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Raster;
+using IraRationis.Graphics.Textures;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -18,28 +19,22 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static readonly NativePipelineCache<GraphicsPipelineMetadata, PlanarColorPipeline>
         SharedPlanarColorPipelines = new("planar-color", static pipeline => (pipeline.Root, pipeline.Pipeline));
 
-    private static bool IsPlanarColorLayout(VertexInputElement[] elements)
+    private static bool IsPositionColorUvLayout(VertexInputElement[] elements)
     {
         return elements.Length == 3 && elements.All(static element => element.Index == 0 && element.Slot == 0 &&
-                                                                      element.Class == 0 && element.Step == 0
-                                                                      && element.Name.ToUpperInvariant() switch
-                                                                      {
-                                                                          "POSITION" => element.Format == 6
-                                                                              && element.Offset == 0,
-                                                                          "COLOR" => element.Format == 28
-                                                                              && element.Offset == 12,
-                                                                          "TEXCOORD" => element.Format == 16
-                                                                              && element.Offset == 16,
-                                                                          _ => false
-                                                                      }) && elements.Select(static element =>
-            element.Name.ToUpperInvariant()).Distinct().Count() == 3;
+            element.Class == 0 && element.Step == 0 && (element.Name.ToUpperInvariant() switch
+            {
+                "POSITION" => element.Format == 6 && element.Offset == 0,
+                "COLOR" => element.Format == 28 && element.Offset == 12,
+                "TEXCOORD" => element.Format == 16 && element.Offset == 16,
+                _ => false
+            })) && elements.Select(static element => element.Name.ToUpperInvariant()).Distinct().Count() == 3;
     }
 
     private static bool IsSrgbTextureStrip(GraphicsPipelineMetadata metadata)
     {
         return metadata.Shaders.Count == 2 && metadata.Shaders.Any(static shader => shader.Stage == 1 &&
-            shader.Hash == SrgbTextureStripCompiler.VertexHash) && metadata.Shaders.Any(static shader =>
-            shader.Stage == 2 &&
+            shader.Hash == SrgbTextureStripCompiler.VertexHash) && metadata.Shaders.Any(static shader => shader.Stage == 2 &&
             shader.Hash == SrgbTextureStripCompiler.PixelHash);
     }
 
@@ -48,7 +43,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         if (metadata.Root != state.Graphics.Signature || !IsRootSignature(metadata.Root) ||
             !metadata.CompleteStream || !metadata.IsStream || metadata.Shaders.Count != 2 ||
-            !TryNormalizeRectangleLayout(metadata.InputLayout, 24, out var elements) || !IsPlanarColorLayout(elements))
+            !TryNormalizeRectangleLayout(metadata.InputLayout, 24, out var elements) || !IsPositionColorUvLayout(elements))
         {
             _ = RejectPlanarColorDraw("unsupported root signature, pipeline shape, or 24-byte input layout");
 
@@ -143,8 +138,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return result;
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or
-                                              NotSupportedException or OverflowException or DllNotFoundException
-                                              or EntryPointNotFoundException)
+            NotSupportedException or OverflowException or DllNotFoundException or EntryPointNotFoundException)
         {
             _ = RejectPlanarColorDraw(exception.Message);
 
@@ -195,8 +189,8 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             return CreatePipelineCandidate(root, vertexShader, pixelShader, metadata, report,
-                null, native, (uint)elements.Length,
-                true);
+                geometryShader: null, inputElements: native, inputCount: (uint)elements.Length,
+                allowDepthless: true);
         }
     }
 }

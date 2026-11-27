@@ -42,7 +42,6 @@ public static class SrgbTextureStripCompiler
         try
         {
             _ = Translate(new byte[16], new byte[16], new byte[16]);
-
             throw new InvalidOperationException("Unknown texture-strip shaders were accepted.");
         }
         catch (NotSupportedException)

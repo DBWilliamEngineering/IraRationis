@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Memory.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct XMemExtendedParameter
+internal unsafe struct XMemExtendedParameter
 {
     public ulong Type;
     public nint Pointer;

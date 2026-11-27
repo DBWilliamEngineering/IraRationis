@@ -6,7 +6,7 @@
 
 namespace IraRationis.Graphics.Presentation.Models;
 
-internal sealed class SwapChainFrameSlot
+internal sealed unsafe class SwapChainFrameSlot
 {
     public nint Buffer, Allocator, List, Source;
     public ulong FenceValue;

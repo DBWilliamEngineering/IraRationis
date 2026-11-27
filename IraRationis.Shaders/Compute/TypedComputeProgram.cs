@@ -22,11 +22,38 @@ public sealed class TypedComputeProgram
     public const int MaximumBlockBudget = 128;
 
     private const string LaneNames = "xyzw";
+
+    private readonly ComputeValueKind[] _registers;
     private readonly ComputeBlock[] _blocks;
     private readonly int[] _inputs;
     private readonly int[] _outputs;
+    private readonly int _budget;
 
-    private readonly ComputeValueKind[] _registers;
+    public int BlockCount
+    {
+        get
+        {
+            return _blocks.Length;
+        }
+    }
+
+    public int RegisterCount
+    {
+        get
+        {
+            return _registers.Length;
+        }
+    }
+
+    public int BlockBudget
+    {
+        get
+        {
+            return _budget;
+        }
+    }
+
+    public int InstructionCount { get; }
 
     public TypedComputeProgram(IReadOnlyList<ComputeValueKind> registers, IReadOnlyList<ComputeBlock> blocks,
         IReadOnlyList<int> inputs, IReadOnlyList<int> outputs, int blockBudget)
@@ -46,7 +73,7 @@ public sealed class TypedComputeProgram
         _registers = registers.ToArray();
         _inputs = inputs.ToArray();
         _outputs = outputs.ToArray();
-        BlockBudget = blockBudget;
+        _budget = blockBudget;
         _blocks = new ComputeBlock[blocks.Count];
 
         if (_registers.Any(static kind => kind is not (ComputeValueKind.UInt32 or ComputeValueKind.Float32)))
@@ -90,32 +117,6 @@ public sealed class TypedComputeProgram
         ValidateReachability();
     }
 
-    public int BlockCount
-    {
-        get
-        {
-            return _blocks.Length;
-        }
-    }
-
-    public int RegisterCount
-    {
-        get
-        {
-            return _registers.Length;
-        }
-    }
-
-    public int BlockBudget
-    {
-        get;
-    }
-
-    public int InstructionCount
-    {
-        get;
-    }
-
     private ComputeValueKind Kind(int register)
     {
         if ((uint)register >= (uint)_registers.Length)
@@ -149,18 +150,16 @@ public sealed class TypedComputeProgram
         {
             case ComputeOperation.Constant:
                 return;
-
             case ComputeOperation.Copy:
             case ComputeOperation.Swizzle:
                 if (Kind(instruction.Left) != kind || (instruction.Operation == ComputeOperation.Swizzle &&
-                                                       (instruction.Literal.X > 3 || instruction.Literal.Y > 3 ||
-                                                        instruction.Literal.Z > 3 || instruction.Literal.W > 3)))
+                    (instruction.Literal.X > 3 || instruction.Literal.Y > 3 ||
+                     instruction.Literal.Z > 3 || instruction.Literal.W > 3)))
                 {
                     throw new ArgumentException("Invalid copy or swizzle.");
                 }
 
                 return;
-
             case ComputeOperation.Bitcast:
                 if (Kind(instruction.Left) == kind)
                 {
@@ -168,7 +167,6 @@ public sealed class TypedComputeProgram
                 }
 
                 return;
-
             case ComputeOperation.LessThan:
             case ComputeOperation.Equal:
                 if (kind != ComputeValueKind.UInt32 || Kind(instruction.Left) != Kind(instruction.Right))
@@ -177,7 +175,6 @@ public sealed class TypedComputeProgram
                 }
 
                 return;
-
             case ComputeOperation.Select:
                 if (Kind(instruction.Mask) != ComputeValueKind.UInt32 || Kind(instruction.Left) != kind ||
                     Kind(instruction.Right) != kind)
@@ -186,7 +183,6 @@ public sealed class TypedComputeProgram
                 }
 
                 return;
-
             case ComputeOperation.And:
             case ComputeOperation.Or:
             case ComputeOperation.Xor:
@@ -196,12 +192,10 @@ public sealed class TypedComputeProgram
                 }
 
                 break;
-
             case ComputeOperation.Add:
             case ComputeOperation.Subtract:
             case ComputeOperation.Multiply:
                 break;
-
             default:
                 throw new ArgumentException("Unknown compute operation.");
         }
@@ -261,7 +255,6 @@ public sealed class TypedComputeProgram
             if (terminator.Transfer == ComputeTransfer.Return)
             {
                 returns = true;
-
                 continue;
             }
 
@@ -293,14 +286,13 @@ public sealed class TypedComputeProgram
         {
             var start = index * 4;
 
-            values[_inputs[index]] =
-                new ComputeVector(input[start], input[start + 1], input[start + 2], input[start + 3]);
+            values[_inputs[index]] = new ComputeVector(input[start], input[start + 1], input[start + 2], input[start + 3]);
         }
 
         var current = 0;
         var returned = false;
 
-        for (var step = 0; step < BlockBudget && !returned; step++)
+        for (var step = 0; step < _budget && !returned; step++)
         {
             var block = _blocks[current];
 
@@ -315,17 +307,12 @@ public sealed class TypedComputeProgram
             {
                 case ComputeTransfer.Return:
                     returned = true;
-
                     break;
-
                 case ComputeTransfer.Jump:
                     current = end.Target;
-
                     break;
-
                 case ComputeTransfer.Branch:
                     current = values[end.Condition].X != 0 ? end.Target : end.Alternative;
-
                     break;
             }
         }
@@ -385,8 +372,7 @@ public sealed class TypedComputeProgram
             EvaluateLane(instruction.Operation, kind, left.W, right.W, mask.W));
     }
 
-    private static uint EvaluateLane(ComputeOperation operation, ComputeValueKind kind, uint left, uint right,
-        uint mask)
+    private static uint EvaluateLane(ComputeOperation operation, ComputeValueKind kind, uint left, uint right, uint mask)
     {
         if (operation == ComputeOperation.Select)
         {
@@ -457,7 +443,7 @@ public sealed class TypedComputeProgram
 
         source.AppendLine(
             $"    [loop] for (uint stepIndex = 0u; " +
-            $"stepIndex < {BlockBudget}u; ++stepIndex)");
+            $"stepIndex < {_budget}u; ++stepIndex)");
 
         source.AppendLine("    {");
         source.AppendLine("        uint currentPc = pc;");
@@ -571,32 +557,22 @@ public sealed class TypedComputeProgram
             case ComputeOperation.Constant:
                 return FromBits(instruction.Destination,
                     $"uint4(0x{literal.X:X8}u,0x{literal.Y:X8}u,0x{literal.Z:X8}u,0x{literal.W:X8}u)");
-
             case ComputeOperation.Copy:
                 return left;
-
             case ComputeOperation.Bitcast:
-                return Kind(instruction.Destination) == ComputeValueKind.Float32
-                    ? $"asfloat({left})"
-                    : $"asuint({left})";
-
+                return Kind(instruction.Destination) == ComputeValueKind.Float32 ? $"asfloat({left})" : $"asuint({left})";
             case ComputeOperation.Swizzle:
-                return
-                    $"{left}.{LaneNames[(int)literal.X]}{LaneNames[(int)literal.Y]}{LaneNames[(int)literal.Z]}{LaneNames[(int)literal.W]}";
-
+                return $"{left}.{LaneNames[(int)literal.X]}{LaneNames[(int)literal.Y]}{LaneNames[(int)literal.Z]}{LaneNames[(int)literal.W]}";
             case ComputeOperation.LessThan:
             case ComputeOperation.Equal:
                 var comparison = instruction.Operation == ComputeOperation.LessThan ? "<" : "==";
 
-                return "uint4(" + string.Join(",",
-                    LaneNames.Select(lane => $"({left}.{lane} {comparison} {right}.{lane}) ? 1u : 0u")) + ")";
-
+                return "uint4(" + string.Join(",", LaneNames.Select(lane => $"({left}.{lane} {comparison} {right}.{lane}) ? 1u : 0u")) + ")";
             case ComputeOperation.Select:
                 var type = Kind(instruction.Destination) == ComputeValueKind.Float32 ? "float4" : "uint4";
                 var mask = $"r{instruction.Mask}";
 
-                return type + "(" + string.Join(",",
-                    LaneNames.Select(lane => $"{mask}.{lane} != 0u ? {left}.{lane} : {right}.{lane}")) + ")";
+                return type + "(" + string.Join(",", LaneNames.Select(lane => $"{mask}.{lane} != 0u ? {left}.{lane} : {right}.{lane}")) + ")";
         }
 
         var operation = instruction.Operation switch

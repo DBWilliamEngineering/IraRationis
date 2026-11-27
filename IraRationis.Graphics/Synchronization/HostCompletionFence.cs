@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Synchronization;
 
@@ -16,7 +17,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
     public HostCompletionFence()
     {
-        var device = (nint)ConsoleGraphicsDevice._host;
+        var device = (nint)GraphicsDevice._host;
 
         lock (PoolGate)
         {
@@ -26,7 +27,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
                 {
                     _timeline = timeline;
 
-                    Interlocked.Increment(ref ConsoleGraphicsDevice._fenceReuses);
+                    Interlocked.Increment(ref GraphicsDevice._fenceReuses);
 
                     return;
                 }
@@ -37,7 +38,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         _timeline = new HostCompletionFenceFenceTimeline(device);
 
-        Interlocked.Increment(ref ConsoleGraphicsDevice._fenceCreations);
+        Interlocked.Increment(ref GraphicsDevice._fenceCreations);
     }
 
     public void Dispose()
@@ -56,7 +57,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         lock (PoolGate)
         {
-            if (Idle.Count < MaximumIdle && timeline.Device == (nint)ConsoleGraphicsDevice._host)
+            if (Idle.Count < MaximumIdle && timeline.Device == (nint)GraphicsDevice._host)
             {
                 Idle.Push(timeline);
 
@@ -80,8 +81,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         var started = Stopwatch.GetTimestamp();
         var value = ++timeline.Value;
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)ConsoleGraphicsDevice.Slot(queue, 14))(
-            queue, timeline.Fence,
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)GraphicsDevice.Slot(queue, 14))(queue, timeline.Fence,
             value);
 
         if (resultCode < 0)
@@ -89,7 +89,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
             Environment.FailFast($"[graphics] Completion fence signal failed: 0x{resultCode:X8}.");
         }
 
-        var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)ConsoleGraphicsDevice.Slot(timeline.Fence, 8);
+        var getCompleted = (delegate* unmanaged[Stdcall]<nint, ulong>)GraphicsDevice.Slot(timeline.Fence, 8);
         var completed = getCompleted(timeline.Fence);
 
         if (completed == ulong.MaxValue)
@@ -103,8 +103,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
             // Reset before registering this signal's event, never after.
             timeline.Completion.Reset();
 
-            var setEvent =
-                (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)ConsoleGraphicsDevice.Slot(timeline.Fence, 9);
+            var setEvent = (delegate* unmanaged[Stdcall]<nint, ulong, nint, int>)GraphicsDevice.Slot(timeline.Fence, 9);
 
             resultCode = setEvent(timeline.Fence, value, timeline.Completion.SafeWaitHandle.DangerousGetHandle());
 
@@ -113,7 +112,7 @@ internal sealed unsafe class HostCompletionFence : IDisposable
                 Environment.FailFast($"[graphics] Completion fence event registration failed: 0x{resultCode:X8}.");
             }
 
-            if (!timeline.Completion.WaitOne(ConsoleGraphicsDevice.MemoryWaitTimeoutMilliseconds))
+            if (!timeline.Completion.WaitOne(GraphicsDevice.MemoryWaitTimeoutMilliseconds))
             {
                 Environment.FailFast("[graphics] GPU completion timed out before deferred memory publication.");
             }
@@ -128,6 +127,6 @@ internal sealed unsafe class HostCompletionFence : IDisposable
 
         _waiting = false;
 
-        ConsoleGraphicsDevice.RecordFenceWait(Stopwatch.GetTimestamp() - started);
+        GraphicsDevice.RecordFenceWait(Stopwatch.GetTimestamp() - started);
     }
 }

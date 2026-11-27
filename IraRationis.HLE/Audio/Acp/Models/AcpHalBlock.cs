@@ -5,4 +5,4 @@
 
 namespace IraRationis.HLE.Audio.Acp.Models;
 
-internal readonly record struct AcpHalBlock(nuint Host, uint Device, uint Size, bool ContextOwned);
+internal readonly unsafe record struct AcpHalBlock(nuint Host, uint Device, uint Size, bool ContextOwned);

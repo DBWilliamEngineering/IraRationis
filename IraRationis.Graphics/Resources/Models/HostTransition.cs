@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 32)]
-internal struct HostTransition
+internal unsafe struct HostTransition
 {
     [FieldOffset(0)] public uint Type;
     [FieldOffset(4)] public uint Flags;

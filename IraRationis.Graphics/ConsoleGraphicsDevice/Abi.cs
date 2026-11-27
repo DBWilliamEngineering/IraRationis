@@ -3,11 +3,11 @@
 
 using System.Globalization;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
-    private static readonly object EvidenceGate = new();
+    private static readonly Lock EvidenceGate = new();
     private static string? _evidencePath;
 
     private static readonly Dictionary<int, string> DeviceMethods = new()

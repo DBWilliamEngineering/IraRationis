@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Media.Models;
 
-internal sealed class Nv12Frame
+internal sealed unsafe class Nv12Frame
 {
     public nint CopyAllocator, CopyList;
     public ulong FenceValue;

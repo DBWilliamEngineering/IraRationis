@@ -9,6 +9,7 @@ using IraRationis.Media.Audio;
 using IraRationis.Media.Playback.Models;
 using IraRationis.Media.Presentation;
 using IraRationis.Media.Video;
+using IraRationis.Media.Presentation.WindowsVideoWindow;
 
 namespace IraRationis.Media.Playback;
 
@@ -158,7 +159,7 @@ public static class StreamingMediaSession
 
                 try
                 {
-                    for (;;)
+                    for(;;)
                     {
                         if (pending == null)
                         {
@@ -325,7 +326,7 @@ public static class StreamingMediaSession
                 {
                     var index = 0;
 
-                    for (;;)
+                    for(;;)
                     {
                         var buffer = ArrayPool<byte>.Shared.Rent(frameBytes);
                         var transferred = false;
@@ -346,8 +347,7 @@ public static class StreamingMediaSession
                                     "Truncated frame or video duration exceeds the configured limit.");
                             }
 
-                            await writer.WriteAsync(new StreamingMediaSessionVideoFrame(index++, buffer), token)
-                                .ConfigureAwait(false);
+                            await writer.WriteAsync(new StreamingMediaSessionVideoFrame(index++, buffer), token).ConfigureAwait(false);
 
                             transferred = true;
                         }

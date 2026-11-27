@@ -178,8 +178,7 @@ public static unsafe class TlsRedirector
                 }
             }
 
-            var page = WindowsNative.VirtualAlloc((nint)(above + (nuint)index * granule), 4096,
-                WindowsNative.CommitReserve,
+            var page = WindowsNative.VirtualAlloc((nint)(above + (nuint)index * granule), 4096, WindowsNative.CommitReserve,
                 WindowsNative.ReadWrite);
 
             if (page != 0)

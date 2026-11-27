@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Resources.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct HostRange
+internal unsafe struct HostRange
 {
     public nuint Begin;
     public nuint End;

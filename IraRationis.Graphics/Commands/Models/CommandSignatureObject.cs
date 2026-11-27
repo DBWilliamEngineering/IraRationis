@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 namespace IraRationis.Graphics.Commands.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct CommandSignatureObject
+internal unsafe struct CommandSignatureObject
 {
     public GraphicsObjectHeader Header;
     public uint Stride;

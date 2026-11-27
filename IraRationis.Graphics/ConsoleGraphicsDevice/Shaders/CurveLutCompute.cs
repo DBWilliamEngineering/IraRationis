@@ -8,7 +8,7 @@ using IraRationis.Graphics.Textures.Models;
 using IraRationis.Shaders.Compute;
 using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -52,11 +52,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             desc.DepthOrArraySize != 1 || desc.MipLevels != 1 || desc.SampleCount != 1 || desc.Width is 0 or > 16384 ||
             (desc.Flags & 4U) == 0 || !CurveLutCompiler.SupportsFormat(format) ||
             (record.Description is { } bytes && (bytes.Length != 40 || ReadDescriptorUInt32(bytes, 0) != format ||
-                                                 ReadDescriptorUInt32(bytes, 4) != 2
-                                                 || ReadDescriptorUInt32(bytes, 8) != 0)))
+                ReadDescriptorUInt32(bytes, 4) != 2 || ReadDescriptorUInt32(bytes, 8) != 0)))
         {
-            Console.Error.WriteLine(
-                $"[graphics] curve-lut UAV: dimension={desc.Dimension}; width={desc.Width}; format={format}; flags=0x{desc.Flags:X}.");
+            Console.Error.WriteLine($"[graphics] curve-lut UAV: dimension={desc.Dimension}; width={desc.Width}; format={format}; flags=0x{desc.Flags:X}.");
 
             return false;
         }
@@ -71,8 +69,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             return false;
         }
 
-        source = new TextureSource(handle, token.Id, token.Kind, record.Resource, resource->Generation,
-            record.Description);
+        source = new TextureSource(handle, token.Id, token.Kind, record.Resource, resource->Generation, record.Description);
 
         return true;
     }
@@ -92,7 +89,6 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var resource = (ResourceObject*)source.Resource;
         var offset = address - resource->Address;
-
         return offset <= resource->Description.Width && (ulong)curveBytes <= resource->Description.Width - offset &&
                (ulong)curveBytes <= ulong.MaxValue - address;
     }
@@ -103,26 +99,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         var segments = CurveLutCompiler.SegmentCount(metadata.Hash);
         var curveBytes = segments * CurveLutCompiler.SegmentBytes;
 
-        if (segments == 0 || _host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 || x is 0 or > 128 || y != 1
-            || z != 1 || flags != 0 ||
+        if (segments == 0 || _host == null || Host(self) == 0 || *(uint*)(self + 0x10) != 0 || x is 0 or > 128 || y != 1 || z != 1 || flags != 0 ||
             state.Compute.Signature != metadata.Root || !IsRootSignature(metadata.Root) ||
             RootSignatureBlob(metadata.Root).Length != 7600 || state.Compute.Tables.Count != 2 ||
             !state.Compute.Tables.ContainsKey(0) || !state.Compute.Tables.TryGetValue(1, out var table) ||
-            table == 0 || table > (ulong)nint.MaxValue - 80 || state.Compute.Constants.Count != 0
-            || state.Compute.Views.Count != 0 ||
-            state.MemoryBoundaries.Count >= MaximumMemoryOperations
-            || state.HostViews.Count > MaximumCommandHostViews - 2)
+            table == 0 || table > (ulong)nint.MaxValue - 80 || state.Compute.Constants.Count != 0 || state.Compute.Views.Count != 0 ||
+            state.MemoryBoundaries.Count >= MaximumMemoryOperations || state.HostViews.Count > MaximumCommandHostViews - 2)
         {
             return RejectCurveLut("unsupported dispatch or root binding contract");
         }
 
-        if (!TryGetTextureSource(state, table, out var input) || input == null
-                                                              || !TryGetCurveBuffer(input, curveBytes, out var address)
-                                                              ||
-                                                              !TryGetCurveOutput(table + 32, out var output,
-                                                                  out var format) || output == null ||
-                                                              !TryGetColorLutConstants(table + 64,
-                                                                  CurveLutCompiler.ParameterBytes, out _))
+        if (!TryGetTextureSource(state, table, out var input) || input == null || !TryGetCurveBuffer(input, curveBytes, out var address) ||
+            !TryGetCurveOutput(table + 32, out var output, out var format) || output == null ||
+            !TryReadConstantDescriptor(table + 64, CurveLutCompiler.ParameterBytes, out _))
         {
             WriteTextureTableEvidence(Console.Error, table);
 
@@ -150,8 +139,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         SealMemoryBoundary(self, state, null, null, compute: new ColorLutComputeBoundary(input, output, table,
             0, outputHost, root, pipeline, format, x, curveBytes));
 
-        TraceGraphicsSuccess(
-            $"[graphics] curve-lut RECORDED: segments={segments}; groups={x}x1x1; width={resource->Description.Width}; format={format}.");
+        TraceGraphicsSuccess($"[graphics] curve-lut RECORDED: segments={segments}; groups={x}x1x1; width={resource->Description.Width}; format={format}.");
 
         return true;
     }
@@ -159,9 +147,8 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void ExecuteCurveLutCompute(nint queue, ColorLutComputeBoundary boundary)
     {
         if (!IsTextureSourceCurrent(boundary.Input) || !IsTextureSourceCurrent(boundary.Output) ||
-            !TryGetCurveBuffer(boundary.Input, boundary.CurveBytes, out var address)
-            || GetResourceWriterQueue(boundary.Input.Resource) != 0 ||
-            !TryGetColorLutConstants(boundary.Table + 64, CurveLutCompiler.ParameterBytes, out var constants))
+            !TryGetCurveBuffer(boundary.Input, boundary.CurveBytes, out var address) || GetResourceWriterQueue(boundary.Input.Resource) != 0 ||
+            !TryReadConstantDescriptor(boundary.Table + 64, CurveLutCompiler.ParameterBytes, out var constants))
         {
             throw new InvalidOperationException("Curve LUT source or descriptor changed before submission.");
         }
@@ -171,8 +158,8 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (!TryReadGuestMemory(constants.Address, data.AsSpan(0, CurveLutCompiler.ParameterBytes)) ||
             !TryReadGuestMemory(address, data.AsSpan(CurveDataOffset, boundary.CurveBytes)) ||
             !IsTextureSourceCurrent(boundary.Input) || !IsTextureSourceCurrent(boundary.Output) ||
-            !TryGetColorLutConstants(boundary.Table + 64, CurveLutCompiler.ParameterBytes, out var check) ||
-            !IsSameColorLutConstant(constants, check))
+            !TryReadConstantDescriptor(boundary.Table + 64, CurveLutCompiler.ParameterBytes, out var check) ||
+            !MatchesConstantDescriptor(constants, check))
         {
             throw new InvalidOperationException("Curve LUT source snapshot unavailable or descriptor changed.");
         }
@@ -181,11 +168,9 @@ public static unsafe partial class ConsoleGraphicsDevice
         var output = (ResourceObject*)boundary.Output.Resource;
         var writer = GetResourceWriterQueue(boundary.Output.Resource);
 
-        if ((writer != 0 && writer != queue) || count != output->Description.Width
-                                             || count > boundary.GroupsX * CurveLutCompiler.ThreadsPerGroup)
+        if (writer != 0 && writer != queue || count != output->Description.Width || count > boundary.GroupsX * CurveLutCompiler.ThreadsPerGroup)
         {
-            throw new InvalidOperationException(
-                $"Curve LUT output coverage/coherence unsupported: count={count}; width={output->Description.Width}; groups={boundary.GroupsX}.");
+            throw new InvalidOperationException($"Curve LUT output coverage/coherence unsupported: count={count}; width={output->Description.Width}; groups={boundary.GroupsX}.");
         }
 
         if (!float.IsFinite(BitConverter.UInt32BitsToSingle(ReadDescriptorUInt32(data, 0))) ||
@@ -204,21 +189,18 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        using var utility = AcquireUtilityContext(CurveUploadBytes, 2, true);
+        using var utility = AcquireUtilityContext(CurveUploadBytes, 2, versioned: true);
         utility.PrepareVersionedUpload(data);
-        RecordCurveLutDispatch(utility, boundary.OutputHost, boundary.Root, boundary.Pipeline, boundary.CurveFormat,
-            boundary.GroupsX);
+        RecordCurveLutDispatch(utility, boundary.OutputHost, boundary.Root, boundary.Pipeline, boundary.CurveFormat, boundary.GroupsX);
         utility.SubmitAndWait(queue);
         ReportUtilityExecution();
         MarkGpuWrite(boundary.Output.Resource, queue);
         Interlocked.Increment(ref _dispatches);
 
-        TraceGraphicsSuccess(
-            $"[graphics] curve-lut GPU COMPLETED: segments={boundary.CurveBytes / CurveLutCompiler.SegmentBytes}; texels={count}; format={boundary.CurveFormat}; numerical equivalence unverified.");
+        TraceGraphicsSuccess($"[graphics] curve-lut GPU COMPLETED: segments={boundary.CurveBytes / CurveLutCompiler.SegmentBytes}; texels={count}; format={boundary.CurveFormat}; numerical equivalence unverified.");
     }
 
-    private static void RecordCurveLutDispatch(UtilityContext utility, nint outputHost, nint root, nint pipeline,
-        uint format, uint groupsX)
+    private static void RecordCurveLutDispatch(UtilityContext utility, nint outputHost, nint root, nint pipeline, uint format, uint groupsX)
     {
         var heap = (ID3D12DescriptorHeap*)utility.Heap;
         var cpu = heap->GetCPUDescriptorHandleForHeapStart();

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Commands.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 48)]
-internal struct ClearProbeCopyLocation
+internal unsafe struct ClearProbeCopyLocation
 {
     [FieldOffset(0)] public nint Resource;
     [FieldOffset(8)] public uint Kind;

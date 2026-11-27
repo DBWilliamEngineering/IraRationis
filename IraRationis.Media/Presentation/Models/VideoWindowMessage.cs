@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Media.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct VideoWindowMessage
+internal unsafe struct VideoWindowMessage
 {
     public nint Hwnd;
     public uint Message;

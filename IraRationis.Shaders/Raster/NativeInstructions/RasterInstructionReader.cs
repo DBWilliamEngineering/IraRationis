@@ -2,19 +2,19 @@
 
 using System.Buffers.Binary;
 
-namespace IraRationis.Shaders.Raster.PlanarColor;
+namespace IraRationis.Shaders.Raster.NativeInstructions;
 
 // Encoding fields follow AMD's RDNA2 ISA. This reader accepts only the named contract at its current offset.
-internal ref struct PlanarInstructionReader
+internal ref struct RasterInstructionReader
 {
     private readonly ReadOnlySpan<byte> _code;
     private int _offset;
 
-    internal PlanarInstructionReader(ReadOnlySpan<byte> code)
+    internal RasterInstructionReader(ReadOnlySpan<byte> code)
     {
         if (code.IsEmpty || (code.Length & 3) != 0 || code.Length > 4096)
         {
-            throw new InvalidDataException("Invalid planar-color native instruction extent.");
+            throw new InvalidDataException("Invalid raster native instruction extent.");
         }
 
         _code = code;
@@ -36,7 +36,7 @@ internal ref struct PlanarInstructionReader
             if ((instruction & 0xffff0000) != 0xd5800000 || ((operands >> 18) & 0x1ff) != 255 ||
                 (operands & 0xf8000000) != 0)
             {
-                throw new NotSupportedException("Unsupported planar-color native identity header.");
+                throw new NotSupportedException("Unsupported raster native identity header.");
             }
 
             _ = Next();
@@ -109,7 +109,7 @@ internal ref struct PlanarInstructionReader
         {
             4 => 2U,
             8 => 3U,
-            _ => throw new InvalidOperationException("Unsupported descriptor extent in planar contract.")
+            _ => throw new InvalidOperationException("Unsupported descriptor extent in raster contract.")
         };
 
         ScalarMemory(opcode, destination, pointerBase, byteOffset);
@@ -122,21 +122,27 @@ internal ref struct PlanarInstructionReader
             1 => 8U,
             4 => 10U,
             16 => 12U,
-            _ => throw new InvalidOperationException("Unsupported buffer extent in planar contract.")
+            _ => throw new InvalidOperationException("Unsupported buffer extent in raster contract.")
         };
 
         ScalarMemory(opcode, destination, descriptorBase, byteOffset);
     }
 
-    internal void FusedMultiplyAdd(uint destination, uint left, uint right, uint addend)
+    internal void FusedMultiplyAdd(uint destination, uint left, uint right, uint addend, uint negations = 0)
     {
         Require(0xd4000000 | (331U << 16) | destination, "V_FMA_F32");
-        Require(left | (right << 9) | (addend << 18), "V_FMA_F32 operands");
+        Require(left | (right << 9) | (addend << 18) | (negations << 29), "V_FMA_F32 operands");
     }
 
     internal void Accumulate(uint destination, uint left, uint rightVector)
     {
         VectorBinary(43, destination, left, rightVector);
+    }
+
+    internal void AccumulateNegatedProduct(uint destination, uint left, uint right)
+    {
+        Require(0xd4000000 | (299U << 16) | destination, "V_FMAC_F32");
+        Require(left | (right << 9) | (1U << 29), "V_FMAC_F32 operands");
     }
 
     internal void MultiplyLegacy(uint destination, uint left, uint rightVector)
@@ -147,6 +153,11 @@ internal ref struct PlanarInstructionReader
     internal void Add(uint destination, uint left, uint rightVector)
     {
         VectorBinary(3, destination, left, rightVector);
+    }
+
+    internal void Subtract(uint destination, uint left, uint rightVector)
+    {
+        VectorBinary(4, destination, left, rightVector);
     }
 
     internal void Maximum(uint destination, uint left, uint rightVector)
@@ -162,6 +173,26 @@ internal ref struct PlanarInstructionReader
     internal void VectorNoOperation()
     {
         Require(0x7e000000, "V_NOP");
+    }
+
+    internal void MoveVector32(uint destination, uint source)
+    {
+        VectorUnary(1, destination, source, "V_MOV_B32");
+    }
+
+    internal void Exp2(uint destination, uint source)
+    {
+        VectorUnary(37, destination, source, "V_EXP_F32");
+    }
+
+    internal void Log2(uint destination, uint source)
+    {
+        VectorUnary(39, destination, source, "V_LOG_F32");
+    }
+
+    internal void Reciprocal(uint destination, uint source)
+    {
+        VectorUnary(42, destination, source, "V_RCP_F32");
     }
 
     internal void Interpolate(uint destination, uint attribute, uint component, bool secondPhase)
@@ -190,7 +221,18 @@ internal ref struct PlanarInstructionReader
 
     internal void SampleLookup(uint destination, uint resourceBase, uint samplerBase, uint coordinateBase)
     {
-        Require(0xf0000000 | (39U << 18) | (7U << 8) | (2U << 3), "IMAGE_SAMPLE_LZ 3D RGB");
+        SampleLodZero(destination, resourceBase, samplerBase, coordinateBase, 2, 7);
+    }
+
+    internal void SampleLodZeroAlpha(uint destination, uint resourceBase, uint samplerBase, uint coordinateBase)
+    {
+        SampleLodZero(destination, resourceBase, samplerBase, coordinateBase, 1, 8);
+    }
+
+    private void SampleLodZero(uint destination, uint resourceBase, uint samplerBase, uint coordinateBase,
+        uint dimension, uint channelMask)
+    {
+        Require(0xf0000000 | (39U << 18) | (channelMask << 8) | (dimension << 3), "IMAGE_SAMPLE_LZ");
         Require(coordinateBase | (destination << 8) | ((resourceBase / 4) << 16) |
                 ((samplerBase / 4) << 21), "IMAGE_SAMPLE_LZ descriptors");
     }
@@ -217,8 +259,7 @@ internal ref struct PlanarInstructionReader
 
         if (source == 255)
         {
-            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."),
-                "scalar literal");
+            Require(literal ?? throw new InvalidOperationException("Missing scalar literal contract."), "scalar literal");
         }
     }
 
@@ -238,6 +279,11 @@ internal ref struct PlanarInstructionReader
         Require((operation << 25) | (destination << 17) | (rightVector << 9) | left, "vector binary operation");
     }
 
+    private void VectorUnary(uint operation, uint destination, uint source, string operationName)
+    {
+        Require(0x7e000000 | (destination << 17) | (operation << 9) | source, operationName);
+    }
+
     private void Require(uint expected, string operation)
     {
         var offset = _offset;
@@ -245,8 +291,8 @@ internal ref struct PlanarInstructionReader
 
         if (actual != expected)
         {
-            throw new NotSupportedException($"Planar-color {operation} differs at native offset 0x{offset:X}: " +
-                                            $"expected 0x{expected:X8}, received 0x{actual:X8}.");
+            throw new NotSupportedException($"Raster {operation} differs at native offset 0x{offset:X}: " +
+                $"expected 0x{expected:X8}, received 0x{actual:X8}.");
         }
     }
 
@@ -254,7 +300,7 @@ internal ref struct PlanarInstructionReader
     {
         if (_offset > _code.Length - 4)
         {
-            throw new InvalidDataException("Truncated planar-color native instruction.");
+            throw new InvalidDataException("Truncated raster native instruction.");
         }
 
         var value = BinaryPrimitives.ReadUInt32LittleEndian(_code[_offset..]);
@@ -267,7 +313,7 @@ internal ref struct PlanarInstructionReader
     internal static void VerifyAuthoredContracts()
     {
         var arithmetic = Convert.FromHexString("07004BD501040E00");
-        var reader = new PlanarInstructionReader(arithmetic);
+        var reader = new RasterInstructionReader(arithmetic);
 
         reader.FusedMultiplyAdd(7, 1, Vector(2), 3);
 
@@ -275,9 +321,8 @@ internal ref struct PlanarInstructionReader
 
         try
         {
-            reader = new PlanarInstructionReader(arithmetic);
+            reader = new RasterInstructionReader(arithmetic);
             reader.FusedMultiplyAdd(7, 1, Vector(2), 3);
-
             throw new InvalidOperationException("Planar native register mutation was accepted.");
         }
         catch (NotSupportedException)
@@ -286,9 +331,8 @@ internal ref struct PlanarInstructionReader
 
         try
         {
-            reader = new PlanarInstructionReader(arithmetic.AsSpan(0, 4));
+            reader = new RasterInstructionReader(arithmetic.AsSpan(0, 4));
             reader.FusedMultiplyAdd(6, 1, Vector(2), 3);
-
             throw new InvalidOperationException("Planar truncated operand was accepted.");
         }
         catch (InvalidDataException)
@@ -303,16 +347,15 @@ internal ref struct PlanarInstructionReader
             BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(offset + 4), 255U << 18);
         }
 
-        reader = new PlanarInstructionReader(header);
+        reader = new RasterInstructionReader(header);
         reader.IdentityHeader();
 
         header[2] ^= 1;
 
         try
         {
-            reader = new PlanarInstructionReader(header);
+            reader = new RasterInstructionReader(header);
             reader.IdentityHeader();
-
             throw new InvalidOperationException("Planar non-NOP header was accepted.");
         }
         catch (NotSupportedException)

@@ -49,8 +49,7 @@ public static unsafe class InstructionMemoryProbe
         var result = Probe(output, nativeProbe, "demand-zero", allocation.Address, residentPageQueries);
 
         RequireCleared(result, allocation.Address);
-        RequirePattern(Bytes(allocation.Address, pageSize), 0,
-            "Demand-zero allocation changed outside its zero state.");
+        RequirePattern(Bytes(allocation.Address, pageSize), 0, "Demand-zero allocation changed outside its zero state.");
     }
 
     private static void RunPrivateMemory(TextWriter output, NativeInstructionMemoryProbe nativeProbe, int pageSize,
@@ -63,8 +62,7 @@ public static unsafe class InstructionMemoryProbe
         if (residentPageQueries
             && InstructionProbeNativeMethods.VirtualLock((nint)allocation.Address, (nuint)pageSize) == 0)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(),
-                "Cannot pin the positive resident-page probe fixture.");
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Cannot pin the positive resident-page probe fixture.");
         }
 
         try
@@ -79,15 +77,13 @@ public static unsafe class InstructionMemoryProbe
             if (residentPageQueries)
             {
                 Require(residentResult.ResidentPageQueries == 1 && residentResult.ResidentPageHits == 1
-                                                                && residentResult.RegionQueries == 0
-                                                                && residentResult.ValidatedEnd
-                                                                == target + CacheLineBytes,
+                        && residentResult.RegionQueries == 0 && residentResult.ValidatedEnd == (ulong)(target + CacheLineBytes),
                     "A pinned RW page did not use the single-line working-set validation path.");
             }
             else
             {
                 Require(residentResult.ResidentPageQueries == 0 && residentResult.ResidentPageHits == 0
-                                                                && residentResult.RegionQueries == 1,
+                        && residentResult.RegionQueries == 1,
                     "Baseline validation must use one region query.");
             }
         }
@@ -96,8 +92,7 @@ public static unsafe class InstructionMemoryProbe
             if (residentPageQueries
                 && InstructionProbeNativeMethods.VirtualUnlock((nint)allocation.Address, (nuint)pageSize) == 0)
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(),
-                    "Cannot unpin the resident-page probe fixture.");
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Cannot unpin the resident-page probe fixture.");
             }
         }
 
@@ -131,8 +126,7 @@ public static unsafe class InstructionMemoryProbe
             };
 
             RequireRejected(Probe(output, nativeProbe, caseName, address + CacheLineBytes, residentPageQueries));
-            Require(Query(address).Protection == protection,
-                "Validation changed the page protection or consumed its guard.");
+            Require(Query(address).Protection == protection, "Validation changed the page protection or consumed its guard.");
 
             Protect(address, (nuint)pageSize, InstructionProbeNativeMethods.ReadWrite);
             RequirePattern(Bytes(address, pageSize), Canary, "Rejected validation changed protected memory.");
@@ -152,8 +146,7 @@ public static unsafe class InstructionMemoryProbe
 
         var lastLine = secondAddress - CacheLineBytes;
 
-        RequireCleared(Probe(output, nativeProbe, "last-line-before-noaccess", lastLine, residentPageQueries),
-            lastLine);
+        RequireCleared(Probe(output, nativeProbe, "last-line-before-noaccess", lastLine, residentPageQueries), lastLine);
         RequireClearedLine(firstPage, pageSize - CacheLineBytes);
         Require(Query(secondAddress).Protection == InstructionProbeNativeMethods.NoAccess,
             "A cache-line clear changed the neighboring inaccessible page protection.");
@@ -209,8 +202,7 @@ public static unsafe class InstructionMemoryProbe
         firstView.Fill(Canary);
         Protect(firstAddress, (nuint)pageSize, InstructionProbeNativeMethods.ReadOnly);
 
-        RequireRejected(Probe(output, nativeProbe, "mapped-readonly", firstAddress + CacheLineBytes,
-            residentPageQueries));
+        RequireRejected(Probe(output, nativeProbe, "mapped-readonly", firstAddress + CacheLineBytes, residentPageQueries));
         RequirePattern(aliasView, Canary, "Rejected mapped validation changed the shared backing memory.");
 
         Protect(firstAddress, (nuint)pageSize, InstructionProbeNativeMethods.ReadWrite);
@@ -242,7 +234,7 @@ public static unsafe class InstructionMemoryProbe
     private static void RequireCleared(WritableCacheLineProbeResult result, nuint address)
     {
         Require(result.Cleared == 1 && result.AccessFaulted == 0
-                                    && result.ValidatedEnd >= address + CacheLineBytes,
+                && result.ValidatedEnd >= (ulong)(address + CacheLineBytes),
             "A writable cache line was not validated and cleared.");
     }
 
@@ -285,8 +277,7 @@ public static unsafe class InstructionMemoryProbe
 
         if (InstructionProbeNativeMethods.VirtualProtect((nint)address, size, protection, &previousProtection) == 0)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(),
-                "Cannot change instruction probe memory protection.");
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Cannot change instruction probe memory protection.");
         }
     }
 

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Textures;
-using IraRationis.Shaders.Native;
-using IraRationis.Shaders.Raster;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
+using IraRationis.Graphics.Diagnostics.Models;
+using IraRationis.Shaders.Native;
+using IraRationis.Shaders.Raster;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Diagnostics;
 
@@ -25,11 +26,11 @@ public static unsafe class DeviceProbe
 
         writer.WriteLine("XG texture computer ABI and layout tests passed.");
 
-        ConsoleGraphicsDevice.VerifyAbiInitialization();
+        GraphicsDevice.VerifyAbiInitialization();
 
         writer.WriteLine("ABI initialization, null-table diagnostics and root signature registration passed.");
 
-        var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)ConsoleGraphicsDevice.ExportAddress;
+        var create = (delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)GraphicsDevice.ExportAddress;
         var version = 0x00020004U;
         var deviceId = new Guid("189819f1-1db6-4b57-be54-1821339b85f7");
         var device11Id = new Guid("5405c344-d457-444e-b4dd-2366e45aee39");
@@ -70,17 +71,17 @@ public static unsafe class DeviceProbe
 
                 VerifyFrameAndDisplay(device);
 
-                ConsoleGraphicsDevice.VerifyResourceAbi(device);
+                GraphicsDevice.VerifyResourceAbi(device);
 
-                ConsoleGraphicsDevice.VerifyDescriptorAbi(device);
+                GraphicsDevice.VerifyDescriptorAbi(device);
 
-                ConsoleGraphicsDevice.VerifyRootSignatureAbi(device);
+                GraphicsDevice.VerifyRootSignatureAbi(device);
 
-                ConsoleGraphicsDevice.VerifyComputePipelineAbi(device);
+                GraphicsDevice.VerifyComputePipelineAbi(device);
 
-                ConsoleGraphicsDevice.VerifyQueryHeapAbi(device);
+                GraphicsDevice.VerifyQueryHeapAbi(device);
 
-                ConsoleGraphicsDevice.VerifyDeviceBatchAbi(device);
+                GraphicsDevice.VerifyDeviceBatchAbi(device);
 
                 writer.WriteLine("Query heap creation, description ownership and interface ABI passed (CPU only).");
 
@@ -111,7 +112,7 @@ public static unsafe class DeviceProbe
 
                 Check(createFence(device, 0, 0, &fenceId, &fence), "Fence creation");
 
-                ConsoleGraphicsDevice.VerifyFenceAddressHostProbe(device, queue, fence);
+                GraphicsDevice.VerifyFenceAddressHostProbe(device, queue, fence);
 
                 var createAllocator = (delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot(device, 9);
 
@@ -163,13 +164,13 @@ public static unsafe class DeviceProbe
 
                 syncBottom(list, 0, 0, 0, 0);
 
-                ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
+                GraphicsDevice.VerifyBarrierRecording(list, newer);
 
-                var clearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list);
+                var clearReadback = GraphicsDevice.RecordHostClearProbe(device, list);
                 // Captured guest pairing and its original typed default, both
                 // using real materialization, descriptors, clears and readbacks.
-                var linearReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list, 29, 28, 0.25f);
-                var srgbReadback = ConsoleGraphicsDevice.RecordHostClearProbe(device, list, 29, 0, 0.25f);
+                var linearReadback = GraphicsDevice.RecordHostClearProbe(device, list, 29, 28, 0.25f);
+                var srgbReadback = GraphicsDevice.RecordHostClearProbe(device, list, 29, 0, 0.25f);
 
                 ulong marker = 0;
 
@@ -182,7 +183,7 @@ public static unsafe class DeviceProbe
 
                 waitValue(list, (ulong)&marker, 3, 0x1234);
 
-                ConsoleGraphicsDevice.VerifyBarrierRecording(list, newer);
+                GraphicsDevice.VerifyBarrierRecording(list, newer);
 
                 write(list, (ulong)&marker, 0x5678, 0, 0);
 
@@ -245,16 +246,15 @@ public static unsafe class DeviceProbe
                         "Graphics device probe: fence did not complete; objects may still be in flight.");
                 }
 
-                ConsoleGraphicsDevice.VerifyHostClearProbe(clearReadback);
-                ConsoleGraphicsDevice.VerifyHostClearProbe(linearReadback, 64, 1);
-                ConsoleGraphicsDevice.VerifyHostClearProbe(srgbReadback, 137, 1);
+                GraphicsDevice.VerifyHostClearProbe(clearReadback);
+                GraphicsDevice.VerifyHostClearProbe(linearReadback, 64, tolerance: 1);
+                GraphicsDevice.VerifyHostClearProbe(srgbReadback, 137, tolerance: 1);
 
-                writer.WriteLine(
-                    "[graphics-probe] Guest sRGB backing with linear and default sRGB RTVs passed GPU readback.");
+                writer.WriteLine("[graphics-probe] Guest sRGB backing with linear and default sRGB RTVs passed GPU readback.");
 
-                ConsoleGraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
+                GraphicsDevice.VerifyHostResourceAbi(device, queue, allocator);
 
-                ConsoleGraphicsDevice.VerifyDescriptorTables(queue);
+                GraphicsDevice.VerifyDescriptorTables(queue);
 
                 Check(reset(allocator), "Allocator reset after completion");
 
@@ -274,7 +274,7 @@ public static unsafe class DeviceProbe
 
                 Release(ref fence);
 
-                ConsoleGraphicsDevice.VerifyFenceAddressProbeCleanup();
+                GraphicsDevice.VerifyFenceAddressProbeCleanup();
 
                 Release(ref queue);
 

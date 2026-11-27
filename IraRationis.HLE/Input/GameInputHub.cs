@@ -4,20 +4,20 @@
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Input.Diagnostics.Models;
 using IraRationis.HLE.Input.Models;
+using GameInput = global::IraRationis.HLE.Input.GameInputModule.GameInputModule;
 
 namespace IraRationis.HLE.Input;
 
 internal sealed unsafe class GameInputHub
 {
-    public readonly nint[] Devices = new nint[GameInputModule.DeviceCount];
+    public readonly nint[] Devices = new nint[GameInput.DeviceCount];
     public readonly object Gate = new();
     public readonly nint Object;
     public readonly List<GameInputNotification> Pending = [];
     public readonly nint ReadingTable;
     public readonly List<GameInputRegistration> Registrations = [];
     public readonly List<(ulong Token, int Thread)> Running = [];
-    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInputModule.DeviceCount)
-        .Select(_ => new GameInputSlot()).ToArray();
+    public readonly GameInputSlot[] Slots = Enumerable.Range(0, GameInput.DeviceCount).Select(_ => new GameInputSlot()).ToArray();
     private readonly DualSenseProvider? _dualSense;
     private readonly long[] _retryAt = new long[4];
     private bool _usingDualSense;
@@ -25,10 +25,10 @@ internal sealed unsafe class GameInputHub
 
     public GameInputHub()
     {
-        var inputTable = GameInputModule.CreateInputTable();
-        var deviceTable = GameInputModule.CreateDeviceTable();
+        var inputTable = GameInput.CreateInputTable();
+        var deviceTable = GameInput.CreateDeviceTable();
 
-        ReadingTable = GameInputModule.CreateReadingTable();
+        ReadingTable = GameInput.CreateReadingTable();
 
         var input = (nint*)NativeMemory.Alloc((nuint)sizeof(nint));
 
@@ -36,7 +36,7 @@ internal sealed unsafe class GameInputHub
 
         Object = (nint)input;
 
-        for (var index = 0; index < GameInputModule.DeviceCount; index++)
+        for (var index = 0; index < GameInput.DeviceCount; index++)
         {
             var device = (GameInputDevice*)NativeMemory.AllocZeroed((nuint)sizeof(GameInputDevice));
 
@@ -46,7 +46,7 @@ internal sealed unsafe class GameInputHub
 
             device->Info.Size = (uint)sizeof(GameInputDeviceInfo);
 
-            device->Info.SupportedInput = GameInputModule.Kind(index);
+            device->Info.SupportedInput = GameInput.Kind(index);
 
             device->Info.RumbleMotors = index < 4 ? 3U : 0U;
 
@@ -73,7 +73,7 @@ internal sealed unsafe class GameInputHub
 
     private void PollLoop()
     {
-        for (;;)
+        for(;;)
         {
             Thread.Sleep(8);
 
@@ -102,10 +102,9 @@ internal sealed unsafe class GameInputHub
                 continue;
             }
 
-            if (GameInputModule.XInputGetState((uint)index, out var state) == 0)
+            if (GameInput.XInputGetState((uint)index, out var state) == 0)
             {
-                pads[index] = GameInputModule.ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger,
-                    state.LeftX,
+                pads[index] = GameInput.ConvertPad(state.Buttons, state.LeftTrigger, state.RightTrigger, state.LeftX,
                     state.LeftY, state.RightX, state.RightY);
             }
             else
@@ -114,7 +113,7 @@ internal sealed unsafe class GameInputHub
             }
         }
 
-        var keys = GameInputModule.ReadKeys();
+        var keys = GameInput.ReadKeys();
         // Prefer existing XInput devices to avoid duplicate events from a virtual controller.
         var dualSense = pads.Any(pad => pad.HasValue) ? null : _dualSense?.Current;
 
@@ -126,7 +125,7 @@ internal sealed unsafe class GameInputHub
 
             Pending.Clear();
 
-            var timestamp = GameInputModule.Now();
+            var timestamp = GameInput.Now();
 
             for (var index = 0; index < pads.Length; index++)
             {
@@ -141,14 +140,13 @@ internal sealed unsafe class GameInputHub
                 _usingDualSense = dualSense.HasValue;
 
                 Console.WriteLine(
-                    $"[input] IRX-R30-ROUTE: slot={GameInputModule.Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
+                    $"[input] IRX-R30-ROUTE: slot={GameInput.Fallback}; source={(_usingDualSense ? "DualSense USB" : "keyboard/XInput")}");
             }
 
-            Update(GameInputModule.Fallback, useFallback,
-                useFallback ? dualSense ?? GameInputModule.FallbackPad(keys) : null, [], timestamp,
+            Update(GameInput.Fallback, useFallback, useFallback ? dualSense ?? GameInput.FallbackPad(keys) : null, [], timestamp,
                 events);
 
-            Update(GameInputModule.Keyboard, true, null, keys, timestamp, events);
+            Update(GameInput.Keyboard, true, null, keys, timestamp, events);
         }
 
         Deliver(events);
@@ -168,7 +166,7 @@ internal sealed unsafe class GameInputHub
         {
             slot.History.Add(new GameInputSnapshot(index, ++slot.Sequence, timestamp, pad, keys));
 
-            if (slot.History.Count > GameInputModule.HistoryLimit)
+            if (slot.History.Count > GameInput.HistoryLimit)
             {
                 slot.History.RemoveAt(0);
             }
@@ -179,9 +177,9 @@ internal sealed unsafe class GameInputHub
             return;
         }
 
-        if (GameInputModule.TraceInput)
+        if (GameInput.TraceInput)
         {
-            GameInputModule.InputDiagnostics.Write(InputDiagnosticCategory.DeviceConnection,
+            GameInput.InputDiagnostics.Write(InputDiagnosticCategory.DeviceConnection,
                 (Slot: index, Connected: connected, Timestamp: timestamp),
                 static connection => $"slot={connection.Slot}; connected={connection.Connected}; "
                                      + $"inputTimestamp={connection.Timestamp}");
@@ -189,18 +187,17 @@ internal sealed unsafe class GameInputHub
 
         foreach (var registration in Registrations)
         {
-            if (Matches(registration, index) && (registration.Status & GameInputModule.Connected) != 0)
+            if (Matches(registration, index) && (registration.Status & GameInput.Connected) != 0)
             {
-                events.Add(new GameInputNotification(registration, index, timestamp,
-                    connected ? GameInputModule.Connected : 0,
-                    previous ? GameInputModule.Connected : 0));
+                events.Add(new GameInputNotification(registration, index, timestamp, connected ? GameInput.Connected : 0,
+                    previous ? GameInput.Connected : 0));
             }
         }
     }
 
     public bool Matches(GameInputRegistration registration, int index)
     {
-        return (registration.Kind & GameInputModule.Kind(index)) != 0
+        return (registration.Kind & GameInput.Kind(index)) != 0
                && (registration.Device == 0 || registration.Device == Devices[index]);
     }
 
@@ -250,9 +247,9 @@ internal sealed unsafe class GameInputHub
 
     private void ReportCallback(InputDiagnosticCategory category, GameInputNotification notification)
     {
-        if (GameInputModule.TraceInput)
+        if (GameInput.TraceInput)
         {
-            GameInputModule.InputDiagnostics.Write(category,
+            GameInput.InputDiagnostics.Write(category,
                 (Notification: notification, Device: Devices[notification.Index]),
                 static delivery => $"token={delivery.Notification.Registration.Token}; "
                                    + $"callback=0x{delivery.Notification.Registration.Callback:X}; "

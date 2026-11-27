@@ -5,7 +5,7 @@ using IraRationis.HLE.Runtime.Diagnostics.Models;
 
 namespace IraRationis.Runtime.Tests.RuntimeBridge;
 
-internal static partial class RuntimeBridgeMemoryNativeMethods
+internal static unsafe partial class RuntimeBridgeMemoryNativeMethods
 {
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

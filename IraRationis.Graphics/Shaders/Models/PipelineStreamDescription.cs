@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Shaders.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct PipelineStreamDescription
+internal unsafe struct PipelineStreamDescription
 {
     public nuint Size;
     public byte* Stream;

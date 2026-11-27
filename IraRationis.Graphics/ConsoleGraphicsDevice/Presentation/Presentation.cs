@@ -8,7 +8,7 @@ using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Presentation.Models;
 using IraRationis.Graphics.Resources.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

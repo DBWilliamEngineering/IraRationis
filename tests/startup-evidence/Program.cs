@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using IraRationis.Cli.Diagnostics;
+using IraRationis.Graphics.Diagnostics;
 using IraRationis.Media.Playback;
 
-namespace IraRationis.StartupEvidence.Contracts;
+namespace StartupEvidence.Contracts;
 
 internal static class Program
 {
@@ -71,45 +71,52 @@ internal static class Program
 
     private static void TestLogSampling()
     {
-        using var output = new StringWriter();
-        using var writer = new SamplingLogWriter(output);
+        var sampling = new GraphicsLogSampling(sampleGraphics: true, sampleListKinds: false, verbose: false);
+        var emittedResources = 0;
+        var emittedLists = 0;
 
         for (var index = 0; index < 4601; index++)
         {
-            writer.WriteLine(
-                "[graphics] Resource view: dimension=3, width=32, layout=0x0, address=0x1000 (CPU backing only).");
+            if (sampling.ShouldEmitResourceView())
+            {
+                emittedResources++;
+            }
         }
 
         for (var index = 0; index < 625; index++)
         {
-            writer.WriteLine("[graphics] Command list type 0 created.");
+            if (sampling.ShouldEmitCommandList(0, out _))
+            {
+                emittedLists++;
+            }
         }
 
-        writer.WriteLine("[graphics] Command list type 0 creation failed.");
-
-        writer.WriteLine("[graphics] Resource view: dimension=3 refused.");
-
-        writer.WriteLine("[audio] untouched");
-
-        writer.Report();
-
-        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
-
-        Require(lines.Count(line => line.EndsWith(" (CPU backing only).", StringComparison.Ordinal)) == 14,
-            "Resource success samples");
-
-        Require(lines.Count(line => line == "[graphics] Command list type 0 created.") == 11,
-            "Command list success samples");
-
-        Require(lines.Contains("[graphics] Command list type 0 creation failed."), "Errors preserved");
-
-        Require(lines.Contains("[graphics] Resource view: dimension=3 refused."), "Refusals preserved");
-
-        Require(lines.Contains("[audio] untouched"), "Unrelated messages preserved");
-
-        Require(string.Equals(lines[^1],
+        Require(emittedResources == 14, "Resource success samples");
+        Require(emittedLists == 11, "Command list success samples");
+        Require(sampling.FormatSummary() ==
                 "[performance] IRX-R50-LOG: resourceLines=4601; resourceEmitted=14; listLines=625; listEmitted=11.",
-                StringComparison.Ordinal), $"Summary counters: {lines[^1]}");
+            "Sampling summary");
+
+        var perKind = new GraphicsLogSampling(sampleGraphics: false, sampleListKinds: true, verbose: false);
+        for (var index = 1; index <= 4; index++)
+        {
+            Require(perKind.ShouldEmitCommandList(0, out var kindCount) && kindCount == index,
+                "Command list kind initial samples");
+        }
+
+        Require(!perKind.ShouldEmitCommandList(0, out _), "Command list kind sample skipped");
+        Require(perKind.ShouldEmitCommandList(1, out var secondKindCount) && secondKindCount == 1,
+            "Each command list kind has an independent sequence");
+        Require(perKind.ShouldEmitCommandList(uint.MaxValue, out var unknownKindCount) && unknownKindCount == 0,
+            "Unknown command list kinds avoid the per-kind counter");
+
+        var verbose = new GraphicsLogSampling(sampleGraphics: true, sampleListKinds: true, verbose: true);
+        Require(!verbose.Enabled, "Verbose logging disables success sampling");
+        for (var index = 0; index < 9; index++)
+        {
+            Require(verbose.ShouldEmitResourceView() && verbose.ShouldEmitCommandList(0, out var kindCount) &&
+                    kindCount == 0, "Verbose logging emits every original success message");
+        }
     }
 
     private static void Require(bool condition, string message)

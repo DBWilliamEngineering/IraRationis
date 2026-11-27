@@ -2,4 +2,4 @@
 
 namespace IraRationis.Media.Decoding.Models;
 
-internal sealed record MediaFoundationDecoderAudioPayload(long Start, short[] Samples);
+internal sealed unsafe record MediaFoundationDecoderAudioPayload(long Start, short[] Samples);

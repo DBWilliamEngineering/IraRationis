@@ -5,22 +5,22 @@ using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
 using IraRationis.HLE.Runtime.Diagnostics.Models;
 
-namespace IraRationis.HLE.Runtime.Diagnostics;
+namespace IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeTrace;
 
 internal sealed partial class RuntimeBridgeTrace
 {
     private const int MaximumWriterFailures = 3;
     private const int MaximumDetailCharacters = 2048;
     private static readonly int OperationCount = Enum.GetValues<RuntimeBridgeOperation>().Length;
-    private readonly long[] _completedCounts = new long[OperationCount];
-    private readonly int _perOperationLimit;
-    private readonly long[] _startedCounts = new long[OperationCount];
 
     private readonly TextWriter _writer;
+    private readonly int _perOperationLimit;
     private readonly object _writerGate = new();
+    private readonly long[] _startedCounts = new long[OperationCount];
+    private readonly long[] _completedCounts = new long[OperationCount];
     private long _noteCount;
-    private int _summaryWritten;
     private int _writerFailures;
+    private int _summaryWritten;
 
     internal RuntimeBridgeTrace(TextWriter writer, int perOperationLimit = 128)
     {
@@ -80,7 +80,7 @@ internal sealed partial class RuntimeBridgeTrace
             var operationIndex = (int)operation;
 
             if ((uint)operationIndex >= (uint)OperationCount || callId <= 0
-                                                             || (callId - 1) % OperationCount != operationIndex)
+                || (callId - 1) % OperationCount != operationIndex)
             {
                 return;
             }
@@ -209,8 +209,8 @@ internal sealed partial class RuntimeBridgeTrace
                 var detailText = LimitDetails(details);
 
                 _writer.WriteLine($"[runtime-bridge] utc={DateTime.UtcNow:O} ticks={Stopwatch.GetTimestamp()} "
-                                  + $"frequency={Stopwatch.Frequency} pid={Environment.ProcessId} nativeTid={nativeThreadId} "
-                                  + $"{record} {detailText}");
+                    + $"frequency={Stopwatch.Frequency} pid={Environment.ProcessId} nativeTid={nativeThreadId} "
+                    + $"{record} {detailText}");
             }
             catch
             {

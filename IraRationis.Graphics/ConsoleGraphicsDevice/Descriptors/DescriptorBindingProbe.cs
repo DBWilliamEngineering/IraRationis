@@ -2,13 +2,13 @@
 
 using System.Runtime.InteropServices;
 using System.Text;
+using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Descriptors;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Resources.Models;
-using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -18,19 +18,19 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Original authored fixture. No guest shader, descriptor or memory translation.
     private const string DescriptorProbeShader = """
-                                                 cbuffer Parameters : register(b0)
-                                                 {
-                                                     uint Addend;
-                                                 };
-                                                 Buffer<uint> Input : register(t0);
-                                                 RWBuffer<uint> Output : register(u0);
+        cbuffer Parameters : register(b0)
+        {
+            uint Addend;
+        };
+        Buffer<uint> Input : register(t0);
+        RWBuffer<uint> Output : register(u0);
 
-                                                 [numthreads(4, 1, 1)]
-                                                 void main(uint3 id : SV_DispatchThreadID)
-                                                 {
-                                                     Output[id.x] = Input[id.x] + Addend;
-                                                 }
-                                                 """;
+        [numthreads(4, 1, 1)]
+        void main(uint3 id : SV_DispatchThreadID)
+        {
+            Output[id.x] = Input[id.x] + Addend;
+        }
+        """;
 
     internal static void VerifyDescriptorTables(nint guestQueue)
     {
@@ -55,7 +55,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         try
         {
             using var utility = AcquireUtilityContext(DescriptorProbeUploadBytes,
-                2 * DescriptorTableCache.DescriptorsPerTable, true);
+                2 * DescriptorTableCache.DescriptorsPerTable, versioned: true);
 
             var input = CreateDescriptorProbeUploadData();
 
@@ -65,8 +65,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             CheckHostResult(CreateHostResource(outputDescription, 1, 0, &output), "R52 UAV allocation");
 
-            CheckHostResult(
-                CreateHostResource(HostBufferDescription(DescriptorProbeOutputBytes), 3, CopyDestination, &readback),
+            CheckHostResult(CreateHostResource(HostBufferDescription(DescriptorProbeOutputBytes), 3, CopyDestination, &readback),
                 "R52 readback allocation");
 
             RequireHostObject(output, "R52 output");
@@ -92,8 +91,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             // Each ordinal is published only after the actual host fence wait succeeds.
             // These are private serial probe ordinals, not the host fence's native values.
-            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 1, input,
-                [9, 11, 13, 15]);
+            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 1, input, [9, 11, 13, 15]);
 
             var initialBytes = utility.LastUploadBytes;
 
@@ -101,8 +99,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             MemoryMarshal.Cast<byte, uint>(input.AsSpan())[0] = 8;
 
-            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 2, input,
-                [10, 12, 14, 16]);
+            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 2, input, [10, 12, 14, 16]);
 
             var changedBytes = utility.LastUploadBytes;
 
@@ -110,15 +107,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             MemoryMarshal.Cast<byte, uint>(input.AsSpan())[0] = 7;
 
-            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, second, 3, input,
-                [29, 39, 49, 59]);
+            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, second, 3, input, [29, 39, 49, 59]);
 
             var restoredBytes = utility.LastUploadBytes;
 
             utility.Reset();
 
-            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 4, input,
-                [9, 11, 13, 15]);
+            ExecuteDescriptorTableProbe(queue, utility, root, pipeline, output, readback, cache, first, 4, input, [9, 11, 13, 15]);
 
             if (initialBytes is not (0 or DescriptorProbeUploadBytes) || changedBytes != 256 || restoredBytes != 256 ||
                 utility.LastUploadBytes != 0)
@@ -250,8 +245,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             if (submitted && !completed)
             {
-                Environment.FailFast("R52 GPU completion is unproven; refusing descriptor/resource release.",
-                    exception);
+                Environment.FailFast("R52 GPU completion is unproven; refusing descriptor/resource release.", exception);
             }
 
             if (!submitted)
@@ -322,8 +316,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         try
         {
-            if (mapped == null
-                || !new ReadOnlySpan<uint>(mapped, DescriptorProbeOutputBytes / sizeof(uint)).SequenceEqual(expected))
+            if (mapped == null || !new ReadOnlySpan<uint>(mapped, DescriptorProbeOutputBytes / sizeof(uint)).SequenceEqual(expected))
             {
                 throw new InvalidOperationException("R52 CBV/SRV/UAV compute readback differs from expected values.");
             }

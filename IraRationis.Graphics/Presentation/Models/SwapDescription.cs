@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct SwapDescription
+internal unsafe struct SwapDescription
 {
     public uint Width, Height, Format;
     public int Stereo;

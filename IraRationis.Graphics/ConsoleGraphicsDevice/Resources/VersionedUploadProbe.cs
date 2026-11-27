@@ -3,7 +3,7 @@
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {

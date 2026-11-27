@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Commands.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct RecordedBufferView
+internal unsafe struct RecordedBufferView
 {
     public ulong Address;
     public uint Size;

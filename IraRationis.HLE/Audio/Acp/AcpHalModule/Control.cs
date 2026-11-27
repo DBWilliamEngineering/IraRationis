@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Audio.Acp.Models;
 
-namespace IraRationis.HLE.Audio.Acp;
+namespace IraRationis.HLE.Audio.Acp.AcpHalModule;
 
 public static unsafe partial class AcpHalModule
 {

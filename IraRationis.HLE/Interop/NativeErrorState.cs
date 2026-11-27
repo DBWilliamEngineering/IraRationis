@@ -12,15 +12,9 @@ internal readonly struct NativeErrorState
         PInvokeError = pinvokeError;
     }
 
-    internal int SystemError
-    {
-        get;
-    }
+    internal int SystemError { get; }
 
-    internal int PInvokeError
-    {
-        get;
-    }
+    internal int PInvokeError { get; }
 
     internal static NativeErrorState Capture()
     {

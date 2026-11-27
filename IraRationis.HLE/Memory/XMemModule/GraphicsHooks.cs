@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-namespace IraRationis.HLE.Memory;
+namespace IraRationis.HLE.Memory.XMemModule;
 
 public static partial class XMemModule
 {

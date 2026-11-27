@@ -8,4 +8,5 @@ public sealed record RectangleShaderPair(
     string PixelSource,
     uint Register,
     uint Space,
-    bool IndexedArray = false);
+    bool IndexedArray = false,
+    bool SamplesDualMasks = false);

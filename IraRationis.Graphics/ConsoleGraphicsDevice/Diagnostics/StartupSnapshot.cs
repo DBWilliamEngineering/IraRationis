@@ -2,7 +2,7 @@
 
 using IraRationis.Graphics.Diagnostics.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {

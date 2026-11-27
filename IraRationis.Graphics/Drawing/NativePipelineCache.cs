@@ -2,22 +2,22 @@
 
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Drawing.Models;
+using GraphicsDevice = global::IraRationis.Graphics.ConsoleGraphicsDevice.ConsoleGraphicsDevice;
 
 namespace IraRationis.Graphics.Drawing;
 
 // Cache references are independent of recorded command-list references.
 // Eviction cannot retire an object still owned by a recording.
 // Only immutable native pipeline objects are cached; bindings remain per list.
-internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
+internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : class
     where TValue : class
 {
     private const int Capacity = 64;
-    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>>
-        _entries = new();
+    private readonly Dictionary<(nint Device, TKey Metadata), LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>> _entries = new();
+    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
     private readonly Lock _gate = new();
     private readonly Func<TValue, (nint Root, nint Pipeline)> _handles;
     private readonly string _name;
-    private readonly LinkedList<NativePipelineCacheEntry<TKey, TValue>> _recency = new();
     private long _hits, _misses, _evictions;
 
     public NativePipelineCache(string name, Func<TValue, (nint Root, nint Pipeline)> handles)
@@ -35,16 +35,16 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
 
         lock (_gate)
         {
-            if (_entries.TryGetValue(((nint)ConsoleGraphicsDevice._host, metadata), out var entry))
+            if (_entries.TryGetValue(((nint)GraphicsDevice._host, metadata), out var entry))
             {
                 // Reserve recording storage before acquiring its two references.
                 _ = state.HostViews.EnsureCapacity(checked(state.HostViews.Count + 2));
 
                 var handles = _handles(entry.Value.Value);
 
-                ConsoleGraphicsDevice.RetainHostObject(handles.Root);
+                GraphicsDevice.RetainHostObject(handles.Root);
 
-                ConsoleGraphicsDevice.RetainHostObject(handles.Pipeline);
+                GraphicsDevice.RetainHostObject(handles.Pipeline);
 
                 state.HostViews.Add(handles.Root);
 
@@ -70,11 +70,9 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
         // Never hold the native cache lock while writing diagnostics.
         var observations = value is null ? misses : hits;
 
-        if (ConsoleGraphicsDevice.EnableVerboseGraphics || observations <= 2
-                                                        || (observations & (observations - 1)) == 0)
+        if (GraphicsDevice.EnableVerboseGraphics || observations <= 2 || (observations & (observations - 1)) == 0)
         {
-            Console.Error.WriteLine(
-                $"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
+            Console.Error.WriteLine($"[graphics] IRX-R69-PSO: name={_name}; hits={hits}; misses={misses}; evictions={evictions}; entries={count}.");
         }
 
         return value;
@@ -84,7 +82,7 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
     {
         lock (_gate)
         {
-            var key = ((nint)ConsoleGraphicsDevice._host, metadata);
+            var key = ((nint)GraphicsDevice._host, metadata);
 
             if (_entries.TryGetValue(key, out var existing))
             {
@@ -93,13 +91,12 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
                 return;
             }
 
-            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(
-                new NativePipelineCacheEntry<TKey, TValue>(key, value));
+            var node = new LinkedListNode<NativePipelineCacheEntry<TKey, TValue>>(new NativePipelineCacheEntry<TKey, TValue>(key, value));
             var handles = _handles(value);
 
-            ConsoleGraphicsDevice.RetainHostObject(handles.Root);
+            GraphicsDevice.RetainHostObject(handles.Root);
 
-            ConsoleGraphicsDevice.RetainHostObject(handles.Pipeline);
+            GraphicsDevice.RetainHostObject(handles.Pipeline);
 
             try
             {
@@ -107,9 +104,9 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
             }
             catch
             {
-                _ = ConsoleGraphicsDevice.HostRelease(handles.Pipeline);
+                _ = GraphicsDevice.HostRelease(handles.Pipeline);
 
-                _ = ConsoleGraphicsDevice.HostRelease(handles.Root);
+                _ = GraphicsDevice.HostRelease(handles.Root);
 
                 throw;
             }
@@ -129,9 +126,9 @@ internal sealed class NativePipelineCache<TKey, TValue> where TKey : class
 
                 // Release the cache's references only. Recording ownership
                 // and existing completion boundaries remain unchanged.
-                _ = ConsoleGraphicsDevice.HostRelease(retired.Pipeline);
+                _ = GraphicsDevice.HostRelease(retired.Pipeline);
 
-                _ = ConsoleGraphicsDevice.HostRelease(retired.Root);
+                _ = GraphicsDevice.HostRelease(retired.Root);
             }
         }
     }

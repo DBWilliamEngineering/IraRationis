@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Resources.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -134,10 +134,9 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             switch (placed)
             {
-                case true when placement.Address % DescriptorStride(description->Kind) != 0
-                               || !DescriptorRange(placement.Address, size, true):
+                case true when (placement.Address % DescriptorStride(description->Kind) != 0
+                                || !DescriptorRange(placement.Address, size, true)):
                     return InvalidArgument;
-
                 case false:
                 {
                     owned = AllocateBacking(size, 64);

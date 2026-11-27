@@ -15,13 +15,13 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
     private const int CompleteSlot = 10;
     private const int GetResultSlot = 11;
     private const int SubmitCallbackSlot = 18;
+    private readonly object _lifetimeGate = new();
     private readonly delegate* unmanaged[Stdcall]<nint, uint> _addReference;
+    private readonly delegate* unmanaged[Stdcall]<nint, uint> _releaseReference;
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nint, byte*, nint, int> _begin;
+    private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int> _schedule;
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void> _complete;
     private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int> _getResult;
-    private readonly object _lifetimeGate = new();
-    private readonly delegate* unmanaged[Stdcall]<nint, uint> _releaseReference;
-    private readonly delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int> _schedule;
     private readonly delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, int> _submitCallback;
     private nint _interfaceObject;
 
@@ -40,13 +40,10 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
 
         var methods = *(nint**)interfaceObject;
 
-        if (methods == null || methods[AddReferenceSlot] == 0 || methods[ReleaseReferenceSlot] == 0
-            || methods[BeginSlot] == 0 ||
-            methods[ScheduleSlot] == 0 || methods[CompleteSlot] == 0 || methods[GetResultSlot] == 0
-            || methods[SubmitCallbackSlot] == 0)
+        if (methods == null || methods[AddReferenceSlot] == 0 || methods[ReleaseReferenceSlot] == 0 || methods[BeginSlot] == 0 ||
+            methods[ScheduleSlot] == 0 || methods[CompleteSlot] == 0 || methods[GetResultSlot] == 0 || methods[SubmitCallbackSlot] == 0)
         {
-            throw new ArgumentException("The runtime async interface is missing a required method.",
-                nameof(interfaceObject));
+            throw new ArgumentException("The runtime async interface is missing a required method.", nameof(interfaceObject));
         }
 
         _addReference = (delegate* unmanaged[Stdcall]<nint, uint>)methods[AddReferenceSlot];
@@ -54,35 +51,9 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
         _begin = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nint, byte*, nint, int>)methods[BeginSlot];
         _schedule = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, uint, int>)methods[ScheduleSlot];
         _complete = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, int, nuint, void>)methods[CompleteSlot];
-        _getResult =
-            (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)methods[GetResultSlot];
+        _getResult = (delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint, nuint, nint, nuint*, int>)methods[GetResultSlot];
         _submitCallback = (delegate* unmanaged[Stdcall]<nint, nint, uint, nint, nint, int>)methods[SubmitCallbackSlot];
         _interfaceObject = interfaceObject;
-    }
-
-    public void Dispose()
-    {
-        var errors = NativeErrorState.Capture();
-
-        try
-        {
-            nint interfaceObject;
-
-            lock (_lifetimeGate)
-            {
-                interfaceObject = _interfaceObject;
-                _interfaceObject = 0;
-            }
-
-            if (interfaceObject != 0)
-            {
-                _releaseReference(interfaceObject);
-            }
-        }
-        finally
-        {
-            errors.Restore();
-        }
     }
 
     internal int Begin(XAsyncBlock* asyncBlock, nint context, nint identity, byte* identityName, nint providerCallback)
@@ -152,6 +123,31 @@ internal sealed unsafe class HostRuntimeAsyncService : IDisposable
         finally
         {
             ReleaseAfterCall(interfaceObject);
+        }
+    }
+
+    public void Dispose()
+    {
+        var errors = NativeErrorState.Capture();
+
+        try
+        {
+            nint interfaceObject;
+
+            lock (_lifetimeGate)
+            {
+                interfaceObject = _interfaceObject;
+                _interfaceObject = 0;
+            }
+
+            if (interfaceObject != 0)
+            {
+                _releaseReference(interfaceObject);
+            }
+        }
+        finally
+        {
+            errors.Restore();
         }
     }
 

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace IraRationis.HLE.Runtime.Diagnostics;
 
-internal static partial class RuntimeBridgeNativeMethods
+internal static unsafe partial class RuntimeBridgeNativeMethods
 {
     internal static string? GetModulePath(nint module)
     {

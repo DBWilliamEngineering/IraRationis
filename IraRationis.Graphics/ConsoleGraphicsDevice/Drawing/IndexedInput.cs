@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Drawing.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static partial class ConsoleGraphicsDevice
 {

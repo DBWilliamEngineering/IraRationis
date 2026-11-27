@@ -3,10 +3,13 @@
 using System.Buffers;
 using IraRationis.Graphics.Commands;
 using IraRationis.Graphics.Commands.Models;
+using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
+using IraRationis.Graphics.Textures;
 using IraRationis.Graphics.Textures.Models;
+using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -148,8 +151,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
     // Extend the existing native resource round-trip probe. Original RGBA8 data,
     // two unequal mip extents, nonzero placement, pitched rows and a real GPU copy.
-    private static void VerifyHostTextureTransfers(nint queue, bool deferUpload = false, uint storageFormat = 28,
-        uint copyFormat = 28)
+    private static void VerifyHostTextureTransfers(nint queue, bool deferUpload = false, uint storageFormat = 28, uint copyFormat = 28)
     {
         const int bytes = 2048;
 
@@ -201,20 +203,128 @@ public static unsafe partial class ConsoleGraphicsDevice
             Format = storageFormat,
             SampleCount = 1
         };
+
+        using var utility = AcquireUtilityContext(bytes, 0, versioned: true);
+        utility.PrepareVersionedUpload(data);
+        VerifyHostTextureRoundTrip(queue, description, footprints, data, utility, deferUpload);
+
+        Console.WriteLine(storageFormat != 28
+            ? $"[graphics-probe] R77 color storage readback passed: storage={storageFormat}; footprint={copyFormat}."
+            : deferUpload
+                ? "[graphics-probe] R76 ordered texture upload and subsequent same-queue readback passed."
+                : "[graphics-probe] IRX-R57: mips=2; activeBytes=164; readback=verified; invalidFootprints=rejected.");
+    }
+
+    private static void VerifyTiledBc3Transfer(nint queue)
+    {
+        const uint linearFormat = (uint)DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
+        const uint srgbFormat = (uint)DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
+        const uint typelessFormat = (uint)DXGI_FORMAT.DXGI_FORMAT_BC3_TYPELESS;
+        const uint rowPitch = 128 * 16;
+        const int bytes = (int)rowPitch * 117;
+
+        var description = new ResourceDescription
+        {
+            Dimension = 3,
+            Width = 512,
+            Height = 468,
+            DepthOrArraySize = 1,
+            MipLevels = 1,
+            Format = linearFormat,
+            SampleCount = 1,
+            Layout = 0x105,
+            Flags = 0x300000
+        };
+
+        var typeless = description;
+        typeless.Format = typelessFormat;
+
+        if (!HostTextureViewFormats.IsSampledCompatible(typeless, linearFormat) ||
+            !HostTextureViewFormats.IsSampledCompatible(typeless, srgbFormat) ||
+            HostTextureViewFormats.IsSampledCompatible(description, srgbFormat) ||
+            !HostTextureViewFormats.TryGetColorCopyFormat(typelessFormat, out var copyFormat) || copyFormat != linearFormat)
+        {
+            throw new InvalidOperationException("BC3 storage and typed view compatibility regressed.");
+        }
+
+        var footprint = new HostTextureTransferFootprint(0, linearFormat, 512, 468, rowPitch, 0);
+        var partialEdgeFootprint = footprint with { Width = 509, Height = 465 };
+
+        if (!TryHostTextureTransferRange(partialEdgeFootprint, bytes, out var rows, out var rowBytes) ||
+            rows != 117 || rowBytes != rowPitch ||
+            TryHostTextureTransferRange(partialEdgeFootprint, bytes - 1, out _, out _))
+        {
+            throw new InvalidOperationException("BC3 transfer did not account for partially covered edge blocks.");
+        }
+
+        if (!SupportsHostTextureSampling(linearFormat))
+        {
+            Console.WriteLine("[graphics-probe] BC3 footprint and view contracts passed (CPU only); GPU format unavailable.");
+            return;
+        }
+
+        if (!TryPlanTextureTexture(description, out var plan) || plan == null ||
+            plan.Bytes != bytes || plan.Pitches.Length != 1 || plan.Pitches[0] != rowPitch || plan.Offsets[0] != 0)
+        {
+            throw new InvalidOperationException("Tiled BC3 texture upload footprint differs from the authored block extent.");
+        }
+
+        var linear = new byte[bytes];
+        new Random(0x105).NextBytes(linear);
+        var tiled = new byte[checked((int)plan.Layout.Size)];
+        WriteAuthoredTiledTexture(description, linear, tiled, rowPitch);
+
+        using var utility = AcquireUtilityContext(bytes, 0);
+
+        if (!PrepareHostTextureUpload(utility, plan, tiled))
+        {
+            throw new InvalidOperationException("Tiled BC3 texture upload preparation failed.");
+        }
+
+        description.Layout = 0;
+        description.Flags = 0;
+        VerifyHostTextureRoundTrip(queue, description, [footprint], linear, utility, deferUpload: true);
+        Console.WriteLine("[graphics-probe] Tiled BC3 blocks passed ordered GPU upload and readback (512x468, layout 0x105).");
+    }
+
+    private static void WriteAuthoredTiledTexture(ResourceDescription description, byte[] linear, byte[] tiled, uint rowPitch)
+    {
+        var create = (delegate* unmanaged[Stdcall]<ResourceDescription*, nint*, int>)TextureComputer.CreateAddress;
+        nint computer = 0;
+
+        CheckHostResult(create(&description, &computer), "authored texture computer creation");
+        RequireHostObject(computer, "authored texture computer");
+
+        try
+        {
+            var tile = (delegate* unmanaged[Stdcall]<nint, byte*, uint, uint, byte*, uint, uint, int>)Slot(computer, 8);
+
+            fixed (byte* input = linear, output = tiled)
+            {
+                CheckHostResult(tile(computer, output, 0, 0, input, rowPitch, 0), "authored texture tiling");
+            }
+        }
+        finally
+        {
+            _ = ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(computer, 1))(computer);
+        }
+    }
+
+    private static void VerifyHostTextureRoundTrip(nint queue, ResourceDescription description,
+        ReadOnlySpan<HostTextureTransferFootprint> footprints, ReadOnlySpan<byte> expected, UtilityContext utility,
+        bool deferUpload)
+    {
+        var bytes = checked((ulong)expected.Length);
         nint texture = 0, readback = 0;
 
         try
         {
-            CheckHostResult(CreateHostResource(description, 1, 0, &texture), "R57 host texture");
-            RequireHostObject(texture, "R57 host texture");
+            CheckHostResult(CreateHostResource(description, 1, 0, &texture), "probe host texture");
+            RequireHostObject(texture, "probe host texture");
 
             CheckHostResult(CreateHostResource(HostBufferDescription(bytes), 3, CopyDestination, &readback),
-                "R57 host texture readback");
-            RequireHostObject(readback, "R57 host texture readback");
-
-            using var utility = AcquireUtilityContext(bytes, 0, true);
-
-            utility.PrepareVersionedUpload(data);
+                "probe host texture readback");
+            RequireHostObject(readback, "probe host texture readback");
 
             var list = utility.List;
 
@@ -222,7 +332,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             foreach (var footprint in footprints)
             {
-                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, true);
+                RecordHostTextureTransfer(list, texture, utility.Upload, bytes, footprint, upload: true);
             }
 
             if (deferUpload)
@@ -235,9 +345,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 TransitionHostResource(consumerList, texture, 0, CopySource);
                 foreach (var footprint in footprints)
                 {
-                    RecordHostTextureTransfer(consumerList, texture, readback, bytes, footprint, false);
+                    RecordHostTextureTransfer(consumerList, texture, readback, bytes, footprint, upload: false);
                 }
-
                 TransitionHostResource(consumerList, texture, CopySource, 0);
                 consumer.SubmitAndWait(queue);
                 ordered.CompleteAfterFence();
@@ -247,35 +356,34 @@ public static unsafe partial class ConsoleGraphicsDevice
                 TransitionHostResource(list, texture, CopyDestination, CopySource);
                 foreach (var footprint in footprints)
                 {
-                    RecordHostTextureTransfer(list, texture, readback, bytes, footprint, false);
+                    RecordHostTextureTransfer(list, texture, readback, bytes, footprint, upload: false);
                 }
-
                 TransitionHostResource(list, texture, CopySource, 0);
                 utility.SubmitAndWait(queue);
             }
 
-            var read = new HostRange { End = bytes };
+            var read = new HostRange { End = (nuint)bytes };
             var noWrite = default(HostRange);
             var mapped = (void*)null;
             var map = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void**, int>)Slot(readback, 8);
             var unmap = (delegate* unmanaged[Stdcall]<nint, uint, HostRange*, void>)Slot(readback, 9);
 
-            CheckHostResult(map(readback, 0, &read, &mapped), "R57 readback map");
+            CheckHostResult(map(readback, 0, &read, &mapped), "probe texture readback map");
 
             try
             {
                 if (mapped == null)
                 {
-                    throw new InvalidOperationException("R57 readback mapping is null.");
+                    throw new InvalidOperationException("Probe texture readback mapping is null.");
                 }
 
-                var result = new ReadOnlySpan<byte>(mapped, bytes);
+                var result = new ReadOnlySpan<byte>(mapped, expected.Length);
 
                 foreach (var footprint in footprints)
                 {
                     if (!TryHostTextureTransferRange(footprint, bytes, out var rows, out var rowBytes))
                     {
-                        throw new InvalidOperationException("R57 footprint invalid during verification.");
+                        throw new InvalidOperationException("Probe texture transfer footprint became invalid.");
                     }
 
                     for (var row = 0U; row < rows; row++)
@@ -283,9 +391,9 @@ public static unsafe partial class ConsoleGraphicsDevice
                         var offset = (int)(footprint.Offset + (ulong)row * footprint.RowPitch);
                         var count = (int)rowBytes;
 
-                        if (!result.Slice(offset, count).SequenceEqual(data.AsSpan(offset, count)))
+                        if (!result.Slice(offset, count).SequenceEqual(expected.Slice(offset, count)))
                         {
-                            throw new InvalidOperationException("R57 GPU texture readback differs.");
+                            throw new InvalidOperationException($"GPU texture readback differs at subresource {footprint.Subresource}, row {row}.");
                         }
                     }
                 }
@@ -294,12 +402,6 @@ public static unsafe partial class ConsoleGraphicsDevice
             {
                 unmap(readback, 0, &noWrite);
             }
-
-            Console.WriteLine(storageFormat != 28
-                ? $"[graphics-probe] R77 color storage readback passed: storage={storageFormat}; footprint={copyFormat}."
-                : deferUpload
-                    ? "[graphics-probe] R76 ordered texture upload and subsequent same-queue readback passed."
-                    : "[graphics-probe] IRX-R57: mips=2; activeBytes=164; readback=verified; invalidFootprints=rejected.");
         }
         finally
         {

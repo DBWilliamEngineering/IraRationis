@@ -1,43 +1,43 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Text;
+using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Descriptors.Models;
 using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Media.Models;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Textures;
-using TerraFX.Interop.DirectX;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
     internal const string Nv12ConversionShader = """
-                                                 Texture2D<float> Luma : register(t0);
-                                                 Texture2D<float2> Chroma : register(t1);
-                                                 RWByteAddressBuffer Output : register(u0);
+                                                Texture2D<float> Luma : register(t0);
+                                                Texture2D<float2> Chroma : register(t1);
+                                                RWByteAddressBuffer Output : register(u0);
 
-                                                 [numthreads(8, 8, 1)]
-                                                 void main(uint3 id : SV_DispatchThreadID)
-                                                 {
-                                                     uint width, height;
-                                                     Luma.GetDimensions(width, height);
+                                                [numthreads(8, 8, 1)]
+                                                void main(uint3 id : SV_DispatchThreadID)
+                                                {
+                                                    uint width, height;
+                                                    Luma.GetDimensions(width, height);
 
-                                                     if (id.x >= width || id.y >= height)
-                                                     {
-                                                         return;
-                                                     }
+                                                    if (id.x >= width || id.y >= height)
+                                                    {
+                                                        return;
+                                                    }
 
-                                                     int c = (int)round(Luma.Load(int3(id.xy, 0)) * 255.0) - 16;
-                                                     int2 uv = (int2)round(Chroma.Load(int3(id.xy / 2, 0)) * 255.0) - 128;
+                                                    int c = (int)round(Luma.Load(int3(id.xy, 0)) * 255.0) - 16;
+                                                    int2 uv = (int2)round(Chroma.Load(int3(id.xy / 2, 0)) * 255.0) - 128;
 
-                                                     uint b = (uint)clamp((298 * c + 541 * uv.x + 128) >> 8, 0, 255);
-                                                     uint g = (uint)clamp((298 * c - 55 * uv.x - 136 * uv.y + 128) >> 8, 0, 255);
-                                                     uint r = (uint)clamp((298 * c + 459 * uv.y + 128) >> 8, 0, 255);
+                                                    uint b = (uint)clamp((298 * c + 541 * uv.x + 128) >> 8, 0, 255);
+                                                    uint g = (uint)clamp((298 * c - 55 * uv.x - 136 * uv.y + 128) >> 8, 0, 255);
+                                                    uint r = (uint)clamp((298 * c + 459 * uv.y + 128) >> 8, 0, 255);
 
-                                                     Output.Store((id.y * width + id.x) * 4, b | (g << 8) | (r << 16) | 0xFF000000u);
-                                                 }
-                                                 """;
+                                                    Output.Store((id.y * width + id.x) * 4, b | (g << 8) | (r << 16) | 0xFF000000u);
+                                                }
+                                                """;
 
     /// <summary>
     ///     Converts independently supplied, limited-range BT.709 NV12 using a real two-plane
@@ -159,8 +159,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             outputDescription.Flags = 4; // ALLOW_UNORDERED_ACCESS
 
             output = CreateHostTransferResource(device, outputDescription, 1, 8); // UNORDERED_ACCESS
-            readback = CreateHostTransferResource(device, HostBufferDescription((ulong)outputBytes), 3,
-                CopyDestination);
+            readback = CreateHostTransferResource(device, HostBufferDescription((ulong)outputBytes), 3, CopyDestination);
 
             CreateNv12ConversionPipeline(device, report, out root, out pipeline);
 
@@ -184,8 +183,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
 
             var yView = new VideoPlaneView { Format = 61, Dimension = 4, Mapping = 5768, MipLevels = 1 };
-            var uvView = new VideoPlaneView
-                { Format = 49, Dimension = 4, Mapping = 5768, MipLevels = 1, PlaneSlice = 1 };
+            var uvView = new VideoPlaneView { Format = 49, Dimension = 4, Mapping = 5768, MipLevels = 1, PlaneSlice = 1 };
 
             // R8_UNORM for plane zero and R8G8_UNORM for plane one of the same resource.
             nativeDevice->CreateShaderResourceView((ID3D12Resource*)texture, (D3D12_SHADER_RESOURCE_VIEW_DESC*)&yView,

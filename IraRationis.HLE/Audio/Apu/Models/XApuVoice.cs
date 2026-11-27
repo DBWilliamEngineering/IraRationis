@@ -5,7 +5,7 @@ using Concentus.Structs;
 
 namespace IraRationis.HLE.Audio.Apu.Models;
 
-internal sealed class XApuVoice(OpusDecoder decoder, int channels)
+internal sealed unsafe class XApuVoice(OpusDecoder decoder, int channels)
 {
     public readonly int Channels = channels;
     public readonly OpusDecoder Decoder = decoder;

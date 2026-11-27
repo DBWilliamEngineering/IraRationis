@@ -2,8 +2,9 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed record RectanglePipeline(
+internal sealed unsafe record RectanglePipeline(
     nint Root,
     nint Pipeline,
     VertexInputElement[] Elements,
-    bool IndexedArray = false);
+    bool IndexedArray = false,
+    bool DualMask = false);

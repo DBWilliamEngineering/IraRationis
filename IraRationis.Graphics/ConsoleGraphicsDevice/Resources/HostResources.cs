@@ -7,7 +7,7 @@ using IraRationis.Graphics.Device.Models;
 using IraRationis.Graphics.Resources;
 using IraRationis.Graphics.Resources.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -45,8 +45,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         *output = 0;
 
-        return ((delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, void*,
-                Guid*,
+        return ((delegate* unmanaged[Stdcall]<nint, GraphicsHeapProperties*, uint, ResourceDescription*, uint, void*, Guid*,
                 nint*, int>)Slot(device, 27))
             (device, &properties, 0, &description, state, null, &iid, output);
     }
@@ -331,24 +330,23 @@ public static unsafe partial class ConsoleGraphicsDevice
                 new ReadOnlySpan<byte>(data, bytes));
 
             VerifyHostTextureTransfers(hostQueue);
-            VerifyHostTextureTransfers(hostQueue, true);
-            if (SupportsUiSampleFormat(65))
+            VerifyHostTextureTransfers(hostQueue, deferUpload: true);
+            VerifyTiledBc3Transfer(hostQueue);
+            if (SupportsHostTextureSampling(65))
             {
-                VerifyHostTextureTransfers(hostQueue, true, 65, 65);
+                VerifyHostTextureTransfers(hostQueue, deferUpload: true, storageFormat: 65, copyFormat: 65);
             }
             else
             {
                 Console.WriteLine("[graphics-probe] R77 A8 sample support unavailable; A8 transfer not tested.");
             }
-
-            if (SupportsUiSampleFormat(61))
+            if (SupportsHostTextureSampling(61))
             {
-                VerifyHostTextureTransfers(hostQueue, true, 60, 61);
+                VerifyHostTextureTransfers(hostQueue, deferUpload: true, storageFormat: 60, copyFormat: 61);
             }
             else
             {
-                Console.WriteLine(
-                    "[graphics-probe] R77 R8 sample support unavailable; typeless R8 transfer not tested.");
+                Console.WriteLine("[graphics-probe] R77 R8 sample support unavailable; typeless R8 transfer not tested.");
             }
 
             VerifyCurveLutGpu(hostQueue);

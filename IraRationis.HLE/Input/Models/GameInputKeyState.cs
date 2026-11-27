@@ -6,4 +6,4 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal readonly record struct GameInputKeyState(uint ScanCode, uint CodePoint, byte VirtualKey, byte DeadKey);
+internal readonly unsafe record struct GameInputKeyState(uint ScanCode, uint CodePoint, byte VirtualKey, byte DeadKey);

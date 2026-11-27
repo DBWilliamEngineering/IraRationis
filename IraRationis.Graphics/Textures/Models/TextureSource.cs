@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal sealed record TextureSource(
+internal sealed unsafe record TextureSource(
     ulong Handle,
     ulong Token,
     uint Kind,

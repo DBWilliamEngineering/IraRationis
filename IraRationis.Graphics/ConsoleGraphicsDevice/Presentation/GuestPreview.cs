@@ -8,7 +8,7 @@ using IraRationis.Graphics.Presentation.Models;
 using IraRationis.Graphics.Resources.Models;
 using IraRationis.Graphics.Textures.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -21,11 +21,10 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static int _previewWarningReported;
     private static readonly bool EnableTextureIntermediatePreview =
         Environment.GetEnvironmentVariable("IRX_PREVIEW_COMPLETED_DRAW") == "1";
-    private static readonly bool EnableGuestPreviewWindow =
-        Environment.GetEnvironmentVariable("IRX_PREVIEW_WINDOW") == "1";
+    private static readonly bool EnableGuestPreviewWindow = Environment.GetEnvironmentVariable("IRX_PREVIEW_WINDOW") == "1";
     internal static readonly bool EnableStartupStatus = EnableGuestPreviewWindow &&
-                                                        Environment.GetEnvironmentVariable("IRX_PREVIEW_STATUS")
-                                                        != "0";
+                                                          Environment.GetEnvironmentVariable("IRX_PREVIEW_STATUS")
+                                                          != "0";
     private static readonly Lock StatusGate = new();
     private static int _compileStarted;
     private static int _compileActive;
@@ -405,7 +404,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(list, resource->HostResource, 0, CopySource);
 
-            RecordHostTextureTransfer(list, resource->HostResource, readback, bytes, footprint, false);
+            RecordHostTextureTransfer(list, resource->HostResource, readback, bytes, footprint, upload: false);
 
             TransitionHostResource(list, resource->HostResource, CopySource, 0);
 
@@ -470,8 +469,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     }
                 }
 
-                return new GuestPreviewFrame(Interlocked.Increment(ref _previewFrameCount), previewWidth, previewHeight,
-                    pixels,
+                return new GuestPreviewFrame(Interlocked.Increment(ref _previewFrameCount), previewWidth, previewHeight, pixels,
                     nonBlack, present);
             }
             finally

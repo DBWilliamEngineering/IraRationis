@@ -4,11 +4,5 @@
 
 namespace IraRationis.Graphics.Textures.Models;
 
-internal readonly record struct LinearSurface(
-    ulong Address,
-    uint Width,
-    uint Height,
-    uint Format,
-    uint PixelBytes,
-    ulong Pitch,
-    long Generation);
+internal readonly unsafe record struct LinearSurface(ulong Address, uint Width, uint Height, uint Format,
+    uint PixelBytes, ulong Pitch, long Generation);

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Input.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct GameInputRawDevice
+internal unsafe struct GameInputRawDevice
 {
     public nint Handle;
     public uint Type;

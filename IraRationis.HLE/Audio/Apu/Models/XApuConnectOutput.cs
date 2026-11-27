@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Audio.Apu.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct XApuConnectOutput
+internal unsafe struct XApuConnectOutput
 {
     public nint Memory;
     public nint Event;

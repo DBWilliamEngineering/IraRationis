@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
-using System.Runtime.InteropServices;
 
 namespace IraRationis.Shaders.Scalar;
 
@@ -44,7 +43,7 @@ public static class ScalarValueGraphProbe
 
             for (var sample = 0; sample < cases; sample++)
             {
-                random.NextBytes(MemoryMarshal.AsBytes(initial.AsSpan()));
+                random.NextBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(initial.AsSpan()));
 
                 initial[ScalarReferenceExecutor.RegisterCount] &= 1;
 
@@ -59,8 +58,7 @@ public static class ScalarValueGraphProbe
 
                 if (!actual.AsSpan().SequenceEqual(expected))
                 {
-                    throw new InvalidOperationException(
-                        $"R65 scalar graph mismatch: program={program}, sample={sample}.");
+                    throw new InvalidOperationException($"R65 scalar graph mismatch: program={program}, sample={sample}.");
                 }
             }
         }
@@ -103,7 +101,6 @@ public static class ScalarValueGraphProbe
             throw new InvalidOperationException("R65 scalar graph borrow was lost across an aliased overwrite.");
         }
 
-        Console.WriteLine(
-            $"[runtime] IRX-R65-CPU: programs={programs}; states={programs * cases}; deadValues={removed}; carryBorrow=verified; reference=verified.");
+        Console.WriteLine($"[runtime] IRX-R65-CPU: programs={programs}; states={programs * cases}; deadValues={removed}; carryBorrow=verified; reference=verified.");
     }
 }

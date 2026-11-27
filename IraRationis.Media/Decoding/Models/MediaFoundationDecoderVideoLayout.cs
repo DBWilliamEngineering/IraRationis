@@ -2,13 +2,7 @@
 
 namespace IraRationis.Media.Decoding.Models;
 
-internal readonly record struct MediaFoundationDecoderVideoLayout(
-    int CodedWidth,
-    int CodedHeight,
-    int X,
-    int Y,
-    int Width,
-    int Height)
+internal readonly unsafe record struct MediaFoundationDecoderVideoLayout(int CodedWidth, int CodedHeight, int X, int Y, int Width, int Height)
 {
     public int CodedBytes
     {

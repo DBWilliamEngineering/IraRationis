@@ -4,4 +4,4 @@
 
 namespace IraRationis.Graphics.Shaders.Models;
 
-internal sealed record ComputePipelineState(nint Root, string Hash, ComputeShaderContainer Shader);
+internal sealed unsafe record ComputePipelineState(nint Root, string Hash, ComputeShaderContainer Shader);

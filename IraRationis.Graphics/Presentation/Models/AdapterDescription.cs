@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Presentation.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct AdapterDescription
+internal unsafe struct AdapterDescription
 {
     public fixed char Name[128];
     public uint Vendor;

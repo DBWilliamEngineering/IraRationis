@@ -4,7 +4,7 @@ using IraRationis.Graphics.Textures.Models;
 
 namespace IraRationis.Graphics.Shaders.Models;
 
-internal sealed record ColorLutComputeBoundary(
+internal sealed unsafe record ColorLutComputeBoundary(
     TextureSource Input,
     TextureSource Output,
     ulong Table,

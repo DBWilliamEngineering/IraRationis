@@ -2,7 +2,7 @@
 
 using IraRationis.Media.Audio;
 
-namespace IraRationis.HLE.Audio.Apu;
+namespace IraRationis.HLE.Audio.Apu.XApuModule;
 
 public static partial class XApuModule
 {

@@ -4,11 +4,10 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using IraRationis.Graphics.Device.Hardware;
-using IraRationis.Graphics.Device.Models;
 using TerraFX.Interop.DirectX;
+using IraRationis.Graphics.Device.Models;
 
-namespace IraRationis.Graphics;
+namespace IraRationis.Graphics.ConsoleGraphicsDevice;
 
 public static unsafe partial class ConsoleGraphicsDevice
 {
@@ -142,32 +141,26 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ReleaseCommandSignature(value);
 
                 return 0;
-
             case 1 when IsQueryHeap(value):
                 ReleaseQueryHeap(value);
 
                 return 0;
-
             case 1 when IsPipeline(value):
                 ReleasePipeline(value);
 
                 return 0;
-
             case 1 when IsRootSignature(value):
                 ReleaseRootSignature(value);
 
                 return 0;
-
             case 1 when IsDescriptorHeap(value):
                 ReleaseDescriptorHeap(value);
 
                 return 0;
-
-            case 1 when IsResource(value) || IsHeap(value):
+            case 1 when (IsResource(value) || IsHeap(value)):
                 ReleaseResourceStorage(value);
 
                 return 0;
-
             case 1 when value != _device && !IsDisplayObject(value):
             {
                 var allocator = IsList(value) ? *(nint*)(value + ListAllocator) : 0;
@@ -417,7 +410,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             var enumerate = (delegate* unmanaged[Stdcall]<nint, uint, uint, Guid*, nint*, int>)Slot(factory, 29);
 
-            for (var index = 0U;; index++)
+            for (var index = 0U; ; index++)
             {
                 var adapter = (nint)0;
 
@@ -432,8 +425,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 {
                     var description = default(DXGI_ADAPTER_DESC1);
 
-                    resultCode = ((delegate* unmanaged[Stdcall]<nint, DXGI_ADAPTER_DESC1*, int>)Slot(adapter, 10))(
-                        adapter,
+                    resultCode = ((delegate* unmanaged[Stdcall]<nint, DXGI_ADAPTER_DESC1*, int>)Slot(adapter, 10))(adapter,
                         &description);
 
                     if (resultCode < 0 || (description.Flags & 2) != 0)
@@ -459,10 +451,10 @@ public static unsafe partial class ConsoleGraphicsDevice
 
                     DetectHostRaytracing();
 
-                    var graphicsCapabilities = HostGraphicsCapabilities.Capture(
+                    var graphicsCapabilities = IraRationis.Graphics.Device.Hardware.HostGraphicsCapabilities.Capture(
                         adapter, name, in description, _hostRaytracingTier, _hostRaytracingShaderModel);
 
-                    HostGraphicsCapabilityReport.WriteTo(Console.Error,
+                    IraRationis.Graphics.Device.Hardware.HostGraphicsCapabilityReport.WriteTo(Console.Error,
                         graphicsCapabilities);
 
                     return 0;
@@ -592,6 +584,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         fields[3] = 1;
 
         return 0;
+
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -630,9 +623,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var id = QueueId;
         var host = (nint)0;
-        var resultCode =
-            ((delegate* unmanaged[Stdcall]<nint, GraphicsQueueDescription*, Guid*, nint*, int>)Slot((nint)_host, 8))(
-                (nint)_host, description, &id, &host);
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, GraphicsQueueDescription*, Guid*, nint*, int>)Slot((nint)_host, 8))(
+            (nint)_host, description, &id, &host);
 
         if (resultCode < 0)
         {
@@ -693,8 +685,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var id = AllocatorId;
         var host = (nint)0;
-        var resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot((nint)_host, 9))(
-            (nint)_host, kind,
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Slot((nint)_host, 9))((nint)_host, kind,
             &id, &host);
 
         if (resultCode < 0)
@@ -838,9 +829,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var id = HostListId;
         var host = (nint)0;
-        var resultCode =
-            ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot((nint)_host, 12))(
-                (nint)_host, nodes, kind, Host(allocator), 0, &id, &host);
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)Slot((nint)_host, 12))(
+            (nint)_host, nodes, kind, Host(allocator), 0, &id, &host);
 
         if (resultCode < 0)
         {
@@ -873,8 +863,7 @@ public static unsafe partial class ConsoleGraphicsDevice
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static int CreateListX(nint self, GraphicsListDescription* description, nint allocator, nint pipeline,
-        Guid* iid,
+    private static int CreateListX(nint self, GraphicsListDescription* description, nint allocator, nint pipeline, Guid* iid,
         nint* output)
     {
         if (description != null)
@@ -923,8 +912,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var host = Host(self);
-        var resultCode =
-            ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)Slot(host, 10))(host, Host(allocator), 0);
+        var resultCode = ((delegate* unmanaged[Stdcall]<nint, nint, nint, int>)Slot(host, 10))(host, Host(allocator), 0);
 
         if (resultCode < 0)
         {
@@ -1065,9 +1053,8 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         _tableInitializationStarted = true;
 
-        if (sizeof(GraphicsObjectHeader) != 16 || sizeof(GraphicsQueueDescription) != 16
-                                               || sizeof(GraphicsListDescription) != 16
-                                               || sizeof(GraphicsHeapProperties) != 20)
+        if (sizeof(GraphicsObjectHeader) != 16 || sizeof(GraphicsQueueDescription) != 16 || sizeof(GraphicsListDescription) != 16
+            || sizeof(GraphicsHeapProperties) != 20)
         {
             Environment.FailFast("Unexpected console graphics ABI structure size.");
         }
@@ -1075,22 +1062,19 @@ public static unsafe partial class ConsoleGraphicsDevice
         var device = NewTable(160);
 
         device[7] = (nint)(delegate* unmanaged[Stdcall]<nint, uint>)&NodeCount;
-        device[8] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsQueueDescription*, Guid*, nint*, int>)&CreateQueue;
+        device[8] = (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsQueueDescription*, Guid*, nint*, int>)&CreateQueue;
         device[9] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)&CreateAllocator;
         device[12] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint, nint, nint, Guid*, nint*, int>)&CreateList;
         device[13] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, void*, uint, int>)&Feature;
         device[15] = (nint)(delegate* unmanaged[Stdcall]<nint, uint, uint>)&Increment;
         device[26] =
-            (nint)(delegate* unmanaged[Stdcall]<GraphicsHeapProperties*, nint, uint, uint, GraphicsHeapProperties*>)
-            &CustomHeap;
+            (nint)(delegate* unmanaged[Stdcall]<GraphicsHeapProperties*, nint, uint, uint, GraphicsHeapProperties*>)&CustomHeap;
 
         device[36] = (nint)(delegate* unmanaged[Stdcall]<nint, ulong, uint, Guid*, nint*, int>)&CreateFence;
         device[48] = (nint)(delegate* unmanaged[Stdcall]<nint, uint*, Guid*, nint*, int>)&CreateQueueX;
 
         device[73] =
-            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsListDescription*, nint, nint, Guid*, nint*, int>)
-            &CreateListX;
+            (nint)(delegate* unmanaged[Stdcall]<nint, GraphicsListDescription*, nint, nint, Guid*, nint*, int>)&CreateListX;
 
         RegisterFrameMethods(device);
         RegisterResourceMethods(device);

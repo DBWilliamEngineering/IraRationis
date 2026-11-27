@@ -2,7 +2,7 @@
 
 namespace IraRationis.Graphics.Drawing.Models;
 
-internal sealed class NativePipelineCacheEntry<TKey, TValue>
+internal sealed unsafe class NativePipelineCacheEntry<TKey, TValue>
     where TKey : class
     where TValue : class
 {

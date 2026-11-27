@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Diagnostics.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct ProbeQueueDescription
+internal unsafe struct ProbeQueueDescription
 {
     public uint Kind;
     public int Priority;

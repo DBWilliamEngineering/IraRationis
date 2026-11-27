@@ -20,13 +20,15 @@ public sealed unsafe class LoadedImage
     private readonly nint _module;
     private bool _bound;
 
-    private LoadedImage(nint module, string path, PeImage info)
+    private LoadedImage(nint module, string path, PreparedImage prepared)
     {
         _module = module;
 
         Path = path;
 
-        Info = info;
+        Info = prepared.Info;
+
+        OriginalHash = prepared.OriginalHash;
     }
 
     public nuint BaseAddress
@@ -43,6 +45,11 @@ public sealed unsafe class LoadedImage
     }
 
     public string Path
+    {
+        get;
+    }
+
+    public string OriginalHash
     {
         get;
     }
@@ -83,7 +90,7 @@ public sealed unsafe class LoadedImage
             throw new Win32Exception(Marshal.GetLastPInvokeError(), $"Cannot map {path}");
         }
 
-        var image = new LoadedImage(module, path, prepared.Info);
+        var image = new LoadedImage(module, path, prepared);
 
         try
         {

@@ -5,9 +5,9 @@ using System.Runtime.InteropServices;
 using IraRationis.HLE.Input.Diagnostics;
 using IraRationis.HLE.Input.Models;
 
-namespace IraRationis.HLE.Input;
+namespace IraRationis.HLE.Input.GameInputModule;
 
-public static partial class GameInputModule
+public static unsafe partial class GameInputModule
 {
     internal static readonly bool TraceInput = Environment.GetEnvironmentVariable("IRX_INPUT_TRACE") == "1";
     internal static readonly InputDiagnosticReport InputDiagnostics = new(TraceInput);

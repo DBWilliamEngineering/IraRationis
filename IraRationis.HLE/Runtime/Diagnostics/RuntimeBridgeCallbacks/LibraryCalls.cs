@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.HLE.Interop;
 
-namespace IraRationis.HLE.Runtime.Diagnostics;
+namespace IraRationis.HLE.Runtime.Diagnostics.RuntimeBridgeCallbacks;
 
-internal static partial class RuntimeBridgeCallbacks
+internal static unsafe partial class RuntimeBridgeCallbacks
 {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint LoadLibrary(char* name)
@@ -85,8 +85,7 @@ internal static partial class RuntimeBridgeCallbacks
 
         incoming.Restore();
 
-        var result =
-            ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
+        var result = ((delegate* unmanaged[Stdcall]<byte*, nint, uint, nint>)_loadLibraryExtendedAnsi)(name, file, flags);
         var outgoing = NativeErrorState.Capture();
 
         try

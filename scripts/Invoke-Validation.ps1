@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = 'artifacts/validation/R74',
+    [string]$OutputDirectory = 'artifacts/validation/component-checks',
     [switch]$NativeOnly,
     [switch]$UnblockReviewedFixtures
 )
@@ -53,6 +53,11 @@ try {
         $dotnet = (Get-Command dotnet.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
         Invoke-IrxStep 'Release build' $dotnet @('build', 'IraRationis.slnx', '-c', 'Release', '-p:Platform=Any CPU') (Join-Path $output 'build.log')
         Invoke-IrxStep 'Runtime contracts' $dotnet @('run', '--project', 'IraRationis.Runtime.Tests', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'contracts.log')
+        Invoke-IrxStep 'Startup evidence contracts' $dotnet @('run', '--project', 'tests/startup-evidence/StartupEvidence.Contracts.csproj', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'startup-evidence.log')
+        Invoke-IrxStep 'Versioned upload contracts' $dotnet @('run', '--project', 'tests/versioned-upload/VersionedUpload.Contracts.csproj', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'versioned-upload.log')
+        Invoke-IrxStep 'Descriptor binding contracts' $dotnet @('run', '--project', 'tests/descriptor-bindings/DescriptorBindings.Contracts.csproj', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'descriptor-bindings.log')
+        Invoke-IrxStep 'Storage payload contracts' $dotnet @('run', '--project', 'tests/storage-contract/StorageContract.csproj', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'storage-contracts.log')
+        Invoke-IrxStep 'Runtime media contracts' $dotnet @('run', '--project', 'tests/runtime-media/RuntimeMedia.csproj', '-c', 'Release', '--no-build', '-p:Platform=AnyCPU') (Join-Path $output 'runtime-media.log')
         Invoke-IrxStep 'Native AOT publish' $dotnet @('publish', 'IraRationis.Cli', '-c', 'Release', '-r', 'win-x64', '-p:Platform=AnyCPU', '-o', $hostDirectory) (Join-Path $output 'publish.log')
     }
     $irx = (Resolve-Path -LiteralPath (Join-Path $hostDirectory 'irx.exe')).Path

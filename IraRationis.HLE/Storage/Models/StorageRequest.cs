@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.HLE.Storage.Models;
 
 [StructLayout(LayoutKind.Explicit, Size = 0x48)]
-internal struct StorageRequest
+internal unsafe struct StorageRequest
 {
     [FieldOffset(0)] public ulong Options;
     [FieldOffset(8)] public nint Destination;

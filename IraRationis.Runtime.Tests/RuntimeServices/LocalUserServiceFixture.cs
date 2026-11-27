@@ -5,6 +5,7 @@ using IraRationis.HLE.Runtime.Services.Async;
 using IraRationis.HLE.Runtime.Services.Async.Models;
 using IraRationis.HLE.Runtime.Services.Users;
 using IraRationis.HLE.Runtime.Services.Users.Models;
+using IraRationis.HLE.Runtime.Services.Users.LocalUserService;
 
 namespace IraRationis.Runtime.Tests.RuntimeServices;
 
@@ -29,29 +30,30 @@ internal sealed unsafe class LocalUserServiceFixture : IDisposable
         AuthoredLocalUserCallbacks.Reset();
     }
 
-    internal AuthoredRuntimeAsyncHost Host
+    internal AuthoredRuntimeAsyncHost Host { get; }
+    internal HostRuntimeAsyncService Async { get; }
+    internal LocalUserService Service { get; }
+    internal nint UserInterface { get; }
+    internal nint GamertagInterface { get; }
+
+    internal nint Method(int offset)
     {
-        get;
+        return (*(nint**)UserInterface)[offset / sizeof(nint)];
     }
 
-    internal HostRuntimeAsyncService Async
+    internal int Add(XAsyncBlock* block, uint options = 0)
     {
-        get;
+        return ((delegate* unmanaged[Stdcall]<nint, uint, XAsyncBlock*, int>)Method(0x38))(UserInterface, options, block);
     }
 
-    internal LocalUserService Service
+    internal int TakeResult(XAsyncBlock* block, nint* handle)
     {
-        get;
+        return ((delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint*, int>)Method(0x40))(UserInterface, block, handle);
     }
 
-    internal nint UserInterface
+    internal void Close(nint handle)
     {
-        get;
-    }
-
-    internal nint GamertagInterface
-    {
-        get;
+        ((delegate* unmanaged[Stdcall]<nint, nint, void>)Method(0x20))(UserInterface, handle);
     }
 
     public void Dispose()
@@ -63,27 +65,5 @@ internal sealed unsafe class LocalUserServiceFixture : IDisposable
 
         Async.Dispose();
         Host.Dispose();
-    }
-
-    internal nint Method(int offset)
-    {
-        return (*(nint**)UserInterface)[offset / sizeof(nint)];
-    }
-
-    internal int Add(XAsyncBlock* block, uint options = 0)
-    {
-        return ((delegate* unmanaged[Stdcall]<nint, uint, XAsyncBlock*, int>)Method(0x38))(UserInterface, options,
-            block);
-    }
-
-    internal int TakeResult(XAsyncBlock* block, nint* handle)
-    {
-        return ((delegate* unmanaged[Stdcall]<nint, XAsyncBlock*, nint*, int>)Method(0x40))(UserInterface, block,
-            handle);
-    }
-
-    internal void Close(nint handle)
-    {
-        ((delegate* unmanaged[Stdcall]<nint, nint, void>)Method(0x20))(UserInterface, handle);
     }
 }

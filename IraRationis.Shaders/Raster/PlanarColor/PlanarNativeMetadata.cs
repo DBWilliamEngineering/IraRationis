@@ -146,7 +146,6 @@ internal static class PlanarNativeMetadata
         try
         {
             ValidateVertex(vertex);
-
             throw new InvalidOperationException("Planar semantic remapping was accepted.");
         }
         catch (NotSupportedException)
@@ -158,7 +157,6 @@ internal static class PlanarNativeMetadata
         try
         {
             ValidatePixel(pixel, code);
-
             throw new InvalidOperationException("Planar non-perspective barycentrics were accepted.");
         }
         catch (NotSupportedException)
@@ -171,7 +169,6 @@ internal static class PlanarNativeMetadata
         try
         {
             ValidatePixel(pixel, code);
-
             throw new InvalidOperationException("Planar export source mutation was accepted.");
         }
         catch (NotSupportedException)
@@ -181,7 +178,6 @@ internal static class PlanarNativeMetadata
         try
         {
             ValidatePixel(pixel.AsSpan(0, PixelMetadataBytes - 1), code);
-
             throw new InvalidOperationException("Truncated planar metadata was accepted.");
         }
         catch (InvalidDataException)

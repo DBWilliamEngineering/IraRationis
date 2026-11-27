@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct DescriptorProbeDescription
+internal unsafe struct DescriptorProbeDescription
 {
     public DescriptorHeapDescription Description;
     public DescriptorPlacement Placement;

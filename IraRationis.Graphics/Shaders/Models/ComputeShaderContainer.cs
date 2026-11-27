@@ -4,7 +4,7 @@
 
 namespace IraRationis.Graphics.Shaders.Models;
 
-internal sealed class ComputeShaderContainer(byte[] bytes)
+internal sealed unsafe class ComputeShaderContainer(byte[] bytes)
 {
     public readonly byte[] Bytes = bytes;
     public int Inspected;

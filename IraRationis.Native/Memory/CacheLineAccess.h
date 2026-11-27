@@ -21,7 +21,7 @@ namespace irx
     }
 
     constexpr bool CanUseResidentPage(bool querySucceeded, bool attributesValid, bool badPage,
-                                      std::uint32_t protection) noexcept
+                                    std::uint32_t protection) noexcept
     {
         constexpr std::uint32_t ordinaryReadWrite = 0x04;
 

@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using IraRationis.Media.Presentation.Models;
 
-namespace IraRationis.Media.Presentation;
+namespace IraRationis.Media.Presentation.WindowsVideoWindow;
 
 /// <summary>Thread-affine Win32 software presenter for decoded BGRA frames.</summary>
 internal sealed unsafe partial class WindowsVideoWindow : IDisposable
@@ -138,13 +138,11 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
                 PatBlt(deviceContext, 0, coordinateY + scaledHeight, width, height - coordinateY - scaledHeight, 0x42);
             }
 
-            var info = new VideoBitmapHeader
-                { Size = 40, Width = _width, Height = -_height, Planes = 1, BitCount = 32 };
+            var info = new VideoBitmapHeader { Size = 40, Width = _width, Height = -_height, Planes = 1, BitCount = 32 };
 
             fixed (byte* data = pixels)
             {
-                var lines = StretchDIBits(deviceContext, coordinateX, coordinateY, scaledWidth, scaledHeight, 0, 0,
-                    _width, _height, data, &info, 0, 0x00CC0020);
+                var lines = StretchDIBits(deviceContext, coordinateX, coordinateY, scaledWidth, scaledHeight, 0, 0, _width, _height, data, &info, 0, 0x00CC0020);
 
                 if (lines == 0 || lines == -1)
                 {
@@ -183,8 +181,7 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
     [LibraryImport("user32.dll", EntryPoint = "CreateWindowExW", SetLastError = true,
         StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint CreateWindowEx(uint exStyle, string className, string title, uint style,
-        int coordinateX, int coordinateY,
+    private static partial nint CreateWindowEx(uint exStyle, string className, string title, uint style, int coordinateX, int coordinateY,
         int width, int height, nint parent, nint menu, nint instance, nint param);
 
     [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW", SetLastError = true)]
@@ -229,12 +226,10 @@ internal sealed unsafe partial class WindowsVideoWindow : IDisposable
 
     [LibraryImport("gdi32.dll", EntryPoint = "PatBlt", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height,
-        uint rop);
+    private static partial int PatBlt(nint deviceContext, int coordinateX, int coordinateY, int width, int height, uint rop);
 
     [LibraryImport("gdi32.dll", EntryPoint = "StretchDIBits", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int StretchDIBits(nint deviceContext, int coordinateX, int coordinateY, int width,
-        int height, int sourceX, int sourceY, int sourceWidth,
+    private static partial int StretchDIBits(nint deviceContext, int coordinateX, int coordinateY, int width, int height, int sourceX, int sourceY, int sourceWidth,
         int sourceHeight, byte* data, VideoBitmapHeader* info, uint usage, uint rop);
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Security.Cryptography;
-using IraRationis.Graphics;
 using IraRationis.Media.Decoding;
 using IraRationis.Media.Video;
+using IraRationis.Graphics.ConsoleGraphicsDevice;
 
-namespace IraRationis.GpuMedia.Tests;
+namespace GpuMedia;
 
 internal static class Program
 {

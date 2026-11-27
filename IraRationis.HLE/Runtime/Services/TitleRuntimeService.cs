@@ -9,9 +9,9 @@ internal sealed unsafe class TitleRuntimeService
 {
     internal static readonly Guid Provider = new("973a344e-24bf-4d0f-8457-56c534892b29");
     internal static readonly Guid Interface = new("2549f142-6419-4a06-97b5-931aab7c2f34");
-    private readonly RuntimeServiceObject _object;
     private readonly uint _titleId;
     private readonly RuntimeServiceTrace _trace;
+    private readonly RuntimeServiceObject _object;
 
     internal TitleRuntimeService(uint titleId, RuntimeServiceTrace trace)
     {

@@ -285,6 +285,32 @@ The graphics initialization captures the actual selected host adapter's memory a
 
 These observations provide inputs for later bounded scheduling and residency policies. They do not enable a MIP streaming subsystem, automatically add shader workers, or raise the existing resource caps. SIMD specialization should follow measured CPU workloads, retain a scalar/reference path, and verify the emitted Native AOT code. Wider vectors reduce constant work per element; they do not generally change an algorithm's asymptotic complexity.
 
+## Title capture and comparison
+
+Use PowerShell 7 from the repository root. The first command builds and runs the validation suite, publishes the host, and launches the title only after validation succeeds.
+
+```powershell
+$run = 'artifacts/validation/title-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+.\scripts\Invoke-R77.ps1 -OutputDirectory $run -Validate -TraceMovieAudio
+```
+
+Select the same profile and settings. Record the intro's wall time, when audio drops, whether the settings screen advances, and whether menu navigation responds. Keep the full `runtime.log` and any new `draw-captures` or `compute-captures` directories. Preserve the matching binary and symbols in `host`.
+
+If decode-to-voice delivery is still intermittent, compare movie scheduling with the exact same host. This promotes only the confirmed title movie worker.
+
+```powershell
+.\scripts\Invoke-R77.ps1 -OutputDirectory "$run-movie-scheduling" `
+    -PublishedHostDirectory (Join-Path $run 'host') -TraceMovieAudio -EnableMovieScheduling
+```
+
+`[movie-audio]` reports the guest sound callback's readiness results, PCM bytes accepted at unlock, and delivery gaps. It samples refused calls for suspension, disabled state, and the last observed queue occupancy after the callback. Mixer activity can change occupancy between the refusal and observation. Confirm mixer consumption and endpoint padding separately if the producer stays active through audible gaps. The trace checks both original binary hashes before installing the callback observer.
+
+For a graphics log sampling comparison, reuse the same host and keep the movie scheduling setting constant. Use `-DisableGraphicsLogSampling` with a fresh output directory. Compare the same scene and use the same cold or warm shader cache condition. `IRX_VERBOSE_GRAPHICS=1` emits full success logs. Compare `IRX-R50-LOG` seen/emitted counts, presentation cadence, and matching upload and submission scopes separately. Those wall-time scopes overlap.
+
+### Measuring the 4K gameplay target
+
+Use a repeatable gameplay scene at 3840×2160, record the guest timing mode, and compare distinct completed frames and frame-time percentiles across identical routes. The target is 60 FPS with steady pacing and continuous audio. That gives about 16.67 ms per frame. Startup presents can repeat or drop frames, and the observed title startup requests 30 Hz, so neither swapping at 60 Hz nor reporting the startup present counter establishes the target. Preserve a matching-symbol CPU trace and a GPU timeline to distinguish guest work, host submission, waiting, and GPU execution.
+
 ## Reporting a result
 
 Provide the build commit, command line, environment switches, scene/action, log, and capture metadata. For network investigation, include the JSONL export and keep the raw ETL available. For CPU analysis, retain exact matching binaries and symbols. Report a successful build, component test, authored fixture, integrated title behavior, and performance measurement as separate observations.

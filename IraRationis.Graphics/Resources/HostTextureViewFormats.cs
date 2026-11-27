@@ -69,7 +69,6 @@ internal static class HostTextureViewFormats
             48 => 49, 53 => 56, 60 => 61, 70 => 71, 73 => 74, 76 => 77, 79 => 80,
             82 => 83, 90 => 87, 92 => 88, 94 => 95, 97 => 98, _ => storage
         };
-
         return IsSampledColorFormat(format);
     }
 
@@ -79,9 +78,7 @@ internal static class HostTextureViewFormats
         {
             return false;
         }
-
         var storage = BackingFormat(guest);
-
         return storage == format || storage switch
         {
             1 => format == 2, 9 => format is 10 or 11, 15 => format == 16, 23 => format == 24,
@@ -96,8 +93,8 @@ internal static class HostTextureViewFormats
     internal static bool IsComponentMapping(uint mapping)
     {
         return (mapping & ~0x1FFFU) == 0 && (mapping & 0x1000U) != 0 &&
-               (mapping & 7U) <= 5 && ((mapping >> 3) & 7U) <= 5 &&
-               ((mapping >> 6) & 7U) <= 5 && ((mapping >> 9) & 7U) <= 5;
+            (mapping & 7U) <= 5 && ((mapping >> 3) & 7U) <= 5 &&
+            ((mapping >> 6) & 7U) <= 5 && ((mapping >> 9) & 7U) <= 5;
     }
 
     internal static bool TryResolveTargetView(in ResourceDescription guest, bool depth, byte[]? descriptor,
@@ -126,8 +123,8 @@ internal static class HostTextureViewFormats
         }
 
         return (depth
-                   ? viewFormat is 40 or 45 or 55 or 20
-                   : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or 87 or 91) &&
-               IsCompatible(guest, viewFormat);
+            ? viewFormat is 40 or 45 or 55 or 20
+            : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or 87 or 91) &&
+            IsCompatible(guest, viewFormat);
     }
 }

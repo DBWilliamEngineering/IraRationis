@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct DescriptorPlacement
+internal unsafe struct DescriptorPlacement
 {
     public ulong Address;
     public ulong Size;

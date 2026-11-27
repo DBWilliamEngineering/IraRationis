@@ -14,15 +14,15 @@ internal sealed class PlanarColorDrawUpload(
     long targetGeneration,
     bool srgbTexture)
 {
-    public readonly int Capacity = capacity;
-    public readonly nint Host = host;
-    public readonly bool SrgbTexture = srgbTexture;
-    public readonly ulong Table = table;
-    public readonly nint Target = target;
-    public readonly long TargetGeneration = targetGeneration;
-    public readonly PlanarColorTextureBinding[] Textures = textures;
     public readonly TextureSource Transform = transform;
+    public readonly PlanarColorTextureBinding[] Textures = textures;
+    public readonly ulong Table = table;
     public readonly ulong Vertex = vertex;
     public readonly int VertexBytes = vertexBytes;
+    public readonly int Capacity = capacity;
+    public readonly nint Host = host;
+    public readonly nint Target = target;
+    public readonly long TargetGeneration = targetGeneration;
+    public readonly bool SrgbTexture = srgbTexture;
     public int Phase;
 }

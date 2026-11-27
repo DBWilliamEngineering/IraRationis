@@ -93,8 +93,7 @@ public static unsafe partial class MediaFoundationDecoder
 
     // Keep the video timeline authoritative for the existing constant-rate player.
     // Only small edge corrections are supported; never conceal gaps inside a track.
-    private static short[] AlignAudio(MediaFoundationDecoderVideoPayload video,
-        MediaFoundationDecoderAudioPayload audio)
+    private static short[] AlignAudio(MediaFoundationDecoderVideoPayload video, MediaFoundationDecoderAudioPayload audio)
     {
         const int sampleRate = 48000;
         const int channels = 2;
@@ -180,7 +179,7 @@ public static unsafe partial class MediaFoundationDecoder
             var count = 0;
             var start = 0L;
 
-            for (;;)
+            for(;;)
             {
                 var sample = ReadSample(reader, VideoStream, out var timestamp, out var end, out var formatFlags);
 
@@ -265,8 +264,7 @@ public static unsafe partial class MediaFoundationDecoder
                 throw new InvalidDataException("No video frames decoded.");
             }
 
-            return new MediaFoundationDecoderVideoPayload(layout.Width, layout.Height, layout.VisibleBytes, start,
-                output.ToArray());
+            return new MediaFoundationDecoderVideoPayload(layout.Width, layout.Height, layout.VisibleBytes, start, output.ToArray());
         }
         finally
         {
@@ -285,7 +283,7 @@ public static unsafe partial class MediaFoundationDecoder
             var start = 0L;
             var count = 0;
 
-            for (;;)
+            for(;;)
             {
                 var sample = ReadSample(reader, AudioStream, out var timestamp, out var end, out var formatFlags);
 
@@ -589,8 +587,7 @@ public static unsafe partial class MediaFoundationDecoder
         return true;
     }
 
-    private static void CopyVisibleFrame(ReadOnlySpan<byte> source, MediaFoundationDecoderVideoLayout layout,
-        Span<byte> destination)
+    private static void CopyVisibleFrame(ReadOnlySpan<byte> source, MediaFoundationDecoderVideoLayout layout, Span<byte> destination)
     {
         // The validated layout is even in both axes, preserving NV12 chroma pairs.
         var sourceChroma = checked(layout.CodedWidth * layout.CodedHeight);

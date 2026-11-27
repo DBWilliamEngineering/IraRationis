@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Shaders.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct ComputeDescription
+internal unsafe struct ComputeDescription
 {
     public nint Root;
     public byte* Code;

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace IraRationis.Graphics.Descriptors.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct DescriptorHeapDescription
+internal unsafe struct DescriptorHeapDescription
 {
     public uint Kind;
     public uint Count;

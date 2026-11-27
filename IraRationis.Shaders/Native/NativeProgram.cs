@@ -16,9 +16,5 @@ public sealed record NativeProgram(
     uint[]? Threads,
     byte[] Code)
 {
-    public byte[] StageMetadata
-    {
-        get;
-        init;
-    } = [];
+    public byte[] StageMetadata { get; init; } = [];
 }

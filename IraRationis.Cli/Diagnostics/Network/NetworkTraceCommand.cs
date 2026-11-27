@@ -18,7 +18,7 @@ internal static class NetworkTraceCommand
         var seconds = 60;
 
         if (args.Length == 3 && (!int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out seconds)
-                                 || seconds is < 1 or > 300))
+            || seconds is < 1 or > 300))
         {
             throw new ArgumentException("Network trace duration must be between 1 and 300 seconds.");
         }
@@ -55,13 +55,10 @@ internal static class NetworkTraceCommand
         using var session = new NetworkTraceSession(tracePath);
 
         metadata.AutoFlush = true;
-        metadata.WriteLine(
-            $"processId={processId}; processName={process.ProcessName}; processStartUtc={process.StartTime.ToUniversalTime():O}");
+        metadata.WriteLine($"processId={processId}; processName={process.ProcessName}; processStartUtc={process.StartTime.ToUniversalTime():O}");
         metadata.WriteLine($"session={session.Name}; circularFileMiB=64; requestedSeconds={seconds}");
-        metadata.WriteLine(
-            "scope=user-mode provider PID; DNS events=3006,3008; Winsock-NameResolution events=1000..1014; Winsock-Sockets events=1..6,9..12,15,16; packetCapture=False");
-        metadata.WriteLine(
-            "Limits: service/worker-process events can be excluded; pre-capture requests are absent; circular capture can overwrite old events; no HTTP/authentication result is inferred from socket success.");
+        metadata.WriteLine("scope=user-mode provider PID; DNS events=3006,3008; Winsock-NameResolution events=1000..1014; Winsock-Sockets events=1..6,9..12,15,16; packetCapture=False");
+        metadata.WriteLine("Limits: service/worker-process events can be excluded; pre-capture requests are absent; circular capture can overwrite old events; no HTTP/authentication result is inferred from socket success.");
 
         report.WriteLine($"[network] Starting session {session.Name} for {process.ProcessName} ({processId}).");
         session.EnableNetworkEvents((uint)processId);
@@ -70,10 +67,8 @@ internal static class NetworkTraceCommand
         var duration = TimeSpan.FromSeconds(seconds);
 
         metadata.WriteLine($"captureStartUtc={DateTime.UtcNow:O}");
-        report.WriteLine(
-            $"[network] Capturing DNS and socket lifecycle metadata for up to {seconds} seconds. Reproduce the Y/account-picker action now. Ctrl+C stops this capture.");
-        report.WriteLine(
-            "[network] This observes connection activity, not application login success. Provider scope can exclude asynchronous worker/service completions.");
+        report.WriteLine($"[network] Capturing DNS and socket lifecycle metadata for up to {seconds} seconds. Reproduce the Y/account-picker action now. Ctrl+C stops this capture.");
+        report.WriteLine("[network] This observes connection activity, not application login success. Provider scope can exclude asynchronous worker/service completions.");
 
         void Cancel(object? sender, ConsoleCancelEventArgs eventArgs)
         {
@@ -96,10 +91,8 @@ internal static class NetworkTraceCommand
 
         var statistics = session.Stop();
 
-        metadata.WriteLine(
-            $"captureEndUtc={DateTime.UtcNow:O}; eventsLost={statistics.EventsLost}; buffersLost={statistics.BuffersLost}; buffersWritten={statistics.BuffersWritten}");
-        report.WriteLine(
-            $"[network] Saved {tracePath}; eventsLost={statistics.EventsLost}; buffersLost={statistics.BuffersLost}.");
+        metadata.WriteLine($"captureEndUtc={DateTime.UtcNow:O}; eventsLost={statistics.EventsLost}; buffersLost={statistics.BuffersLost}; buffersWritten={statistics.BuffersWritten}");
+        report.WriteLine($"[network] Saved {tracePath}; eventsLost={statistics.EventsLost}; buffersLost={statistics.BuffersLost}.");
         report.WriteLine($"[network] Capture scope and timestamps: {metadataPath}");
 
         return statistics.EventsLost == 0 && statistics.BuffersLost == 0 ? 0 : 3;

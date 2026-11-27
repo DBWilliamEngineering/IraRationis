@@ -4,8 +4,8 @@ namespace IraRationis.HLE.Runtime.Diagnostics.Models;
 
 internal sealed class RuntimeBridgeQuerySeries
 {
+    internal long Started;
     internal long Completed;
     internal long Failures;
     internal long Reported;
-    internal long Started;
 }

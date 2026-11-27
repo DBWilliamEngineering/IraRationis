@@ -39,20 +39,19 @@ internal static unsafe class HostRuntimeAsyncServiceTests
     private static void StructuresMatchPublicLayouts()
     {
         Require(sizeof(XAsyncBlock) == 56 && Marshal.OffsetOf<XAsyncBlock>(nameof(XAsyncBlock.Queue)) == 0 &&
-                Marshal.OffsetOf<XAsyncBlock>(nameof(XAsyncBlock.Context)) == 8 &&
-                Marshal.OffsetOf<XAsyncBlock>(nameof(XAsyncBlock.Callback)) == 16,
+            Marshal.OffsetOf<XAsyncBlock>(nameof(XAsyncBlock.Context)) == 8 &&
+            Marshal.OffsetOf<XAsyncBlock>(nameof(XAsyncBlock.Callback)) == 16,
             "XAsyncBlock must retain its three pointer fields and 32 opaque reserved bytes.");
 
-        Require(sizeof(XAsyncProviderData) == 32
-                && Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Async)) == 0 &&
-                Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.BufferSize)) == 8 &&
-                Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Buffer)) == 16 &&
-                Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Context)) == 24,
+        Require(sizeof(XAsyncProviderData) == 32 && Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Async)) == 0 &&
+            Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.BufferSize)) == 8 &&
+            Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Buffer)) == 16 &&
+            Marshal.OffsetOf<XAsyncProviderData>(nameof(XAsyncProviderData.Context)) == 24,
             "XAsyncProviderData must match the Windows x64 provider callback layout.");
 
         Require((uint)XAsyncOperation.Begin == 0 && (uint)XAsyncOperation.DoWork == 1 &&
-                (uint)XAsyncOperation.GetResult == 2 && (uint)XAsyncOperation.Cancel == 3 &&
-                (uint)XAsyncOperation.Cleanup == 4,
+            (uint)XAsyncOperation.GetResult == 2 && (uint)XAsyncOperation.Cancel == 3 &&
+            (uint)XAsyncOperation.Cleanup == 4,
             "Async provider operation values must match the public contract.");
     }
 
@@ -114,11 +113,9 @@ internal static unsafe class HostRuntimeAsyncServiceTests
             CheckErrors();
 
             Require(result == expectedResult && AuthoredHostRuntimeAsyncTargets.Instance == authored.Address &&
-                    AuthoredHostRuntimeAsyncTargets.AsyncBlock == (nint)(&asyncBlock) &&
-                    AuthoredHostRuntimeAsyncTargets.Context == context
-                    && AuthoredHostRuntimeAsyncTargets.Identity == identity &&
-                    AuthoredHostRuntimeAsyncTargets.IdentityName == (nint)identityName
-                    && AuthoredHostRuntimeAsyncTargets.ProviderCallback == provider,
+                AuthoredHostRuntimeAsyncTargets.AsyncBlock == (nint)(&asyncBlock) &&
+                AuthoredHostRuntimeAsyncTargets.Context == context && AuthoredHostRuntimeAsyncTargets.Identity == identity &&
+                AuthoredHostRuntimeAsyncTargets.IdentityName == (nint)identityName && AuthoredHostRuntimeAsyncTargets.ProviderCallback == provider,
                 "Begin must forward the full pointer widths, self pointer, callback, and HRESULT unchanged.");
 
             AuthoredHostRuntimeAsyncTargets.SetIncomingErrors();
@@ -132,9 +129,7 @@ internal static unsafe class HostRuntimeAsyncServiceTests
             service.Complete(&asyncBlock, expectedResult, bufferSize);
             CheckErrors();
 
-            Require(
-                AuthoredHostRuntimeAsyncTargets.CompletionResult == expectedResult
-                && AuthoredHostRuntimeAsyncTargets.BufferSize == bufferSize,
+            Require(AuthoredHostRuntimeAsyncTargets.CompletionResult == expectedResult && AuthoredHostRuntimeAsyncTargets.BufferSize == bufferSize,
                 "Complete must preserve the signed HRESULT and native-width result size.");
 
             var used = (nuint)197;
@@ -143,10 +138,8 @@ internal static unsafe class HostRuntimeAsyncServiceTests
             CheckErrors();
 
             Require(result == expectedResult && AuthoredHostRuntimeAsyncTargets.Identity == identity &&
-                    AuthoredHostRuntimeAsyncTargets.BufferSize == bufferSize
-                    && AuthoredHostRuntimeAsyncTargets.Buffer == buffer &&
-                    AuthoredHostRuntimeAsyncTargets.BufferUsed == (nint)(&used)
-                    && used == (expectedResult >= 0 ? bufferSize : 197),
+                AuthoredHostRuntimeAsyncTargets.BufferSize == bufferSize && AuthoredHostRuntimeAsyncTargets.Buffer == buffer &&
+                AuthoredHostRuntimeAsyncTargets.BufferUsed == (nint)(&used) && used == (expectedResult >= 0 ? bufferSize : 197),
                 "GetResult must preserve pointers, size, result, and output behavior on success and failure.");
 
             AuthoredHostRuntimeAsyncTargets.SetIncomingErrors();
@@ -154,18 +147,15 @@ internal static unsafe class HostRuntimeAsyncServiceTests
             CheckErrors();
 
             Require(result == expectedResult && AuthoredHostRuntimeAsyncTargets.Queue == buffer &&
-                    AuthoredHostRuntimeAsyncTargets.Port == uint.MaxValue
-                    && AuthoredHostRuntimeAsyncTargets.Context == context &&
-                    AuthoredHostRuntimeAsyncTargets.QueueCallback == provider,
+                AuthoredHostRuntimeAsyncTargets.Port == uint.MaxValue && AuthoredHostRuntimeAsyncTargets.Context == context &&
+                AuthoredHostRuntimeAsyncTargets.QueueCallback == provider,
                 "SubmitCallback must preserve the queue, unsigned port, context, callback, and HRESULT.");
         }
 
         Require(new ReadOnlySpan<byte>(&asyncBlock, sizeof(XAsyncBlock)).SequenceEqual(originalBytes),
             "The adapter must never interpret or modify XAsyncBlock state.");
-        Require(AuthoredHostRuntimeAsyncTargets.TargetCalls == 10
-                && AuthoredHostRuntimeAsyncTargets.AddReferenceCalls == 10 &&
-                AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 10
-                && AuthoredHostRuntimeAsyncTargets.ReferenceCount == 1,
+        Require(AuthoredHostRuntimeAsyncTargets.TargetCalls == 10 && AuthoredHostRuntimeAsyncTargets.AddReferenceCalls == 10 &&
+            AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 10 && AuthoredHostRuntimeAsyncTargets.ReferenceCount == 1,
             "Every native call must own and release one temporary interface reference.");
     }
 
@@ -179,9 +169,8 @@ internal static unsafe class HostRuntimeAsyncServiceTests
         var result = service.Begin(&asyncBlock, 0, 0, null, 0);
 
         Require(result == 0 && !AuthoredHostRuntimeAsyncTargets.CallbackFailed &&
-                AuthoredHostRuntimeAsyncTargets.ReferencesAfterCallback == 1 &&
-                AuthoredHostRuntimeAsyncTargets.ReferenceCount == 0
-                && AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 2,
+            AuthoredHostRuntimeAsyncTargets.ReferencesAfterCallback == 1 &&
+            AuthoredHostRuntimeAsyncTargets.ReferenceCount == 0 && AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 2,
             "Disposal during a native call must release the session reference while retaining the in-flight call reference.");
         AuthoredHostRuntimeAsyncTargets.DuringBegin = null;
     }
@@ -194,7 +183,7 @@ internal static unsafe class HostRuntimeAsyncServiceTests
         service.Dispose();
 
         Require(Marshal.GetLastSystemError() == AuthoredHostRuntimeAsyncTargets.IncomingSystemError &&
-                Marshal.GetLastPInvokeError() == AuthoredHostRuntimeAsyncTargets.IncomingPInvokeError,
+            Marshal.GetLastPInvokeError() == AuthoredHostRuntimeAsyncTargets.IncomingPInvokeError,
             "Releasing the owned interface must preserve the caller's native error state.");
 
         service.Dispose();
@@ -210,8 +199,7 @@ internal static unsafe class HostRuntimeAsyncServiceTests
         }
 
         Require(rejected && AuthoredHostRuntimeAsyncTargets.ReferenceCount == 0 &&
-                AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 1
-                && AuthoredHostRuntimeAsyncTargets.TargetCalls == 0,
+            AuthoredHostRuntimeAsyncTargets.ReleaseReferenceCalls == 1 && AuthoredHostRuntimeAsyncTargets.TargetCalls == 0,
             "Disposal must release ownership once and prevent subsequent native calls.");
     }
 
@@ -220,12 +208,10 @@ internal static unsafe class HostRuntimeAsyncServiceTests
         var systemError = Marshal.GetLastSystemError();
         var pinvokeError = Marshal.GetLastPInvokeError();
 
-        Require(AuthoredHostRuntimeAsyncTargets.ObservedSystemError
-                == AuthoredHostRuntimeAsyncTargets.IncomingSystemError &&
-                AuthoredHostRuntimeAsyncTargets.ObservedPInvokeError
-                == AuthoredHostRuntimeAsyncTargets.IncomingPInvokeError &&
-                systemError == AuthoredHostRuntimeAsyncTargets.OutgoingSystemError &&
-                pinvokeError == AuthoredHostRuntimeAsyncTargets.OutgoingPInvokeError,
+        Require(AuthoredHostRuntimeAsyncTargets.ObservedSystemError == AuthoredHostRuntimeAsyncTargets.IncomingSystemError &&
+            AuthoredHostRuntimeAsyncTargets.ObservedPInvokeError == AuthoredHostRuntimeAsyncTargets.IncomingPInvokeError &&
+            systemError == AuthoredHostRuntimeAsyncTargets.OutgoingSystemError &&
+            pinvokeError == AuthoredHostRuntimeAsyncTargets.OutgoingPInvokeError,
             "Reference management must preserve both native error channels before and after the target call.");
     }
 

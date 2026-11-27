@@ -20,8 +20,7 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
 
     public ConsoleInstructionHandler(IEnumerable<LoadedImage> images, InstructionEmulationOptions options)
         : this(images.Select(image =>
-            new ConsoleInstructionHandlerImageRange(image.BaseAddress,
-                checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray(), options)
+            new ConsoleInstructionHandlerImageRange(image.BaseAddress, checked(image.BaseAddress + image.Info.SizeOfImage))).ToArray(), options)
     {
     }
 
@@ -46,8 +45,7 @@ public sealed unsafe class ConsoleInstructionHandler : IDisposable
         }
 
         var install =
-            (delegate* unmanaged[Stdcall]<ConsoleInstructionHandlerImageRange*, uint, NativeInstructionHandlerOptions*,
-                uint>)installAddress;
+            (delegate* unmanaged[Stdcall]<ConsoleInstructionHandlerImageRange*, uint, NativeInstructionHandlerOptions*, uint>)installAddress;
 
         _disable = (delegate* unmanaged[Stdcall]<void>)NativeLibrary.GetExport(module, "IrxDisableHandler");
 
