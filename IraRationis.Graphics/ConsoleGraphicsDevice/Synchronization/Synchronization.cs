@@ -104,6 +104,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast("[graphics] Unexpected enhanced barrier group layout.");
         }
 
+        RecordHostGpuCommand(self, "Global barrier");
         ((ID3D12GraphicsCommandList7*)enhanced)->Barrier(1, (D3D12_BARRIER_GROUP*)&group);
     }
 

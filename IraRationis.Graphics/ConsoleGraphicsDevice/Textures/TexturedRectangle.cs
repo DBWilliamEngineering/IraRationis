@@ -741,7 +741,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             commands->OMSetRenderTargets(1, &colorView, false, null);
 
-            TraceHostCommand(self, "R16 textured rectangle DrawInstanced");
+            RecordHostGpuCommand(self, "R16 textured rectangle DrawInstanced");
 
             commands->DrawInstanced(vertices, instances, 0, firstInstance);
 
@@ -1165,7 +1165,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 }
                 else
                 {
-                    ordered.Submit(utility);
+                    ordered.Submit(utility, host);
                     transferred = true;
                 }
 

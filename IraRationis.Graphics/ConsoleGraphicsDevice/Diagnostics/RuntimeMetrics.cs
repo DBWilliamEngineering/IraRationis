@@ -151,6 +151,16 @@ public static partial class ConsoleGraphicsDevice
                 Console.Error.WriteLine(SuccessLogSampling.FormatSummary());
             }
 
+            if (SkipEmptyDrawSegments)
+            {
+                Console.Error.WriteLine($"[performance] Empty draw preparation segments skipped: {Interlocked.Read(ref _skippedEmptyDrawSegments)}.");
+            }
+
+            if (EnableBatchedTextureUploads)
+            {
+                Console.Error.WriteLine($"[performance] Texture upload queue submissions saved: {Interlocked.Read(ref _textureUploadSubmitsSaved)}.");
+            }
+
             var rectangleUploads = Interlocked.Read(ref _rectangleUploadSlices);
 
             if (rectangleUploads != 0)

@@ -46,6 +46,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var resource = (ResourceObject*)record.Resource;
         var desc = resource->Description;
+
         format = desc.Format;
 
         if (resource->Generation != record.ResourceGeneration || desc.Dimension != 2 || desc.Height != 1 ||
@@ -89,6 +90,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         var resource = (ResourceObject*)source.Resource;
         var offset = address - resource->Address;
+
         return offset <= resource->Description.Width && (ulong)curveBytes <= resource->Description.Width - offset &&
                (ulong)curveBytes <= ulong.MaxValue - address;
     }
@@ -221,7 +223,9 @@ public static unsafe partial class ConsoleGraphicsDevice
             Shader4ComponentMapping = 5768
         };
         unused.Anonymous.Texture2D.MipLevels = 1;
+
         _host->CreateShaderResourceView(null, &unused, cpu);
+
         cpu.ptr += increment;
 
         var view = new D3D12_UNORDERED_ACCESS_VIEW_DESC
@@ -229,10 +233,13 @@ public static unsafe partial class ConsoleGraphicsDevice
             Format = (DXGI_FORMAT)format,
             ViewDimension = (D3D12_UAV_DIMENSION)2
         };
+
         _host->CreateUnorderedAccessView((ID3D12Resource*)outputHost, null, &view, cpu);
 
         var commands = (ID3D12GraphicsCommandList*)utility.List;
+
         TransitionHostResource(utility.List, outputHost, 0, 8);
+
         commands->SetDescriptorHeaps(1, &heap);
         commands->SetPipelineState((ID3D12PipelineState*)pipeline);
         commands->SetComputeRootSignature((ID3D12RootSignature*)root);
@@ -240,6 +247,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         commands->SetComputeRootConstantBufferView(1, cbv + CurveDataOffset);
         commands->SetComputeRootDescriptorTable(2, gpu);
         commands->Dispatch(groupsX, 1, 1);
+
         TransitionHostResource(utility.List, outputHost, 8, 0);
     }
 }

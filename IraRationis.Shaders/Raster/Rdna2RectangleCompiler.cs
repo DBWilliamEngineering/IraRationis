@@ -8,6 +8,7 @@ using IraRationis.Shaders.Native;
 using IraRationis.Shaders.Native.Models;
 using IraRationis.Shaders.Raster.DualMask;
 using IraRationis.Shaders.Raster.Models;
+using IraRationis.Shaders.Raster.NativeInstructions;
 
 namespace IraRationis.Shaders.Raster;
 
@@ -228,6 +229,42 @@ public static class Rdna2RectangleCompiler
                                              }
                                              """;
 
+    private const string IndexedTransformVaryings = """
+        struct Varyings
+        {
+            float4 Position : SV_Position;
+            float4 Color : COLOR0;
+            float Opacity : COLOR1;
+        };
+        """;
+
+    private const string IndexedTransformVertex = """
+        cbuffer VertexConstants : register(b5, space1)
+        {
+            float4 TransformX;
+            float4 TransformY;
+        };
+
+        Varyings main(float4 color : COLOR0, float4 opacity : COLOR1, float2 position : POSITION0)
+        {
+            Varyings result;
+            precise float x = mad(TransformX.x, position.x, mad(TransformX.y, position.y, TransformX.w));
+            precise float y = mad(TransformY.x, position.x, mad(TransformY.y, position.y, TransformY.w));
+            result.Position = float4(x, y, 0.0f, 1.0f);
+            result.Color = color;
+            result.Opacity = opacity.a;
+            return result;
+        }
+        """;
+
+    private const string IndexedTransformPixel = """
+        float4 main(Varyings input) : SV_Target0
+        {
+            return float4(HalfRtz(input.Color.r), HalfRtz(input.Color.g), HalfRtz(input.Color.b),
+                HalfRtz(LegacyMul(input.Color.a, input.Opacity)));
+        }
+        """;
+
     private const string TexturedVertex = """
                                           cbuffer TransformA : register(b0)
                                           {
@@ -326,7 +363,10 @@ public static class Rdna2RectangleCompiler
         var array = vertexHash == "1A546262E886D089F19E7AF74BA9EAC4BF403FD424553EA3F71014E435EDAC3F" &&
                     pixelHash == "A33F9DF0EFFCFAD15A393BD879D1EB0F3AB4CE2B3AB2F499B6ED751A4D55C10D";
 
-        if ((!single && !array) || Convert.ToHexString(SHA256.HashData(root.Span)) !=
+        var transformOnly = vertexHash == "274269C2A96159981CCF4A8D99B553A9BBEF8F9C5B1C142440BF173313FFC561" &&
+                            pixelHash == "465FC098482EA82737E573EFDC3822625F571BEE7C23B856640BE1F4A8B1C432";
+
+        if ((!single && !array && !transformOnly) || Convert.ToHexString(SHA256.HashData(root.Span)) !=
             "DF44DC5144517A00F01BE4238EC63F9463BFFC8A035C2E02E73CA5AE165D9355")
         {
             throw new NotSupportedException("R23 indexed color shader contract differs.");
@@ -334,7 +374,7 @@ public static class Rdna2RectangleCompiler
 
         var vertexShader = ReadProgram(ShaderContainer.Parse(vertex), NativeShaderStage.Vertex);
         var pixelShader = ReadProgram(ShaderContainer.Parse(pixel), NativeShaderStage.Pixel);
-        var register = array ? 0U : 7U;
+        var register = array ? 0U : transformOnly ? 5U : 7U;
 
         ReadOnlySpan<uint> layout = [3, 0, 1, register, 8, 0, 0, 2, 500, 265, 6, 0, 1, 0, 11];
 
@@ -342,6 +382,16 @@ public static class Rdna2RectangleCompiler
         RequireWords(pixelShader.RootLayout, layout, "indexed pixel root layout");
         RequireWords(vertexShader.UsedResources, [0x302, 0, register, 0, 0x804], "indexed vertex resources");
         RequireWords(pixelShader.UsedResources, [], "indexed pixel resources");
+
+        if (transformOnly)
+        {
+            RecognizeIndexedTransform(vertexShader.Code, pixelShader.Code);
+            return new RectangleShaderPair(IndexedTransformVaryings + "\n" + IndexedTransformVertex, string.Empty,
+                IndexedTransformVaryings + "\n" + PixelArithmetic + "\n" + IndexedTransformPixel, register, 1)
+            {
+                IndexedVertexConstantBytes = 32
+            };
+        }
 
         if (vertexShader.Code.Length != (array ? 384 : 320) || pixelShader.Code.Length != 384)
         {
@@ -351,6 +401,53 @@ public static class Rdna2RectangleCompiler
         return new RectangleShaderPair(IndexedColorVaryings + "\n" +
                                        (array ? IndexedArrayVertex : IndexedColorVertex), string.Empty,
             IndexedColorVaryings + "\n" + IndexedColorPixel, register, 1, array);
+    }
+
+    private static void RecognizeIndexedTransform(ReadOnlySpan<byte> vertex, ReadOnlySpan<byte> pixel)
+    {
+        var position = new RasterInstructionReader(vertex);
+        position.IdentityHeader();
+        position.SwapProgramCounter(4, 4);
+        position.Prefetch(3);
+        position.Move32(9, 128);
+        position.MoveVector32(0, 128);
+        position.LoadDescriptor(0, 8, 4, 0);
+        position.MoveVector32(1, 242);
+        position.Wait(0xc07f);
+        position.LoadBuffer(0, 0, 8, 0);
+        position.Wait(0x0070);
+        position.FusedMultiplyAdd(2, 1, RasterInstructionReader.Vector(13), 3);
+        position.FusedMultiplyAdd(3, 5, RasterInstructionReader.Vector(13), 7);
+        position.Accumulate(2, 0, 12);
+        position.Accumulate(3, 4, 12);
+        position.Export(12, 2, 3, 0, 1, done: true);
+        position.Export(32, 4, 5, 6, 7);
+        position.Export(33, 8, 9, 10, 11);
+        position.End();
+        position.Padding();
+
+        var color = new RasterInstructionReader(pixel);
+        color.IdentityHeader();
+        color.Prefetch(3);
+        color.Move32(124, 12);
+        color.Interpolate(2, 1, 3, secondPhase: false);
+        color.Interpolate(3, 0, 3, secondPhase: false);
+        color.Interpolate(4, 0, 0, secondPhase: false);
+        color.Interpolate(5, 0, 1, secondPhase: false);
+        color.Interpolate(6, 0, 2, secondPhase: false);
+        color.Interpolate(2, 1, 3, secondPhase: true);
+        color.Interpolate(3, 0, 3, secondPhase: true);
+        color.Interpolate(4, 0, 0, secondPhase: true);
+        color.Interpolate(5, 0, 1, secondPhase: true);
+        color.Interpolate(6, 0, 2, secondPhase: true);
+        color.MultiplyLegacy(3, RasterInstructionReader.Vector(3), 2);
+        color.ScalarNoOperation();
+        color.ScalarNoOperation();
+        color.PackHalfTowardZero(0, RasterInstructionReader.Vector(4), 5);
+        color.PackHalfTowardZero(1, RasterInstructionReader.Vector(6), 3);
+        color.Export(0, 0, 1, 0, 0, done: true, compressed: true, validMask: true);
+        color.End();
+        color.Padding();
     }
 
     public static RectangleShaderPair Translate(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> pixel,

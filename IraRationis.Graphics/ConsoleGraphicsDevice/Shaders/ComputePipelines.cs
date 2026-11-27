@@ -233,12 +233,14 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         shader.References--;
 
-        if (shader.References == 0)
+        if (shader.References != 0)
         {
-            _ = ComputeShaders.Remove(hash);
-
-            _retainedComputeBytes -= shader.Bytes.Length;
+            return;
         }
+
+        _ = ComputeShaders.Remove(hash);
+
+        _retainedComputeBytes -= shader.Bytes.Length;
     }
 
     private static void ReleasePipeline(nint value)
@@ -265,12 +267,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             }
         }
 
-        foreach (var key in ResourcePrivateData.Keys)
+        foreach (var key in ResourcePrivateData.Keys
+                     .Where(key => key.Item1 == value))
         {
-            if (key.Item1 == value)
-            {
-                _ = ResourcePrivateData.TryRemove(key, out _);
-            }
+            _ = ResourcePrivateData.TryRemove(key, out _);
         }
 
         NativeMemory.Free((void*)value);

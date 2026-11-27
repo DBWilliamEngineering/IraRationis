@@ -21,9 +21,11 @@ public static unsafe partial class ConsoleGraphicsDevice
     internal const int MemoryWaitTimeoutMilliseconds = 30000;
     private const int MaximumMemoryOperations = 65536;
     private static readonly bool EnableGuardedPublication = Environment.GetEnvironmentVariable("IRX_GUARDED_MEMORY_PUBLICATION") == "1";
+    private static readonly bool SkipEmptyDrawSegments = Environment.GetEnvironmentVariable("IRX_SKIP_EMPTY_DRAW_SEGMENTS") == "1";
     private static int _guardedPublicationUnavailable;
     private static long _guardedPublicationHits;
     private static long _guardedPublicationMisses;
+    private static long _skippedEmptyDrawSegments;
 
     [DllImport("irx-native", EntryPoint = "IrxTryPublishResidentScalar", ExactSpelling = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.ApplicationDirectory)]
@@ -145,10 +147,20 @@ public static unsafe partial class ConsoleGraphicsDevice
         using var stageTiming = BeginTiming(GraphicsStage.SealBoundary);
 
         var current = Host(self);
+        var boundary = new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor, indexedUi);
 
         if (current == 0) // Synthetic ABI probe only.
         {
-            state.MemoryBoundaries.Add(new MemoryBoundary(0, write, wait, copy, draw, rectangle, textured, compute, planarColor, indexedUi));
+            state.MemoryBoundaries.Add(boundary);
+
+            return;
+        }
+
+        if (SkipEmptyDrawSegments && !state.HasHostGpuWork && boundary.IsDrawPreparation)
+        {
+            // Keep the open list with its raster state. Preserve the CPU action and queue fence.
+            state.MemoryBoundaries.Add(boundary with { Host = 0 });
+            Interlocked.Increment(ref _skippedEmptyDrawSegments);
 
             return;
         }
@@ -159,7 +171,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         if (resultCode < 0)
         {
-            var boundary = indexedUi.HasValue ? "indexed-ui" : planarColor.HasValue ? "planar-color" :
+            var boundaryName = indexedUi.HasValue ? "indexed-ui" : planarColor.HasValue ? "planar-color" :
                 compute != null ? "compute" :
                 textured.HasValue ? "textured-rectangle" :
                 rectangle.HasValue ? "rectangle" :
@@ -167,7 +179,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 write.HasValue ? "write" :
                 wait.HasValue ? "wait" : "copy";
 
-            ReportHostCloseFailure(self, resultCode, boundary);
+            ReportHostCloseFailure(self, resultCode, boundaryName);
 
             Environment.FailFast($"[graphics] IRX-GFX-CLOSE-R3: closing memory segment failed: 0x{resultCode:X8}.");
         }
@@ -186,7 +198,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             Environment.FailFast($"[graphics] Opening memory segment failed: 0x{resultCode:X8}.");
         }
 
-        state.MemoryBoundaries.Add(new MemoryBoundary(current, write, wait, copy, draw, rectangle, textured, compute, planarColor, indexedUi));
+        state.MemoryBoundaries.Add(boundary);
 
         var enhanced = *(nint*)(self + ListEnhancedHost);
 
@@ -198,6 +210,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         *(nint*)(self + ListHost) = next;
+        state.HasHostGpuWork = false;
 
         state.LastHostCommand = null;
 
@@ -343,13 +356,18 @@ public static unsafe partial class ConsoleGraphicsDevice
         {
             using var completion = new HostCompletionFence();
             using var ordered = EnableOrderedTextureUploads && !EnableColorFlow && !EnableInputColorTrace &&
-                !EnableTextureIntermediatePreview && !EnableGuestPreviewWindow ? new OrderedTextureUploads(queue) : null;
+                !EnableTextureIntermediatePreview && !EnableGuestPreviewWindow
+                ? new OrderedTextureUploads(queue, EnableBatchedTextureUploads) : null;
 
             foreach (var boundary in state.MemoryBoundaries)
             {
+                ordered?.SubmitBeforeConsumer();
                 var segment = boundary.Host;
 
-                ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &segment);
+                if (segment != 0)
+                {
+                    ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Slot(queue, 10))(queue, 1, &segment);
+                }
 
                 completion.Wait(queue);
                 ordered?.CompleteAfterFence();
@@ -516,6 +534,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                                              || state.MemoryBoundaries[1].Write?.Bytes != 4
                                              || state.MemoryBoundaries[2].Write?.Value != 42
                                              || state.MemoryBoundaries[3].Wait?.Reference != 42
+                                             || state.MemoryBoundaries[3].IsDrawPreparation
                                              || !CompareMemory(target, 0xEEFF0011, 3, 4)
                                              || CompareMemory(target, 0xEEFF0011, 3, 8)
                                              || !TryReadMemory(address, 8, out var read) || read != target)

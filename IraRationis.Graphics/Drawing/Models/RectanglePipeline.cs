@@ -7,4 +7,5 @@ internal sealed unsafe record RectanglePipeline(
     nint Pipeline,
     VertexInputElement[] Elements,
     bool IndexedArray = false,
-    bool DualMask = false);
+    bool DualMask = false,
+    int IndexedVertexConstantBytes = 64);

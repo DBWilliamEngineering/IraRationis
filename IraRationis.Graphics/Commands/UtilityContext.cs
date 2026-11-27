@@ -193,6 +193,37 @@ internal sealed unsafe class UtilityContext : IDisposable
     // Caller retains this context until a later fence on the same queue completes.
     internal void SubmitOrdered(nint queue)
     {
+        CloseForSubmission(queue);
+        var list = List;
+        _submitted = true;
+        ExecuteLists(queue, new ReadOnlySpan<nint>(&list, 1));
+    }
+
+    internal static void SubmitIndependentUploads(nint queue, ReadOnlySpan<UtilityContext> contexts)
+    {
+        if (contexts.Length is 0 or > OrderedTextureUploads.MaximumPending)
+        {
+            throw new ArgumentOutOfRangeException(nameof(contexts));
+        }
+
+        Span<nint> lists = stackalloc nint[contexts.Length];
+        for (var index = 0; index < contexts.Length; index++)
+        {
+            var context = contexts[index];
+            context.CloseForSubmission(queue);
+            lists[index] = context.List;
+        }
+
+        foreach (var context in contexts)
+        {
+            context._submitted = true;
+        }
+
+        ExecuteLists(queue, lists);
+    }
+
+    private void CloseForSubmission(nint queue)
+    {
         if (_returned || _submitted || (Versioned && !_prepared) || queue == 0)
         {
             throw new InvalidOperationException("R53 invalid utility submission.");
@@ -203,9 +234,14 @@ internal sealed unsafe class UtilityContext : IDisposable
         {
             _versions!.MarkSubmitted(snapshot);
         }
-        var list = List;
-        _submitted = true;
-        ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)GraphicsDevice.Slot(queue, 10))(queue, 1, &list);
+    }
+
+    private static void ExecuteLists(nint queue, ReadOnlySpan<nint> lists)
+    {
+        fixed (nint* list = lists)
+        {
+            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)GraphicsDevice.Slot(queue, 10))(queue, (uint)lists.Length, list);
+        }
     }
 
     internal void CompleteOrdered()

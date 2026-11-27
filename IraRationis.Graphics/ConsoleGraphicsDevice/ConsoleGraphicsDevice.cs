@@ -353,9 +353,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         var child = (nint)NativeMemory.AllocZeroed((nuint)size);
 
         ((GraphicsObjectHeader*)child)->Table = table;
-
         ((GraphicsObjectHeader*)child)->Bits = 0;
-
         ((GraphicsObjectHeader*)child)->References = 1;
 
         *(nint*)(child + hostOffset) = host;

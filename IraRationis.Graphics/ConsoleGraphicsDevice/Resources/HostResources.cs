@@ -331,6 +331,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             VerifyHostTextureTransfers(hostQueue);
             VerifyHostTextureTransfers(hostQueue, deferUpload: true);
+            VerifyTextureUploadBatch(hostQueue);
             VerifyTiledBc3Transfer(hostQueue);
             if (SupportsHostTextureSampling(65))
             {

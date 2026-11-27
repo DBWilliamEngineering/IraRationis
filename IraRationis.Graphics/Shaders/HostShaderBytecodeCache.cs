@@ -30,6 +30,7 @@ internal sealed class HostShaderBytecodeCache
     {
         var key = (source, profile);
         var keyBytes = ((long)source.Length + profile.Length) * sizeof(char);
+
         HostShaderBytecodeCacheEntry? entry = null;
 
         reused = false;
@@ -211,10 +212,10 @@ internal sealed class HostShaderBytecodeCache
             throw new InvalidOperationException("R63 duplicated identical compilation.");
         }
 
-        _ = cache.GetOrCompile("source", "vs", () => [9], out var crossProfile);
-        _ = cache.GetOrCompile("source", "cs", () => throw new InvalidOperationException("Unexpected miss."), out var hit);
-        _ = cache.GetOrCompile("other", "cs", () => [8], out _);
-        _ = cache.GetOrCompile("source", "vs", () => [9], out var evicted);
+        _ = cache.GetOrCompile("source", "vs", static () => [9], out var crossProfile);
+        _ = cache.GetOrCompile("source", "cs", static () => throw new InvalidOperationException("Unexpected miss."), out var hit);
+        _ = cache.GetOrCompile("other", "cs", static () => [8], out _);
+        _ = cache.GetOrCompile("source", "vs", static () => [9], out var evicted);
 
         if (crossProfile || !hit || evicted)
         {
@@ -229,8 +230,8 @@ internal sealed class HostShaderBytecodeCache
             throw new InvalidOperationException("R63 cached an unsuccessful compilation.");
         }
 
-        _ = cache.GetOrCompile("large", "cs", () => new byte[512], out _);
-        _ = cache.GetOrCompile("large", "cs", () => [6], out var oversizedHit);
+        _ = cache.GetOrCompile("large", "cs", static () => new byte[512], out _);
+        _ = cache.GetOrCompile("large", "cs", static () => [6], out var oversizedHit);
 
         if (oversizedHit)
         {
@@ -239,8 +240,8 @@ internal sealed class HostShaderBytecodeCache
 
         var bounded = new HostShaderBytecodeCache(4, 256);
 
-        _ = bounded.GetOrCompile("keep", "cs", () => [11], out _);
-        _ = bounded.GetOrCompile("oversized", "cs", () => new byte[512], out _);
+        _ = bounded.GetOrCompile("keep", "cs", static () => [11], out _);
+        _ = bounded.GetOrCompile("oversized", "cs", static () => new byte[512], out _);
 
         var retained = bounded.GetOrCompile("keep", "cs",
             () => throw new InvalidOperationException("R70 oversized artifact displaced a valid entry."), out var retainedHit);

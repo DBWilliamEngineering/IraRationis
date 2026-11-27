@@ -22,6 +22,9 @@ public static class IndexedUiCompiler
     public const int BatchedMaskConstantBytes = 96;
     public const int BatchedMaskMaximumBatches = 256;
 
+    public const string TransformedTextureVertexHash = "3664FD683B8E2E256956490F92A6A5C4809A472FC4339A34DA6C7456FC7EA8AA";
+    public const string TransformedTexturePixelHash = "1695C915FFBDAE8B818D5910CC8EDB84254A40485688E232AA4A6B81561D1194";
+
     public static bool TryClassify(string vertex, string pixel, out IndexedUiVariant variant)
     {
         if (vertex == VertexHash && pixel == PixelHash)
@@ -44,6 +47,11 @@ public static class IndexedUiCompiler
             variant = IndexedUiVariant.BatchedMask;
             return true;
         }
+        if (vertex == TransformedTextureVertexHash && pixel == TransformedTexturePixelHash)
+        {
+            variant = IndexedUiVariant.TransformedTexture;
+            return true;
+        }
         variant = IndexedUiVariant.AlphaMask;
         return vertex == AlphaVertexHash && pixel == AlphaPixelHash;
     }
@@ -62,7 +70,7 @@ public static class IndexedUiCompiler
     {
         return variant switch
         {
-            IndexedUiVariant.AlphaMask => 64,
+            IndexedUiVariant.AlphaMask or IndexedUiVariant.TransformedTexture => 64,
             IndexedUiVariant.BatchedMask => BatchedMaskConstantBytes,
             _ => 96
         };
@@ -183,6 +191,39 @@ public static class IndexedUiCompiler
         };
         """;
 
+    public const string TransformedTextureVertexSource = AlphaVaryings + """
+        cbuffer VertexParameters : register(b0)
+        {
+            float4 clipX;
+            float4 clipY;
+            float4 textureX;
+            float4 textureY;
+        };
+
+        Varyings main(float4 color : COLOR0, float2 position : POSITION0)
+        {
+            Varyings output;
+            output.color = color;
+            output.position = float4(mad(clipX.x, position.x, mad(clipX.y, position.y, clipX.w)),
+                mad(clipY.x, position.x, mad(clipY.y, position.y, clipY.w)), 0, 1);
+            output.uv = float2(mad(textureX.x, position.x, mad(textureX.y, position.y, textureX.w)),
+                mad(textureY.x, position.x, mad(textureY.y, position.y, textureY.w)));
+            return output;
+        }
+        """;
+
+    public const string TransformedTexturePixelSource = AlphaVaryings + """
+        Texture2D<float4> colorTexture : register(t0);
+        SamplerState colorSampler : register(s0);
+        """ + HalfExport + """
+        float4 main(Varyings input) : SV_Target0
+        {
+            float4 texel = colorTexture.Sample(colorSampler, input.uv);
+            float opacity = texel.a == 0.0 || input.color.a == 0.0 ? 0.0 : texel.a * input.color.a;
+            return float4(HalfRtz(texel.r), HalfRtz(texel.g), HalfRtz(texel.b), HalfRtz(opacity));
+        }
+        """;
+
     public const string AlphaVertexSource = AlphaVaryings + """
         cbuffer VertexParameters : register(b0)
         {
@@ -225,15 +266,16 @@ public static class IndexedUiCompiler
         };
         """;
 
+    // The native position export uses the last two rows, loaded from vertex constants at byte 64.
     public const string DualAlphaVertexSource = DualAlphaVaryings + """
         cbuffer VertexParameters : register(b0)
         {
             float4 addend;
             float4 multiplier;
-            float4 clipX;
-            float4 clipY;
             float4 textureX;
             float4 textureY;
+            float4 clipX;
+            float4 clipY;
         };
 
         Varyings main(float4 color : COLOR0, float2 uv : TEXCOORD0, float2 position : POSITION0)

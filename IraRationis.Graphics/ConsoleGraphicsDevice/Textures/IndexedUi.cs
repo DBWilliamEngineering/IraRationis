@@ -401,6 +401,35 @@ public static unsafe partial class ConsoleGraphicsDevice
             : elements[1] == new VertexInputElement("POSITION", 0, 16, 0, 4, 0, 0);
     }
 
+    private static void VerifyIndexedUiTransformedTexture()
+    {
+        const IndexedUiVariant expectedVariant = IndexedUiVariant.TransformedTexture;
+        VertexInputElement[] layout =
+        [
+            new("COLOR", 0, 28, 0, 0, 0, 0),
+            new("POSITION", 0, 16, 0, 4, 0, 0)
+        ];
+
+        if (!IndexedUiCompiler.TryClassify(IndexedUiCompiler.TransformedTextureVertexHash,
+                IndexedUiCompiler.TransformedTexturePixelHash, out var variant) || variant != expectedVariant ||
+            IndexedUiCompiler.TryClassify(IndexedUiCompiler.TransformedTextureVertexHash, IndexedUiCompiler.PlainPixelHash, out _) ||
+            IndexedUiCompiler.VertexStride(variant) != 12 || IndexedUiCompiler.VertexConstantBytes(variant) != 64 ||
+            IndexedUiCompiler.TextureCount(variant) != 1 || IndexedUiVertexConstantsOffset(variant) != 32 ||
+            !IsIndexedUiLayout(layout, variant))
+        {
+            throw new InvalidOperationException("Transformed indexed UI shader binding or input layout differs.");
+        }
+
+        if (CompileHostShader(IndexedUiCompiler.TransformedTextureVertexSource, "vs_5_1", Console.Out) == null ||
+            CompileHostShader(IndexedUiCompiler.TransformedTexturePixelSource, "ps_5_1", Console.Out) == null ||
+            SerializeIndexedUiRoot(twoTextures: false) == null)
+        {
+            throw new InvalidOperationException("Transformed indexed UI shaders or root were rejected by the host compiler.");
+        }
+
+        Console.WriteLine("[graphics-probe] Transformed indexed UI layout, bindings, host shaders and root serialization passed (no GPU draw).");
+    }
+
     private static ulong IndexedUiVertexConstantsOffset(IndexedUiVariant variant)
     {
         const ulong textureDescriptorBytes = 32;
@@ -509,6 +538,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             IndexedUiVariant.AlphaMask => IndexedUiCompiler.AlphaVertexSource,
             IndexedUiVariant.DualAlphaMask => IndexedUiCompiler.DualAlphaVertexSource,
             IndexedUiVariant.BatchedMask => IndexedUiCompiler.BatchedMaskVertexSource,
+            IndexedUiVariant.TransformedTexture => IndexedUiCompiler.TransformedTextureVertexSource,
             _ => IndexedUiCompiler.VertexSource
         };
         var pixelSource = variant switch
@@ -518,6 +548,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             IndexedUiVariant.AlphaMask => IndexedUiCompiler.AlphaPixelSource,
             IndexedUiVariant.DualAlphaMask => IndexedUiCompiler.DualAlphaPixelSource,
             IndexedUiVariant.BatchedMask => IndexedUiCompiler.BatchedMaskPixelSource,
+            IndexedUiVariant.TransformedTexture => IndexedUiCompiler.TransformedTexturePixelSource,
             _ => throw new ArgumentOutOfRangeException(nameof(variant))
         };
         var vs = CompileHostShader(vertexSource, "vs_5_1", Console.Error);
@@ -754,7 +785,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             commands->IASetVertexBuffers(0, 1, &vb);
             commands->IASetIndexBuffer(&ib);
             commands->OMSetRenderTargets(1, &nativeRtv, false, null);
-            TraceHostCommand(self, "indexed-ui DrawIndexedInstanced");
+            RecordHostGpuCommand(self, "indexed-ui DrawIndexedInstanced");
             commands->DrawIndexedInstanced(indices, 1, 0, baseVertex, 0);
             commands->OMSetRenderTargets(0, null, false, null);
             TransitionPlanarColorTextures(list, textures, 0x80, 0);
@@ -771,6 +802,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             else if (variant == IndexedUiVariant.BatchedMask)
             {
                 TraceGraphicsSuccess($"[graphics] Indexed UI batched mask recorded: indices={indices}; vertexConstants={vertexConstantBytes}; samplerKind={token.Kind}.");
+            }
+            else if (variant == IndexedUiVariant.TransformedTexture)
+            {
+                TraceGraphicsSuccess($"[graphics] Indexed UI transformed texture recorded: indices={indices}; samplerKind={token.Kind}.");
             }
             else
             {
@@ -827,6 +862,10 @@ public static unsafe partial class ConsoleGraphicsDevice
             else if (upload.Variant == IndexedUiVariant.BatchedMask)
             {
                 TraceGraphicsSuccess("[graphics] Indexed UI batched mask GPU completed (visual content unverified).");
+            }
+            else if (upload.Variant == IndexedUiVariant.TransformedTexture)
+            {
+                TraceGraphicsSuccess("[graphics] Indexed UI transformed texture GPU completed (visual content unverified).");
             }
             else
             {

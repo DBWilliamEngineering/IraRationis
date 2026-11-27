@@ -26,6 +26,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         if (tryCompact)
         {
             ReadIndexedUiIndexRange(upload, checkedIndices, out offset, out bytes);
+
             if (TryStageCompactIndexedUiUpload(upload, checkedIndices, offset, bytes))
             {
                 return;
@@ -33,11 +34,15 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var rented = ArrayPool<byte>.Shared.Rent(plan.Capacity);
+
         try
         {
             var snapshot = rented.AsSpan(0, plan.Capacity);
+
             snapshot.Clear();
+
             var indices = snapshot.Slice(plan.IndexOffset, plan.IndexBytes);
+
             if (tryCompact)
             {
                 checkedIndices.CopyTo(indices);
@@ -47,6 +52,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 ReadIndexedUiIndexRange(upload, indices, out offset, out bytes);
             }
             var vertices = snapshot.Slice(upload.VertexOffset + offset, bytes);
+
             ReadIndexedUiVertexData(upload, indices, vertices, offset, snapshot);
             MapPlanarColorUpload(upload.Host, snapshot);
         }
@@ -60,18 +66,24 @@ public static unsafe partial class ConsoleGraphicsDevice
     {
         var plan = upload.Plan;
         var stagingBytes = upload.VertexOffset + bytes;
+
         if (bytes > MaximumCompactVertexBytes || stagingBytes + indices.Length > plan.Capacity / 2)
         {
             return false;
         }
 
-        var rented = stagingBytes > IndexedUiStackSnapshotLimit ? ArrayPool<byte>.Shared.Rent(stagingBytes) : null;
+        var rented = (stagingBytes > IndexedUiStackSnapshotLimit)
+            ? ArrayPool<byte>.Shared.Rent(stagingBytes)
+            : null;
+
         try
         {
             var staging = rented == null ? stackalloc byte[stagingBytes] : rented.AsSpan(0, stagingBytes);
             var constants = staging[..upload.VertexOffset];
             var vertices = staging[upload.VertexOffset..];
+
             constants.Clear();
+
             ReadIndexedUiVertexData(upload, indices, vertices, offset, constants);
             WriteCompactIndexedUpload(upload.Host, 0, plan.Capacity, 0, upload.VertexOffset + offset,
                 plan.IndexOffset, constants, vertices, indices);
@@ -85,6 +97,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         }
 
         var observations = Interlocked.Increment(ref _compactIndexedUiUploads);
+
         if (GraphicsLogSampling.IsSample(observations))
         {
             Console.Error.WriteLine($"[performance] Indexed UI compact upload: observations={observations}; " +
@@ -123,6 +136,11 @@ public static unsafe partial class ConsoleGraphicsDevice
             !AreIndexedUiBatchesPresent(upload.Plan, indices, vertices, offset, upload.VertexConstantBytes))
         {
             Environment.FailFast("[graphics] Indexed UI batched mask vertex selected constants outside its CBV.");
+        }
+
+        if (IndexedUiSourceTraceEnabled)
+        {
+            TraceIndexedUiGlyphCoverage(upload, indices, vertices, offset, constants);
         }
     }
 }

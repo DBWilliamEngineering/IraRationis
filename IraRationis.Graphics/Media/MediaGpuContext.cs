@@ -67,13 +67,11 @@ public sealed unsafe class MediaGpuContext : IDisposable
             _queue = queue;
 
             GraphicsDevice.CheckHostResult(result, "R44 queue");
-
             GraphicsDevice.RequireHostObject(_queue, "queue");
         }
         catch
         {
             GraphicsDevice.ReleaseHostObject(_queue);
-
             GraphicsDevice.ReleaseHostObject(_device);
 
             throw;
@@ -95,14 +93,12 @@ public sealed unsafe class MediaGpuContext : IDisposable
         foreach (var entry in _pipelines.Values)
         {
             GraphicsDevice.ReleaseHostObject(entry.Pipeline);
-
             GraphicsDevice.ReleaseHostObject(entry.Root);
         }
 
         _pipelines.Clear();
 
         GraphicsDevice.ReleaseHostObject(_queue);
-
         GraphicsDevice.ReleaseHostObject(_device);
 
         _queue = 0;
@@ -145,9 +141,7 @@ public sealed unsafe class MediaGpuContext : IDisposable
     internal void AcquireDeviceQueue(out nint device, out nint queue)
     {
         CheckUsable();
-
         AddReference(_device);
-
         AddReference(_queue);
 
         device = _device;
@@ -179,7 +173,6 @@ public sealed unsafe class MediaGpuContext : IDisposable
             catch
             {
                 GraphicsDevice.ReleaseHostObject(createdPipeline);
-
                 GraphicsDevice.ReleaseHostObject(createdRoot);
 
                 throw;
@@ -193,7 +186,6 @@ public sealed unsafe class MediaGpuContext : IDisposable
         }
 
         AddReference(entry.Root);
-
         AddReference(entry.Pipeline);
 
         root = entry.Root;

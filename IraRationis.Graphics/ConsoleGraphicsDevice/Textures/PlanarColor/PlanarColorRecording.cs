@@ -212,7 +212,7 @@ public static unsafe partial class ConsoleGraphicsDevice
         commands->IASetVertexBuffers(0, 1, &vertexView);
         commands->OMSetRenderTargets(1, &colorView, false, null);
 
-        TraceHostCommand(self, "planar-color triangle-strip DrawInstanced");
+        RecordHostGpuCommand(self, "planar-color triangle-strip DrawInstanced");
 
         commands->DrawInstanced(4, 1, 0, 0);
         commands->OMSetRenderTargets(0, null, false, null);

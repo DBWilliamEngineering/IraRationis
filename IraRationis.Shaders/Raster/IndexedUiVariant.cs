@@ -8,5 +8,6 @@ public enum IndexedUiVariant
     Plain,
     AlphaMask,
     DualAlphaMask,
-    BatchedMask
+    BatchedMask,
+    TransformedTexture
 }

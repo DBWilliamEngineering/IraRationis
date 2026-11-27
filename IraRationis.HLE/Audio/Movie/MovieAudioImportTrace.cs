@@ -18,9 +18,13 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
 
     private const string LibraryHash = "cb71456919aada87fddafc44a27b8733aa827de4da58516e9381323ef70da331";
     private const string RegistrationName = "BinkSetSoundSystem";
+    private const string BinkWaitName = "BinkWait";
+    private const string BinkAsyncWaitName = "BinkDoFrameAsyncWait";
     private const string MixerSleepLibrary = "api-ms-win-core-synch-l1-2-0";
     private const string EndpointWaitLibrary = "api-ms-win-core-synch-l1-1-0";
     private const uint RegistrationRva = 0x4DC0;
+    private const uint BinkWaitRva = 0x56F0;
+    private const uint BinkAsyncWaitRva = 0xA890;
     private const uint FactoryRva = 0x5F172C0;
     private const uint OpenTrackRva = 0x1A9B300;
     private const uint ReadyRva = 0x20EEB40;
@@ -46,6 +50,9 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
     private readonly ConcurrentDictionary<nint, MovieAudioTrack> _tracks = new();
     private readonly MovieMixerWaitAudit _mixerWaitAudit = new();
     private readonly MovieAudioEndpointTrace? _endpointTrace;
+    private readonly MovieAudioFrameTrace? _frameTrace;
+    private readonly nint _binkWaitAddress;
+    private readonly nint _binkAsyncWaitAddress;
     private readonly bool _mixerWaitAuditEnabled = MixerWaitAuditEnabled;
     private readonly bool _preciseMixerWaitEnabled;
     private readonly Timer _reporter;
@@ -59,7 +66,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
     private nint _endpointWaitAddress;
     private long _lastAcceptedMovieBlock;
 
-    private MovieAudioImportTrace(IImportResolver resolver, nuint title, nuint registration)
+    private MovieAudioImportTrace(IImportResolver resolver, nuint title, nuint registration, LoadedImage library)
     {
         _resolver = resolver;
         _registerAddress = (nint)registration;
@@ -70,6 +77,16 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         _unlockAddress = (nint)(title + UnlockRva);
         _preciseMixerWaitEnabled = _mixerWaitAuditEnabled && PreciseMixerWaitRequested;
         _endpointTrace = EndpointProbeRequested ? new MovieAudioEndpointTrace() : null;
+
+        if (Environment.GetEnvironmentVariable("IRX_MOVIE_FRAME_TRACE") == "1" &&
+            library.Export(new ImportSymbol(BinkWaitName, 0)) == library.BaseAddress + BinkWaitRva &&
+            library.Export(new ImportSymbol(BinkAsyncWaitName, 0)) == library.BaseAddress + BinkAsyncWaitRva)
+        {
+            _binkWaitAddress = (nint)(library.BaseAddress + BinkWaitRva);
+            _binkAsyncWaitAddress = (nint)(library.BaseAddress + BinkAsyncWaitRva);
+            _frameTrace = new MovieAudioFrameTrace();
+        }
+
         _reporter = new Timer(static state => ((MovieAudioImportTrace)state!).Report(), this,
             Timeout.Infinite, Timeout.Infinite);
     }
@@ -161,7 +178,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
             return null;
         }
 
-        var trace = new MovieAudioImportTrace(resolver, title.BaseAddress, address);
+        var trace = new MovieAudioImportTrace(resolver, title.BaseAddress, address, library);
 
         // Bound callbacks may outlive this trace's reporting scope. Keep their forwards valid.
         if (Interlocked.CompareExchange(ref _binding, trace, null) is not null)
@@ -174,7 +191,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         trace._reporter.Change(2_000, 2_000);
         Note($"enabled=True; scope=Bink-to-guest-voice; units=PCM-bytes; periodMs=2000; " +
             $"mixerWaitAudit={trace._mixerWaitAuditEnabled}; mixerPreciseWaitRequested={trace._preciseMixerWaitEnabled}; " +
-            $"endpointProbe={trace._endpointTrace != null}");
+            $"endpointProbe={trace._endpointTrace != null}; frameProbe={trace._frameTrace != null}");
 
         return trace;
     }
@@ -197,6 +214,20 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
             return binding with { Address = (nuint)(delegate* unmanaged<nint, nuint, int>)&RegisterSoundSystem };
         }
 
+        if (_frameTrace != null && resolution is { Provenance: ImportProvenance.Title } movie &&
+            string.Equals(dll, LibraryName, StringComparison.OrdinalIgnoreCase))
+        {
+            if (movie.Address == (nuint)_binkWaitAddress && symbol.Name == BinkWaitName)
+            {
+                return movie with { Address = (nuint)(delegate* unmanaged<nint, int>)&BinkPacingPoll };
+            }
+
+            if (movie.Address == (nuint)_binkAsyncWaitAddress && symbol.Name == BinkAsyncWaitName)
+            {
+                return movie with { Address = (nuint)(delegate* unmanaged<nint, int, int>)&BinkDecodeWait };
+            }
+        }
+
         if (_mixerWaitAuditEnabled && resolution is { Provenance: ImportProvenance.Host, Address: not 0 } host &&
             string.Equals(symbol.Name, "Sleep", StringComparison.Ordinal) &&
             (string.Equals(dll, MixerSleepLibrary, StringComparison.OrdinalIgnoreCase) ||
@@ -216,10 +247,16 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
             }
         }
 
-        if (_endpointTrace != null && resolution is { Provenance: ImportProvenance.Host, Address: not 0 } endpoint &&
-            string.Equals(symbol.Name, "WaitForSingleObject", StringComparison.Ordinal) &&
-            (string.Equals(dll, EndpointWaitLibrary, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(dll, EndpointWaitLibrary + ".dll", StringComparison.OrdinalIgnoreCase)))
+        if (_endpointTrace == null || resolution is not (not 0, ImportProvenance.Host) endpoint
+                                   ||
+                                   !string.Equals(symbol.Name, "WaitForSingleObject", StringComparison.Ordinal) ||
+                                   (!string.Equals(dll, EndpointWaitLibrary, StringComparison.OrdinalIgnoreCase) &&
+                                    !string.Equals(dll, EndpointWaitLibrary + ".dll",
+                                        StringComparison.OrdinalIgnoreCase)))
+        {
+            return resolution;
+        }
+
         {
             var address = (nint)endpoint.Address;
             var previous = Interlocked.CompareExchange(ref _endpointWaitAddress, address, 0);
@@ -244,6 +281,58 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         {
             _reporter.Dispose();
         }
+    }
+
+    [UnmanagedCallersOnly]
+    private static int BinkPacingPoll(nint movie)
+    {
+        var trace = Volatile.Read(ref _binding)!;
+        var original = (delegate* unmanaged<nint, int>)trace._binkWaitAddress;
+        var result = original(movie);
+
+        if (!trace.ObserveMovieFrame(movie))
+        {
+            return result;
+        }
+
+        var error = NativeErrorState.Capture();
+
+        trace._frameTrace!.RecordPacingPoll(result != 0);
+        error.Restore();
+
+        return result;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int BinkDecodeWait(nint movie, int timeout)
+    {
+        var trace = Volatile.Read(ref _binding)!;
+        var original = (delegate* unmanaged<nint, int, int>)trace._binkAsyncWaitAddress;
+
+        if (!trace.ObserveMovieFrame(movie))
+        {
+            return original(movie, timeout);
+        }
+
+        var incomingError = NativeErrorState.Capture();
+        var started = Stopwatch.GetTimestamp();
+
+        incomingError.Restore();
+
+        var result = original(movie, timeout);
+        var error = NativeErrorState.Capture();
+
+        trace._frameTrace!.RecordDecodeWait(result != 0, Stopwatch.GetTimestamp() - started);
+
+        error.Restore();
+
+        return result;
+    }
+
+    private bool ObserveMovieFrame(nint movie)
+    {
+        return Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _reports) < MaximumReports &&
+            _frameTrace?.Observes(movie) == true;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -338,18 +427,20 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         var original = (delegate* unmanaged<nint, nuint, int>)trace._registerAddress;
         var result = original(wrap ? (nint)(delegate* unmanaged<nuint, nint>)&OpenSoundSystem : factory, parameter);
 
-        if (wrap && Interlocked.Exchange(ref trace._reportedRegistration, 1) == 0)
+        if (!wrap || Interlocked.Exchange(ref trace._reportedRegistration, 1) != 0)
         {
-            var error = NativeErrorState.Capture();
+            return result;
+        }
 
-            try
-            {
-                Note($"registrationResult={result}");
-            }
-            finally
-            {
-                error.Restore();
-            }
+        var error = NativeErrorState.Capture();
+
+        try
+        {
+            Note($"registrationResult={result}");
+        }
+        finally
+        {
+            error.Restore();
         }
 
         return result;
@@ -374,27 +465,30 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         var original = (delegate* unmanaged<byte*, uint, uint, uint, nint, int>)trace._openTrackAddress;
         var result = original(channel, sampleRate, channels, flags, movie);
 
-        if (result != 0 && channel != null && Volatile.Read(ref trace._disposed) == 0)
+        if (result == 0 || channel == null || Volatile.Read(ref trace._disposed) != 0)
         {
-            var error = NativeErrorState.Capture();
+            return result;
+        }
 
-            try
-            {
-                trace.AttachTrack(channel, sampleRate, channels);
-            }
-            catch (Exception)
-            {
-            }
-            finally
-            {
-                error.Restore();
-            }
+        var error = NativeErrorState.Capture();
+
+        try
+        {
+            trace.AttachTrack(channel, sampleRate, channels, movie);
+        }
+        catch (Exception)
+        {
+            // ignored
+        }
+        finally
+        {
+            error.Restore();
         }
 
         return result;
     }
 
-    private void AttachTrack(byte* channel, uint sampleRate, uint channels)
+    private void AttachTrack(byte* channel, uint sampleRate, uint channels, nint movie)
     {
         var ready = (nint*)(channel + ReadyOffset);
         var unlock = (nint*)(channel + UnlockOffset);
@@ -411,8 +505,9 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
                 return;
             }
 
+            var observedMovie = _frameTrace != null && *(nint*)(channel + 0x74) == movie ? movie : 0;
             var track = new MovieAudioTrack(++_nextTrack, sampleRate, channels,
-                *(uint*)(channel + 0x98), *(uint*)(channel + 0x90));
+                *(uint*)(channel + 0x98), *(uint*)(channel + 0x90), observedMovie);
 
             _tracks[(nint)channel] = track;
             *ready = (nint)(delegate* unmanaged<nint, int>)&TrackReady;
@@ -443,14 +538,23 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         var original = (delegate* unmanaged<nint, uint, int>)trace._unlockAddress;
         var result = original(channel, bytes);
 
-        if (Volatile.Read(ref trace._disposed) == 0 && trace._tracks.TryGetValue(channel, out var track))
+        if (Volatile.Read(ref trace._disposed) != 0 || !trace._tracks.TryGetValue(channel, out var track))
         {
-            track.RecordUnlock(result != 0, bytes);
+            return result;
+        }
 
-            if (trace._preciseMixerWaitEnabled && result != 0 && bytes != 0)
-            {
-                Volatile.Write(ref trace._lastAcceptedMovieBlock, Stopwatch.GetTimestamp());
-            }
+        track.RecordUnlock(result != 0, bytes);
+
+        if (result == 0 || bytes == 0)
+        {
+            return result;
+        }
+
+        trace._frameTrace?.RecordAudio(track.Movie);
+
+        if (trace._preciseMixerWaitEnabled)
+        {
+            Volatile.Write(ref trace._lastAcceptedMovieBlock, Stopwatch.GetTimestamp());
         }
 
         return result;
@@ -479,6 +583,11 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
                 return;
             }
 
+            if (_frameTrace?.TakeReport(now) is { } frameReport && !ReportSample(elapsed, frameReport))
+            {
+                return;
+            }
+
             foreach (var (_, track) in _tracks)
             {
                 if (track.TakeReport(now) is { } report && !ReportSample(elapsed, report))
@@ -489,6 +598,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         }
         catch (Exception)
         {
+            // ignored
         }
         finally
         {
@@ -518,6 +628,7 @@ public sealed unsafe class MovieAudioImportTrace : IImportResolver, IDisposable
         }
         catch (Exception)
         {
+            // ignored
         }
     }
 }

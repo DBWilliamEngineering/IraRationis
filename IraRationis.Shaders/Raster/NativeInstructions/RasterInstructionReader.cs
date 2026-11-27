@@ -121,6 +121,7 @@ internal ref struct RasterInstructionReader
         {
             1 => 8U,
             4 => 10U,
+            8 => 11U,
             16 => 12U,
             _ => throw new InvalidOperationException("Unsupported buffer extent in raster contract.")
         };

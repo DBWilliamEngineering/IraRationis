@@ -46,6 +46,7 @@ internal static class DepthTargetPolicy
 
         // Without a depth target the output-merger depth test passes and has no storage to update.
         var hostDepth = (byte[])depth.Bytes.Clone();
+
         hostDepth.AsSpan(4, 8).Clear();
 
         var state = guest.State.Select(record => record.Kind == 21

@@ -17,4 +17,23 @@ internal readonly unsafe record struct MemoryBoundary(
     TexturedDrawBoundary? Textured,
     ColorLutComputeBoundary? Compute,
     PlanarColorDrawBoundary? PlanarColor = null,
-    IndexedUiBoundary? IndexedUi = null);
+    IndexedUiBoundary? IndexedUi = null)
+{
+    internal bool IsDrawPreparation
+    {
+        get
+        {
+            if (Write.HasValue
+                || Wait.HasValue
+                || Copy.HasValue
+                || Compute != null)
+            {
+                return false;
+            }
+
+            return (Draw is { Complete: false } || Rectangle is { Complete: false })
+                   || (Textured is { Complete: false } || PlanarColor is { Complete: false })
+                   || (IndexedUi is { Complete: false });
+        }
+    }
+}

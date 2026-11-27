@@ -18,8 +18,9 @@ internal static class HostTextureViewFormats
         // The captured color target is sRGB storage with a linear RTV. Use a
         // typeless host allocation only for the supported single-subresource RT
         // contract. Do not mutate the guest description or broaden UAV/DS paths.
-        if (guest.Format == Rgba8Srgb && guest.Dimension == 3 && guest.DepthOrArraySize == 1 &&
-            guest.MipLevels == 1 && guest.SampleCount == 1 && (guest.Flags & 7U) == 1U)
+        if (guest is
+                { Format: Rgba8Srgb, Dimension: 3, DepthOrArraySize: 1, MipLevels: 1, SampleCount: 1 }
+            && (guest.Flags & 7U) == 1U)
         {
             return Rgba8Typeless;
         }
@@ -109,23 +110,28 @@ internal static class HostTextureViewFormats
             return false;
         }
 
-        if (descriptor != null)
+        if (descriptor == null)
         {
-            var words = descriptor.AsSpan();
-
-            if (words.Length != 24 || BinaryPrimitives.ReadUInt32LittleEndian(words[4..]) != (depth ? 3U : 4U) ||
-                BinaryPrimitives.ReadUInt32LittleEndian(words[8..]) != 0 ||
-                BinaryPrimitives.ReadUInt32LittleEndian(words[12..]) != 0)
-            {
-                return false;
-            }
-
-            viewFormat = BinaryPrimitives.ReadUInt32LittleEndian(words);
+            return (depth
+                       ? viewFormat is 40 or 45 or 55 or 20
+                       : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or A8Unorm or 87 or 91) &&
+                   IsCompatible(guest, viewFormat);
         }
 
+        var words = descriptor.AsSpan();
+
+        if (words.Length != 24 || BinaryPrimitives.ReadUInt32LittleEndian(words[4..]) != (depth ? 3U : 4U) ||
+            BinaryPrimitives.ReadUInt32LittleEndian(words[8..]) != 0 ||
+            BinaryPrimitives.ReadUInt32LittleEndian(words[12..]) != 0)
+        {
+            return false;
+        }
+
+        viewFormat = BinaryPrimitives.ReadUInt32LittleEndian(words);
+
         return (depth
-            ? viewFormat is 40 or 45 or 55 or 20
-            : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or A8Unorm or 87 or 91) &&
-            IsCompatible(guest, viewFormat);
+                   ? viewFormat is 40 or 45 or 55 or 20
+                   : viewFormat is 2 or 10 or 24 or 28 or 29 or 41 or 49 or 61 or A8Unorm or 87 or 91) &&
+               IsCompatible(guest, viewFormat);
     }
 }

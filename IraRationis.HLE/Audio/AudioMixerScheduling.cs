@@ -99,14 +99,18 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
     internal static AudioMixerScheduling? TryEnter(nint routine, nint parameter)
     {
         var image = _image;
+
         if (image == 0)
         {
             return null;
         }
+
         var start = (nuint)routine;
         var entry = start;
+
         if (start >= image && start - image == ThreadWrapperRva && parameter != 0)
         {
+
             var read = (nuint)0;
             if (ReadProcessMemory(-1, (void*)parameter, &entry, (nuint)sizeof(nuint), &read) == 0 ||
                 read != (nuint)sizeof(nuint))
@@ -114,14 +118,17 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
                 return null;
             }
         }
+
         var matchedMixer = Matches(image, start, entry);
         var matchedEndpoint = MatchesEndpointWorker(image, start, entry);
         var observesMixer = matchedMixer && MovieAudioImportTrace.IsMixerWaitAuditBound;
         var observesEndpoint = (matchedMixer || matchedEndpoint) &&
             MovieAudioImportTrace.IsEndpointProbeBound;
+
         var mixer = _mixerEnabled && matchedMixer;
         var endpoint = _endpointEnabled && matchedEndpoint;
         var movie = _movieEnabled && MatchesMovie(image, start, entry);
+
         if (!mixer && !endpoint && !movie && !observesMixer && !observesEndpoint)
         {
             return null;
@@ -149,6 +156,7 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         try
         {
             var realtimeAudio = mixer || endpoint;
+
             if (realtimeAudio && GetActiveProcessorGroupCount() == 1 &&
                 GetProcessAffinityMask(-1, out var processMask, out _) != 0 && processMask != 0)
             {
@@ -166,9 +174,12 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
                     scope._previousPriority = previous;
                 }
             }
+
             scope._mmcss = AvSetMmThreadCharacteristics(realtimeAudio ? "Pro Audio" : "Playback", &taskIndex);
+
             var priority = scope._mmcss != 0 && AvSetMmThreadPriority(scope._mmcss, realtimeAudio ? 1 : 0) != 0;
             var role = mixer ? "mixer" : endpoint ? "endpoint" : "movie";
+
             Console.Error.WriteLine($"[audio-scheduling] role={role}; " +
                 $"thread={GetCurrentThreadId()}; mmcss={scope._mmcss != 0}; relativePrioritySet={priority}; " +
                 $"normalPriorityRestored={scope._previousPriority != int.MaxValue}; previousMask=0x{scope._previousAffinity:X}.");
@@ -178,7 +189,9 @@ public sealed unsafe partial class AudioMixerScheduling : IDisposable
         catch (Exception exception)
         {
             scope.Dispose();
+
             Console.Error.WriteLine($"[audio-scheduling] unavailable ({exception.GetType().Name}).");
+
             return null;
         }
     }

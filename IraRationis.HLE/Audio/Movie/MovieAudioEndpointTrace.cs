@@ -38,11 +38,13 @@ internal sealed class MovieAudioEndpointTrace
 
     internal void Detach(nint mixerState)
     {
-        if (Interlocked.CompareExchange(ref _mixerState, 0, mixerState) == mixerState)
+        if (Interlocked.CompareExchange(ref _mixerState, 0, mixerState) != mixerState)
         {
-            Volatile.Write(ref _bufferEvent, 0);
-            Interlocked.Exchange(ref _lastSignal, 0);
+            return;
         }
+
+        Volatile.Write(ref _bufferEvent, 0);
+        Interlocked.Exchange(ref _lastSignal, 0);
     }
 
     internal bool Observes(nint handle)

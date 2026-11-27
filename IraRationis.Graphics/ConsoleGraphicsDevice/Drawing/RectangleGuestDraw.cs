@@ -333,7 +333,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                 : indexedColor
                 ? pair.IndexedArray
                     ? "[graphics] IRX-GFX-SHADER-R23: recognized indexed array color transform; up to 256 parameter blocks."
-                    : "[graphics] IRX-GFX-SHADER-R22: recognized indexed triangle color transform; 64-byte vertex CBV."
+                    : $"[graphics] IRX-GFX-SHADER-R22: recognized indexed triangle color transform; {pair.IndexedVertexConstantBytes}-byte vertex CBV."
                 : "[graphics] IRX-GFX-SHADER-R14: recognized rectangle IA fetch / perspective COLOR / CBV modulation; b27, space1.");
 
             var vertexShader = CompileHostShader(pair.VertexSource, "vs_5_1", report);
@@ -406,7 +406,8 @@ public static unsafe partial class ConsoleGraphicsDevice
                 return null;
             }
 
-            var result = new RectanglePipeline((nint)root, pipeline, elements, pair.IndexedArray, dualMask);
+            var result = new RectanglePipeline((nint)root, pipeline, elements, pair.IndexedArray, dualMask,
+                pair.IndexedVertexConstantBytes);
 
             state.HostViews.Add((nint)root);
 
@@ -597,7 +598,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             NonIndexedVertexBytes = vertexRange.Bytes,
             Capacity = capacity,
             ConstantBytes = translated.IndexedArray ? RectangleConstantArrayBytes :
-                translated.DualMask ? DualMaskConstantBytes : indexedColor ? 64 : RectangleConstantBytes
+                translated.DualMask ? DualMaskConstantBytes : indexedColor ? translated.IndexedVertexConstantBytes : RectangleConstantBytes
         };
 
         SealMemoryBoundary(self, state, null, null, rectangle: new RectangleDrawBoundary(deferred, false));
@@ -654,14 +655,14 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             commands->IASetIndexBuffer(&indexBufferView);
 
-            TraceHostCommand(self,
+            RecordHostGpuCommand(self,
                 indexedColor ? "R22 triangle DrawIndexedInstanced" : "R20 rectangle DrawIndexedInstanced");
             // The staged index view starts at the requested first index.
             commands->DrawIndexedInstanced(vertices, instances, 0, baseVertex, firstInstance);
         }
         else
         {
-            TraceHostCommand(self, "R14 rectangle DrawInstanced");
+            RecordHostGpuCommand(self, "R14 rectangle DrawInstanced");
 
             commands->DrawInstanced(vertices, instances, 0, firstInstance);
         }
@@ -729,7 +730,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             else if (upload.Indexed != null)
             {
                 TraceGraphicsSuccess(upload.IndexedColor
-                    ? $"[graphics] IRX-GFX-INDEX-{(upload.IndexedArray ? "R23" : "R22")}: GPU COMPLETED indexed triangle (content unverified)."
+                    ? $"[graphics] IRX-GFX-INDEX-{(upload.IndexedArray ? "R23" : "R22")}: GPU COMPLETED indexed triangle; vertexConstantBytes={upload.ConstantBytes} (content unverified)."
                     : "[graphics] IRX-GFX-INDEX-R20: GPU COMPLETED indexed rectangle (content unverified).");
             }
 
@@ -867,7 +868,7 @@ public static unsafe partial class ConsoleGraphicsDevice
                     Console.Error.WriteLine($"[graphics] IRX-GFX-INPUT-R22: observation={observation}, " +
                                             $"firstIndex={firstIndex}, effectiveVertex={effective}, firstVertex={Convert.ToHexString(firstVertex)}, "
                                             +
-                                            $"CBV64={Convert.ToHexString(snapshot[..64])}.");
+                                            $"CBV{requiredBytes}={Convert.ToHexString(snapshot[..requiredBytes])}.");
                 }
             }
 
@@ -1131,13 +1132,9 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static void VerifyVertexInputLayout()
     {
         VerifyIndexedUpload();
-
         VerifyRectangleUploadPlacement();
-
         VerifyConstantExtent();
-
         VerifyRectangleDepthState();
-
         VerifyDepthlessIndexedColorOutput();
 
         var view = new RecordedBufferView { Address = 0x10000, Size = 192, FormatOrStride = 24 };

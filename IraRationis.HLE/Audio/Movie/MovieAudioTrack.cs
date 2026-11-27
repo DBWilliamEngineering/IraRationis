@@ -5,7 +5,7 @@ using System.Globalization;
 
 namespace IraRationis.HLE.Audio.Movie;
 
-internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, uint blockBytes, uint primeBytes)
+internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, uint blockBytes, uint primeBytes, nint movie)
 {
     private const int ReadyRefusalSampleMask = 63;
     private const int ReadySuccessSampleMask = 3;
@@ -27,6 +27,8 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
     private long _cursorInconsistencies;
     private long _reportedReadyCalls = -1;
     private long _reportedUnlockCalls = -1;
+
+    internal nint Movie { get; } = movie;
 
     internal bool RecordReady(bool ready)
     {
@@ -89,24 +91,28 @@ internal sealed class MovieAudioTrack(int id, uint sampleRate, uint channels, ui
             return;
         }
 
-        if (bytes != 0)
+        if (bytes == 0)
         {
-            Interlocked.Add(ref _acceptedBytes, bytes);
+            return;
+        }
 
-            var current = Stopwatch.GetTimestamp();
-            var previous = Interlocked.Exchange(ref _lastAcceptance, current);
+        Interlocked.Add(ref _acceptedBytes, bytes);
 
-            if (previous != 0)
+        var current = Stopwatch.GetTimestamp();
+        var previous = Interlocked.Exchange(ref _lastAcceptance, current);
+
+        if (previous == 0)
+        {
+            return;
+        }
+
+        var gap = current - previous;
+
+        for (var longest = Volatile.Read(ref _longestGap); gap > longest; longest = Volatile.Read(ref _longestGap))
+        {
+            if (Interlocked.CompareExchange(ref _longestGap, gap, longest) == longest)
             {
-                var gap = current - previous;
-
-                for (var longest = Volatile.Read(ref _longestGap); gap > longest; longest = Volatile.Read(ref _longestGap))
-                {
-                    if (Interlocked.CompareExchange(ref _longestGap, gap, longest) == longest)
-                    {
-                        break;
-                    }
-                }
+                break;
             }
         }
     }

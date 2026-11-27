@@ -5,6 +5,7 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using TerraFX.Interop.DirectX;
 using IraRationis.Graphics.Commands;
+using IraRationis.Graphics.Commands.Models;
 using IraRationis.Graphics.Diagnostics.Models;
 using IraRationis.Graphics.Drawing;
 using IraRationis.Graphics.Drawing.Models;
@@ -216,7 +217,7 @@ public static unsafe partial class ConsoleGraphicsDevice
             // SealMemoryBoundary already replayed topology, viewports, scissors, blend and stencil.
             commands->OMSetRenderTargets(1, &colorView, false, depth == 0 ? null : &depthView);
 
-            TraceHostCommand(self, "R13 DrawInstanced");
+            RecordHostGpuCommand(self, "R13 DrawInstanced");
 
             commands->DrawInstanced(vertices, instances, first, firstInstance);
 
@@ -404,9 +405,13 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         SealMemoryBoundary(list, state, null, null, draw: new VertexFetchDrawBoundary(upload, true));
 
-        if (state.MemoryBoundaries.Count != before + 2 || upload.Phase != 0 ||
+        var prepareWithWait = new MemoryBoundary(0, null, new MemoryWait(0x10000, 3, 0, 4), null,
+            new VertexFetchDrawBoundary(upload, false), null, null, null);
+
+        if (state.MemoryBoundaries.Count != before + 2 || upload.Phase != 0 || prepareWithWait.IsDrawPreparation ||
             state.MemoryBoundaries[before].Draw is not { Complete: false } prepare ||
             state.MemoryBoundaries[before + 1].Draw is not { Complete: true } complete ||
+            !state.MemoryBoundaries[before].IsDrawPreparation || state.MemoryBoundaries[before + 1].IsDrawPreparation ||
             !ReferenceEquals(prepare.Upload, upload) || !ReferenceEquals(complete.Upload, upload))
         {
             throw new InvalidOperationException("R13 deferred draw boundary recording failed.");

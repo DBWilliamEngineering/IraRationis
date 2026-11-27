@@ -113,23 +113,25 @@ internal sealed unsafe class NativePipelineCache<TKey, TValue> where TKey : clas
 
             _recency.AddFirst(node);
 
-            if (_entries.Count > Capacity)
+            if (_entries.Count <= Capacity)
             {
-                var victim = _recency.Last!;
-                var retired = _handles(victim.Value.Value);
-
-                _ = _entries.Remove(victim.Value.Key);
-
-                _recency.RemoveLast();
-
-                _evictions++;
-
-                // Release the cache's references only. Recording ownership
-                // and existing completion boundaries remain unchanged.
-                _ = GraphicsDevice.HostRelease(retired.Pipeline);
-
-                _ = GraphicsDevice.HostRelease(retired.Root);
+                return;
             }
+
+            var victim = _recency.Last!;
+            var retired = _handles(victim.Value.Value);
+
+            _ = _entries.Remove(victim.Value.Key);
+
+            _recency.RemoveLast();
+
+            _evictions++;
+
+            // Release the cache's references only. Recording ownership
+            // and existing completion boundaries remain unchanged.
+            _ = GraphicsDevice.HostRelease(retired.Pipeline);
+
+            _ = GraphicsDevice.HostRelease(retired.Root);
         }
     }
 

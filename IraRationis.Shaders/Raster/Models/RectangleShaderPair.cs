@@ -9,4 +9,7 @@ public sealed record RectangleShaderPair(
     uint Register,
     uint Space,
     bool IndexedArray = false,
-    bool SamplesDualMasks = false);
+    bool SamplesDualMasks = false)
+{
+    public int IndexedVertexConstantBytes { get; init; } = 64;
+}

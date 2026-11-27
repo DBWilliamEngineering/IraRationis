@@ -11,7 +11,17 @@ public static unsafe partial class ConsoleGraphicsDevice
     private static readonly bool UtilityPoolingEnabled =
         Environment.GetEnvironmentVariable("IRX_RUNTIME_UTILITY_POOL") != "0";
     private static readonly bool EnableOrderedTextureUploads = Environment.GetEnvironmentVariable("IRX_ORDERED_TEXTURE_UPLOADS") == "1";
+    private static readonly bool EnableBatchedTextureUploads = Environment.GetEnvironmentVariable("IRX_BATCH_TEXTURE_UPLOADS") == "1";
     private static long _orderedTextureUploads;
+    private static long _textureUploadSubmitsSaved;
+
+    internal static void RecordTextureUploadSubmitsSaved(int saved)
+    {
+        if (saved > 0)
+        {
+            Interlocked.Add(ref _textureUploadSubmitsSaved, saved);
+        }
+    }
     internal static void ReportOrderedTextureUploads(int count)
     {
         var total = Interlocked.Add(ref _orderedTextureUploads, count);

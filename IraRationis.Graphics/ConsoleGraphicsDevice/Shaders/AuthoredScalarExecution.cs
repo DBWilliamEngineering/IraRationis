@@ -253,11 +253,13 @@ public static unsafe partial class ConsoleGraphicsDevice
         cpu.ptr = checked(cpu.ptr + (nuint)offset);
         gpu.ptr = checked(gpu.ptr + offset);
 
-        if (lease.RequiresMaterialization)
+        if (!lease.RequiresMaterialization)
         {
-            MaterializeTable(cpu, increment, upload, output, lease.Table);
-            cache.MarkMaterialized(lease);
+            return gpu;
         }
+
+        MaterializeTable(cpu, increment, upload, output, lease.Table);
+        cache.MarkMaterialized(lease);
 
         return gpu;
     }

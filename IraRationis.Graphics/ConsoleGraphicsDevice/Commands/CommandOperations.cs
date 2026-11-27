@@ -241,7 +241,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         TransitionHostResource(list, resource, 0, 4);
 
-        TraceHostCommand(self, "ClearRenderTargetView");
+        RecordHostGpuCommand(self, "ClearRenderTargetView");
         // Guest slot 52 is Windows BeginQuery, not ClearRenderTargetView.
         ((ID3D12GraphicsCommandList*)list)->ClearRenderTargetView(
             new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = view }, color, count, rects);
@@ -273,7 +273,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
         TransitionHostResource(list, resource, 0, 0x10);
 
-        TraceHostCommand(self, "ClearDepthStencilView");
+        RecordHostGpuCommand(self, "ClearDepthStencilView");
         // Guest slot 51 is Windows DiscardResource, not ClearDepthStencilView.
         ((ID3D12GraphicsCommandList*)list)->ClearDepthStencilView(
             new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = view }, (D3D12_CLEAR_FLAGS)flags, depth, stencil, count, rects);
@@ -888,7 +888,7 @@ public static unsafe partial class ConsoleGraphicsDevice
 
             TransitionHostResource(command, host, 0, CopySource);
 
-            TraceHostCommand(list, "ProbeCopyTextureRegion");
+            RecordHostGpuCommand(list, "ProbeCopyTextureRegion");
 
             ((delegate* unmanaged[Stdcall]<nint, ClearProbeCopyLocation*, uint, uint, uint, ClearProbeCopyLocation*,
                     void*, void>)Slot(command, 16))

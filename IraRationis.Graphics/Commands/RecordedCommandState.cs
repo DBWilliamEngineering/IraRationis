@@ -22,6 +22,7 @@ internal sealed unsafe class RecordedCommandState
     public ulong? Depth;
     public (float Min, float Max)? DepthBounds;
     public nint[] Heaps = [];
+    public bool HasHostGpuWork = true;
     public int HostCommandCount;
     public RecordedBufferView? Index;
     public RecordedUploadPage? LargeRectangleUploadPage;
