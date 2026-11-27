@@ -28,3 +28,6 @@ __pycache__/
 /R66-generated.hlsl
 /R66.2-validation.log
 *.etl
+/docs/development-handoff.md
+/docs/runtime-services.md
+/docs/maintainer-guide.md
